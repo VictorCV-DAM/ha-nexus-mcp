@@ -48,13 +48,13 @@
       },
       "mcp_server": {
         "title": "Conexión con el Servidor HA-MCP",
-        "description": "Conecta Nexus MCP a tu servidor ha-mcp para permitir la creación de automatizaciones y gestión de entidades.",
+        "description": "Nexus MCP se conecta a un servidor MCP para ofrecer herramientas avanzadas y creación de automatizaciones.\n\n• Si ya tienes **ha-mcp** instalado, la URL se ha auto-detectado automáticamente abajo.\n• Si aún no lo tienes instalado, puedes obtener la integración en el repositorio oficial [HA-MCP en GitHub](https://github.com/homeassistant-ai/ha-mcp) a través de HACS.\n\nConfigura los datos de conexión:",
         "data": {
           "mcp_server_url": "URL SSE / Endpoint del Servidor MCP",
           "autonomous_mode": "Modo Autónomo (Ejecutar acciones sin pedir confirmación)"
         },
         "data_description": {
-          "mcp_server_url": "Auto-detectado si ha_mcp_tools está instalado en Home Assistant.",
+          "mcp_server_url": "Auto-detectado si tienes ha_mcp_tools. Si no, instálalo desde https://github.com/homeassistant-ai/ha-mcp",
           "autonomous_mode": "Si se activa, Nexus MCP ejecutará las acciones directamente sin solicitar confirmación interactiva."
         }
       }

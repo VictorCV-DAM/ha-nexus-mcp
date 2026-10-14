@@ -169,7 +169,7 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             config_data = {
                 **self._llm_data,
-                CONF_MCP_SERVER_URL: user_input[CONF_MCP_SERVER_URL],
+                CONF_MCP_SERVER_URL: user_input[CONF_MCP_SERVER_URL].strip(),
                 CONF_AUTONOMOUS_MODE: user_input[CONF_AUTONOMOUS_MODE],
             }
             return self.async_create_entry(
@@ -188,7 +188,12 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         return self.async_show_form(
-            step_id="mcp_server", data_schema=schema, errors=errors
+            step_id="mcp_server",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "ha_mcp_repo_url": "https://github.com/homeassistant-ai/ha-mcp",
+            },
         )
 
     @staticmethod
