@@ -14,6 +14,7 @@ from .const import (
     DOMAIN,
     CONF_LLM_PROVIDER,
     PROVIDER_GEMINI_FREE,
+    PROVIDER_QWEN_FREE,
     PROVIDER_OLLAMA_LOCAL,
     PROVIDER_CUSTOM_OPENAI,
     CONF_API_KEY,
@@ -22,6 +23,8 @@ from .const import (
     CONF_MCP_SERVER_URL,
     CONF_AUTONOMOUS_MODE,
     DEFAULT_GEMINI_MODEL,
+    DEFAULT_QWEN_URL,
+    DEFAULT_QWEN_MODEL,
     DEFAULT_OLLAMA_URL,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_MCP_SERVER_URL,
@@ -52,6 +55,8 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._provider = user_input[CONF_LLM_PROVIDER]
             if self._provider == PROVIDER_GEMINI_FREE:
                 return await self.async_step_gemini()
+            if self._provider == PROVIDER_QWEN_FREE:
+                return await self.async_step_qwen()
             if self._provider == PROVIDER_OLLAMA_LOCAL:
                 return await self.async_step_ollama()
             return await self.async_step_custom_openai()
@@ -63,8 +68,9 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ): vol.In(
                     {
                         PROVIDER_GEMINI_FREE: "Google Gemini (Free Tier / Gratis)",
-                        PROVIDER_OLLAMA_LOCAL: "Ollama Local (Qwen 2.5 Coder / Gratis)",
-                        PROVIDER_CUSTOM_OPENAI: "OpenAI / DashScope / Custom BYOK",
+                        PROVIDER_QWEN_FREE: "Qwen Cloud / DashScope (API Gratuita / Millones de tokens)",
+                        PROVIDER_OLLAMA_LOCAL: "Ollama Local (Qwen 2.5 Coder / Gratis Local)",
+                        PROVIDER_CUSTOM_OPENAI: "OpenAI / Custom BYOK",
                     }
                 )
             }
@@ -101,6 +107,38 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={
                 "api_key_url": "https://aistudio.google.com/app/apikey",
+            },
+        )
+
+    async def async_step_qwen(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure Qwen Cloud / DashScope Free Tier."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            self._llm_data = {
+                CONF_LLM_PROVIDER: PROVIDER_QWEN_FREE,
+                CONF_BASE_URL: user_input[CONF_BASE_URL].strip(),
+                CONF_API_KEY: user_input[CONF_API_KEY].strip(),
+                CONF_MODEL: user_input[CONF_MODEL].strip(),
+            }
+            return await self.async_step_mcp_server()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_API_KEY): str,
+                vol.Optional(CONF_MODEL, default=DEFAULT_QWEN_MODEL): str,
+                vol.Optional(CONF_BASE_URL, default=DEFAULT_QWEN_URL): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="qwen",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "qwen_api_url": "https://bailian.console.aliyun.com/",
             },
         )
 

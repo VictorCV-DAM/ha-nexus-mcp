@@ -3,21 +3,35 @@
     "step": {
       "user": {
         "title": "Nexus MCP: Inference Provider",
-        "description": "Select the AI brain for Nexus MCP. Google Gemini Free Tier and local Ollama are 100% free.\n\n• **Google Gemini**: Get a free API key at [Google AI Studio](https://aistudio.google.com/app/apikey).\n• **Ollama Local**: Free & private, running locally on your hardware.\n• **OpenAI / Custom**: Bring your own key.",
+        "description": "Select the AI brain for Nexus MCP. Free cloud and local options are available:\n\n• **Google Gemini**: Free tier with Google AI Studio key.\n• **Qwen Cloud (DashScope)**: Free API with millions of free tokens (no tight 20 req/day limit).\n• **Ollama Local**: 100% free and private on your own PC.\n• **OpenAI / Custom**: Bring your own key.",
         "data": {
           "llm_provider": "AI Provider"
         }
       },
       "gemini": {
         "title": "Google Gemini (Free Tier)",
-        "description": "To use Google Gemini, you need a free API key from Google AI Studio.\n\n👉 **[Get your free Gemini API Key here (aistudio.google.com)](https://aistudio.google.com/app/apikey)**\n*(Free tier requires no credit card or billing).*\n\nPaste your API key below:",
+        "description": "To use Google Gemini, you need a free API key from Google AI Studio.\n\n👉 **[Get your free Gemini API Key here (aistudio.google.com)](https://aistudio.google.com/app/apikey)**\n*(Free tier requires no credit card or billing).*\n\n**Available Models:**\n• `gemini-3.1-flash-lite` (Recommended): 500 free requests per day.\n• `gemini-flash-latest`: Always Google's newest Flash (Gemini 3.8 Flash), but limited to 20 requests per day on free tier.\n\nPaste your API key and chosen model below:",
         "data": {
           "api_key": "API Key",
-          "model": "Model Name (default: gemini-3.1-flash-lite)"
+          "model": "Model Name (e.g. gemini-3.1-flash-lite or gemini-flash-latest)"
         },
         "data_description": {
           "api_key": "Generate your free API key at https://aistudio.google.com/app/apikey",
-          "model": "gemini-3.1-flash-lite provides 500 free requests/day (recommended). gemini-flash-latest / 3.8 Flash is limited to 20 requests/day."
+          "model": "Use 'gemini-3.1-flash-lite' (500 req/day, recommended) or 'gemini-flash-latest' (latest Flash, 20 req/day on free tier)."
+        }
+      },
+      "qwen": {
+        "title": "Qwen Cloud (Alibaba Model Studio / DashScope)",
+        "description": "Use Alibaba Qwen's cloud API with millions of free tokens without Google's daily request limitations.\n\n👉 **[Get your free Qwen/DashScope API Key here](https://bailian.console.aliyun.com/)**\n*(Or via Alibaba Cloud Model Studio international console).*\n\nEnter your API key below:",
+        "data": {
+          "api_key": "API Key (sk-...)",
+          "model": "Model Name",
+          "base_url": "DashScope Endpoint URL"
+        },
+        "data_description": {
+          "api_key": "Your DashScope / Model Studio API key.",
+          "model": "Recommended: qwen2.5-coder-32b-instruct, qwen-turbo, or qwen-plus.",
+          "base_url": "Default is international (https://dashscope-intl.aliyuncs.com/compatible-mode/v1). Use https://dashscope.aliyuncs.com/compatible-mode/v1 for mainland China accounts."
         }
       },
       "ollama": {

@@ -18,6 +18,7 @@ from custom_components.nexus_mcp.const import (
     PROVIDER_CUSTOM_OPENAI,
     PROVIDER_GEMINI_FREE,
     PROVIDER_OLLAMA_LOCAL,
+    PROVIDER_QWEN_FREE,
 )
 from custom_components.nexus_mcp.llm_engine import (
     ChatMessage,
@@ -211,6 +212,11 @@ class TestLlmEngine(unittest.IsolatedAsyncioTestCase):
             PROVIDER_GEMINI_FREE, {"api_key": "abc"}, mock_session
         )
         self.assertIsInstance(gemini_eng, GeminiEngine)
+
+        qwen_eng = create_llm_engine(
+            PROVIDER_QWEN_FREE, {"api_key": "sk-123"}, mock_session
+        )
+        self.assertIsInstance(qwen_eng, OpenAiCompatibleEngine)
 
         ollama_eng = create_llm_engine(
             PROVIDER_OLLAMA_LOCAL,

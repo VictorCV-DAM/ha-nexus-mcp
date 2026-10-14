@@ -3,21 +3,35 @@
     "step": {
       "user": {
         "title": "Nexus MCP: Motor de Inferencia",
-        "description": "Selecciona el cerebro de IA para Nexus MCP. Tanto Google Gemini Free Tier como Ollama Local son 100% gratuitos.\n\n• **Google Gemini**: Consigue tu clave API gratis en [Google AI Studio](https://aistudio.google.com/app/apikey).\n• **Ollama Local**: Gratuito, privado y ejecutado en tu propio hardware.\n• **OpenAI / Custom**: Usa tu propia clave de API.",
+        "description": "Selecciona el cerebro de IA para Nexus MCP. Opciones gratuitas en la nube y locales disponibles:\n\n• **Google Gemini**: Capa gratuita con clave de Google AI Studio.\n• **Qwen Cloud (DashScope)**: API gratuita con millones de tokens para no depender de los límites diarios de Google.\n• **Ollama Local**: 100% gratuito y privado en tu propio hardware.\n• **OpenAI / Custom**: Usa tu propia clave de API.",
         "data": {
           "llm_provider": "Proveedor de IA"
         }
       },
       "gemini": {
         "title": "Google Gemini (Capa Gratuita)",
-        "description": "Para usar Google Gemini necesitas una clave de API de Google AI Studio.\n\n👉 **[Consigue tu clave API gratuita de Gemini aquí (aistudio.google.com)](https://aistudio.google.com/app/apikey)**\n*(La capa gratuita no requiere tarjeta de crédito ni facturación).*\n\nPega tu clave API a continuación:",
+        "description": "Para usar Google Gemini necesitas una clave de API de Google AI Studio.\n\n👉 **[Consigue tu clave API gratuita de Gemini aquí (aistudio.google.com)](https://aistudio.google.com/app/apikey)**\n*(La capa gratuita no requiere tarjeta de crédito ni facturación).*\n\n**Modelos disponibles:**\n• `gemini-3.1-flash-lite` (Recomendado): **500 peticiones al día** gratuitas.\n• `gemini-flash-latest`: Apunta siempre a la versión más reciente (Gemini 3.8 Flash), pero con un límite de **20 peticiones al día** en la capa gratuita de Google.\n\nIntroduce tu clave API y el modelo a continuación:",
         "data": {
           "api_key": "Clave API (API Key)",
-          "model": "Nombre del Modelo (por defecto: gemini-3.1-flash-lite)"
+          "model": "Nombre del Modelo (ej. gemini-3.1-flash-lite o gemini-flash-latest)"
         },
         "data_description": {
           "api_key": "Genera tu clave gratuita en https://aistudio.google.com/app/apikey",
-          "model": "gemini-3.1-flash-lite ofrece 500 peticiones/día gratis (recomendado). gemini-flash-latest / 3.8 Flash está limitado a solo 20 peticiones/día."
+          "model": "Puedes indicar 'gemini-3.1-flash-lite' (500 peticiones/día, recomendado) o 'gemini-flash-latest' (última versión Flash, 20 peticiones/día gratis)."
+        }
+      },
+      "qwen": {
+        "title": "Qwen Cloud (Alibaba Model Studio / DashScope)",
+        "description": "Utiliza la API oficial en la nube de Qwen con millones de tokens gratuitos y sin las severas limitaciones diarias de peticiones de Google.\n\n👉 **[Consigue tu clave de API gratuita de Qwen / DashScope aquí](https://bailian.console.aliyun.com/)**\n*(O en la consola internacional de Alibaba Cloud Model Studio).*\n\nIntroduce tu clave de API a continuación:",
+        "data": {
+          "api_key": "Clave API (sk-...)",
+          "model": "Nombre del Modelo",
+          "base_url": "URL del Endpoint DashScope"
+        },
+        "data_description": {
+          "api_key": "Tu clave de API de DashScope / Alibaba Model Studio.",
+          "model": "Recomendado: qwen2.5-coder-32b-instruct, qwen-turbo o qwen-plus.",
+          "base_url": "Por defecto internacional (https://dashscope-intl.aliyuncs.com/compatible-mode/v1). Usa https://dashscope.aliyuncs.com/compatible-mode/v1 para cuentas de China continental."
         }
       },
       "ollama": {
