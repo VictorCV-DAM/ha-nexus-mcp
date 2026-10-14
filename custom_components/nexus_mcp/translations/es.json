@@ -1,0 +1,57 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nexus MCP: Motor de Inferencia",
+        "description": "Selecciona el cerebro de IA para Nexus MCP. Tanto Google Gemini Free Tier como Ollama Local son 100% gratuitos.",
+        "data": {
+          "llm_provider": "Proveedor de IA"
+        }
+      },
+      "gemini": {
+        "title": "Google Gemini (Capa Gratuita)",
+        "description": "Obtén una clave de API gratuita en Google AI Studio (aistudio.google.com). No requiere tarjeta de crédito.",
+        "data": {
+          "api_key": "Clave API (API Key)",
+          "model": "Modelo (ej. gemini-2.0-flash)"
+        }
+      },
+      "ollama": {
+        "title": "Ollama Local (Qwen 2.5 Coder)",
+        "description": "Conéctate a tu servidor local de Ollama ejecutando Qwen Coder.",
+        "data": {
+          "base_url": "URL del Endpoint de Ollama",
+          "model": "Etiqueta del Modelo"
+        }
+      },
+      "custom_openai": {
+        "title": "OpenAI / DashScope Personalizado",
+        "description": "Conéctate a cualquier proveedor compatible con la API de OpenAI (ej. Alibaba DashScope para Qwen Coder en la nube).",
+        "data": {
+          "base_url": "URL Base (Base URL)",
+          "api_key": "Clave API (API Key)",
+          "model": "Nombre del Modelo"
+        }
+      },
+      "mcp_server": {
+        "title": "Conexión con el Servidor HA-MCP",
+        "description": "Conecta Nexus MCP a tu servidor ha-mcp para permitir la creación de automatizaciones y gestión de entidades.",
+        "data": {
+          "mcp_server_url": "URL SSE / Endpoint del Servidor MCP",
+          "autonomous_mode": "Modo Autónomo (Ejecutar acciones sin pedir confirmación)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de Nexus MCP",
+        "description": "Configura el comportamiento del agente en ejecución.",
+        "data": {
+          "autonomous_mode": "Modo Autónomo (Ejecutar sin confirmación)"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nexus MCP: Inference Provider",
+        "description": "Select the AI brain for Nexus MCP. Google Gemini Free Tier and local Ollama are 100% free.",
+        "data": {
+          "llm_provider": "AI Provider"
+        }
+      },
+      "gemini": {
+        "title": "Google Gemini (Free Tier)",
+        "description": "Get a free API key at Google AI Studio (aistudio.google.com). No credit card required.",
+        "data": {
+          "api_key": "API Key",
+          "model": "Model (e.g. gemini-2.0-flash)"
+        }
+      },
+      "ollama": {
+        "title": "Ollama Local (Qwen 2.5 Coder)",
+        "description": "Connect to your local Ollama instance running Qwen Coder.",
+        "data": {
+          "base_url": "Ollama Endpoint URL",
+          "model": "Model Tag"
+        }
+      },
+      "custom_openai": {
+        "title": "Custom OpenAI / DashScope",
+        "description": "Connect to any OpenAI-compatible provider (e.g. Alibaba DashScope for Qwen Coder Cloud).",
+        "data": {
+          "base_url": "Base URL",
+          "api_key": "API Key",
+          "model": "Model Name"
+        }
+      },
+      "mcp_server": {
+        "title": "HA-MCP Server Connection",
+        "description": "Connect Nexus MCP to your ha-mcp server to enable automation creation and entity management.",
+        "data": {
+          "mcp_server_url": "MCP Server SSE / Endpoint URL",
+          "autonomous_mode": "Autonomous Mode (Execute actions without asking confirmation)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Nexus MCP Options",
+        "description": "Configure agent runtime behavior.",
+        "data": {
+          "autonomous_mode": "Autonomous Mode (Execute without confirmation)"
+        }
+      }
+    }
+  }
+}
