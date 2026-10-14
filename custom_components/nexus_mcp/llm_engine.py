@@ -283,22 +283,47 @@ class GeminiEngine(BaseLlmEngine):
                 }
             ]
 
-        try:
-            async with self._session.post(url, json=payload, headers=headers) as resp:
-                if resp.status == 400:
-                    text = await resp.text()
-                    raise LlmError(f"Gemini Bad Request: {text}")
-                if resp.status in (401, 403):
-                    raise LlmAuthError("Invalid Gemini API key.")
-                if resp.status == 429:
-                    raise LlmRateLimitError("Gemini quota exceeded.")
-                if resp.status != 200:
-                    text = await resp.text()
-                    raise LlmError(f"HTTP {resp.status} from Gemini: {text}")
+        max_attempts = 3
+        backoff_seconds = 1.5
+        data: dict[str, Any] | None = None
 
-                data = await resp.json()
-        except aiohttp.ClientError as err:
-            raise LlmError(f"Network error connecting to Gemini: {err}") from err
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with self._session.post(url, json=payload, headers=headers) as resp:
+                    if resp.status in (503, 429):
+                        if attempt < max_attempts:
+                            _LOGGER.warning(
+                                "Gemini API temporarily busy (HTTP %d, attempt %d/%d). Retrying in %.1fs...",
+                                resp.status,
+                                attempt,
+                                max_attempts,
+                                backoff_seconds * attempt,
+                            )
+                            await asyncio.sleep(backoff_seconds * attempt)
+                            continue
+                        raise LlmRateLimitError(
+                            "Los servidores de Gemini están experimentando una sobrecarga temporal de alta demanda. Por favor, vuelve a intentarlo en unos instantes."
+                        )
+
+                    if resp.status == 400:
+                        text = await resp.text()
+                        raise LlmError(f"Gemini Bad Request: {text}")
+                    if resp.status in (401, 403):
+                        raise LlmAuthError("Clave de API de Gemini inválida o no autorizada.")
+                    if resp.status != 200:
+                        text = await resp.text()
+                        raise LlmError(f"HTTP {resp.status} from Gemini: {text}")
+
+                    data = await resp.json()
+                    break
+            except aiohttp.ClientError as err:
+                if attempt < max_attempts:
+                    await asyncio.sleep(backoff_seconds * attempt)
+                    continue
+                raise LlmError(f"Error de red al conectar con Gemini: {err}") from err
+
+        if data is None:
+            raise LlmError("No se recibió respuesta válida del servidor de Gemini.")
 
         candidates = data.get("candidates", [])
         if not candidates:

@@ -18,7 +18,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers import intent
 
 from .const import CONF_LLM_PROVIDER, DOMAIN
-from .llm_engine import ChatMessage, create_llm_engine
+from .llm_engine import ChatMessage, LlmAuthError, LlmRateLimitError, create_llm_engine
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -105,6 +105,15 @@ class NexusMcpConversationEntity(ConversationEntity):
             assistant_reply = response.content or "OK."
             history.append(ChatMessage(role="assistant", content=assistant_reply))
 
+        except LlmRateLimitError as err:
+            _LOGGER.warning("Nexus MCP rate limit/high demand: %s", err)
+            assistant_reply = str(err)
+        except LlmAuthError as err:
+            _LOGGER.error("Nexus MCP authentication error: %s", err)
+            assistant_reply = (
+                f"Error de autenticación ({err}). "
+                "Verifica tu clave de API en Ajustes > Dispositivos y Servicios."
+            )
         except Exception as err:
             _LOGGER.error("Nexus MCP Intercom error communicating with server: %s", err)
             assistant_reply = (
