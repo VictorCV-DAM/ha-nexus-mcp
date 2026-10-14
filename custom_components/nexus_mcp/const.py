@@ -17,7 +17,7 @@ CONF_MCP_SERVER_URL = "mcp_server_url"
 CONF_AUTONOMOUS_MODE = "autonomous_mode"
 
 # Defaults
-DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+DEFAULT_GEMINI_MODEL = "gemini-flash-latest"
 DEFAULT_OLLAMA_URL = "http://localhost:11434/v1"
 DEFAULT_OLLAMA_MODEL = "qwen2.5-coder:7b"
 DEFAULT_MCP_SERVER_URL = "http://localhost:8000/sse"

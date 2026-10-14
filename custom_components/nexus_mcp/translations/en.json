@@ -13,7 +13,7 @@
         "description": "Get a free API key at Google AI Studio (aistudio.google.com). No credit card required.",
         "data": {
           "api_key": "API Key",
-          "model": "Model (e.g. gemini-3.8-flash)"
+          "model": "Model (e.g. gemini-flash-latest - always newest)"
         }
       },
       "ollama": {
