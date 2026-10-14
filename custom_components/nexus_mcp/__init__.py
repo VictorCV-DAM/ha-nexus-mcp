@@ -12,16 +12,21 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+PLATFORMS = ["conversation"]
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Nexus MCP from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    _LOGGER.info("Initializing Nexus MCP agent integration (%s)", entry.title)
+    _LOGGER.info("Initializing Nexus MCP Intercom (%s)", entry.title)
 
     # Store entry config and context
     hass.data[DOMAIN][entry.entry_id] = {
         "entry": entry,
     }
+
+    # Set up conversation platform
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Listen for options updates
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
@@ -30,13 +35,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    _LOGGER.info("Unloading Nexus MCP integration (%s)", entry.title)
-    if entry.entry_id in hass.data.get(DOMAIN, {}):
+    _LOGGER.info("Unloading Nexus MCP Intercom (%s)", entry.title)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok and entry.entry_id in hass.data.get(DOMAIN, {}):
         hass.data[DOMAIN].pop(entry.entry_id)
-    return True
+    return unload_ok
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry."""
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)
+
