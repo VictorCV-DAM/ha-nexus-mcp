@@ -72,7 +72,7 @@ class McpClient:
         server_url: str,
         session: aiohttp.ClientSession | None = None,
         client_name: str = "nexus-mcp",
-        client_version: str = "0.1.0",
+        client_version: str = "1.0.0",
     ) -> None:
         """Initialize the MCP client."""
         self._server_url = server_url.rstrip("/")
