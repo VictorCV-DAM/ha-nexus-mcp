@@ -3,17 +3,21 @@
     "step": {
       "user": {
         "title": "Nexus MCP: Inference Provider",
-        "description": "Select the AI brain for Nexus MCP. Google Gemini Free Tier and local Ollama are 100% free.",
+        "description": "Select the AI brain for Nexus MCP. Google Gemini Free Tier and local Ollama are 100% free.\n\n• **Google Gemini**: Get a free API key at [Google AI Studio](https://aistudio.google.com/app/apikey).\n• **Ollama Local**: Free & private, running locally on your hardware.\n• **OpenAI / Custom**: Bring your own key.",
         "data": {
           "llm_provider": "AI Provider"
         }
       },
       "gemini": {
         "title": "Google Gemini (Free Tier)",
-        "description": "Get a free API key at Google AI Studio (aistudio.google.com). No credit card required.",
+        "description": "To use Google Gemini, you need a free API key from Google AI Studio.\n\n👉 **[Get your free Gemini API Key here (aistudio.google.com)](https://aistudio.google.com/app/apikey)**\n*(Free tier requires no credit card or billing).*\n\nPaste your API key below:",
         "data": {
           "api_key": "API Key",
-          "model": "Model (e.g. gemini-flash-latest - always newest)"
+          "model": "Model Name"
+        },
+        "data_description": {
+          "api_key": "Generate your free API key at https://aistudio.google.com/app/apikey",
+          "model": "Default 'gemini-flash-latest' always points to Google's newest and fastest Flash model."
         }
       },
       "ollama": {
@@ -22,6 +26,10 @@
         "data": {
           "base_url": "Ollama Endpoint URL",
           "model": "Model Tag"
+        },
+        "data_description": {
+          "base_url": "URL where Ollama is listening (default: http://127.0.0.1:11434).",
+          "model": "Model tag to use (e.g. qwen2.5-coder:7b or qwen2.5-coder:latest)."
         }
       },
       "custom_openai": {
@@ -31,6 +39,11 @@
           "base_url": "Base URL",
           "api_key": "API Key",
           "model": "Model Name"
+        },
+        "data_description": {
+          "base_url": "OpenAI-compatible base URL (e.g. https://api.openai.com/v1).",
+          "api_key": "Your API key for this provider.",
+          "model": "Model identifier (e.g. gpt-4o-mini or qwen-coder-turbo)."
         }
       },
       "mcp_server": {
@@ -39,6 +52,10 @@
         "data": {
           "mcp_server_url": "MCP Server SSE / Endpoint URL",
           "autonomous_mode": "Autonomous Mode (Execute actions without asking confirmation)"
+        },
+        "data_description": {
+          "mcp_server_url": "Auto-detected if ha_mcp_tools is installed in Home Assistant.",
+          "autonomous_mode": "If enabled, Nexus MCP will execute actions without requiring an interactive confirmation prompt."
         }
       }
     }
@@ -50,6 +67,9 @@
         "description": "Configure agent runtime behavior.",
         "data": {
           "autonomous_mode": "Autonomous Mode (Execute without confirmation)"
+        },
+        "data_description": {
+          "autonomous_mode": "If enabled, Nexus MCP will execute actions directly without asking for confirmation."
         }
       }
     }

@@ -83,8 +83,8 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._llm_data = {
                 CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE,
-                CONF_API_KEY: user_input[CONF_API_KEY],
-                CONF_MODEL: user_input.get(CONF_MODEL, DEFAULT_GEMINI_MODEL),
+                CONF_API_KEY: user_input[CONF_API_KEY].strip(),
+                CONF_MODEL: user_input.get(CONF_MODEL, DEFAULT_GEMINI_MODEL).strip(),
             }
             return await self.async_step_mcp_server()
 
@@ -96,7 +96,12 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         return self.async_show_form(
-            step_id="gemini", data_schema=schema, errors=errors
+            step_id="gemini",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "api_key_url": "https://aistudio.google.com/app/apikey",
+            },
         )
 
     async def async_step_ollama(
