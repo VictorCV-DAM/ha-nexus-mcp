@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Nexus MCP: Motor de Inferencia",
-        "description": "Selecciona el cerebro de IA para Nexus MCP. Opciones gratuitas en la nube y locales disponibles:\n\n• **Google Gemini**: Capa gratuita con clave de Google AI Studio.\n• **Qwen Cloud (DashScope)**: API gratuita con millones de tokens para no depender de los límites diarios de Google.\n• **Ollama Local**: 100% gratuito y privado en tu propio hardware.\n• **OpenAI / Custom**: Usa tu propia clave de API.",
+        "description": "Selecciona el cerebro de IA para Nexus MCP. Opciones gratuitas en la nube y locales disponibles:\n\n• **Google Gemini**: Capa gratuita con clave de Google AI Studio.\n• **Qwen Cloud (DashScope)**: Millones de tokens gratis con los modelos más recientes de Qwen. [Consigue tu clave en Alibaba Cloud Model Studio](https://modelstudio.console.alibabacloud.com/).\n• **Ollama Local**: 100% gratuito y privado en tu propio hardware.\n• **OpenAI / Custom**: Usa tu propia clave de API.",
         "data": {
           "llm_provider": "Proveedor de IA"
         }
@@ -22,16 +22,16 @@
       },
       "qwen": {
         "title": "Qwen Cloud (Alibaba Model Studio / DashScope)",
-        "description": "Utiliza la API oficial en la nube de Qwen con millones de tokens gratuitos y sin las severas limitaciones diarias de peticiones de Google.\n\n👉 **[Consigue tu clave de API gratuita de Qwen / DashScope aquí](https://bailian.console.aliyun.com/)**\n*(O en la consola internacional de Alibaba Cloud Model Studio).*\n\nIntroduce tu clave de API a continuación:",
+        "description": "Para usar Qwen en la nube necesitas una clave de API de Alibaba Cloud Model Studio (DashScope), que incluye millones de tokens gratuitos sin las restricciones diarias de Google.\n\n👉 **[Consigue tu clave API gratuita de Qwen aquí (alibabacloud.com)](https://modelstudio.console.alibabacloud.com/)**\n*(Disponible internacionalmente con registro gratuito).* \n\n**Modelo configurado:**\n• `qwen-plus-latest`: Apunta siempre a la última versión disponible de Qwen Plus.\n• También compatible con `qwen-turbo-latest` o `qwen2.5-coder-32b-instruct`.\n\nIntroduce tu clave API y el modelo a continuación:",
         "data": {
           "api_key": "Clave API (sk-...)",
-          "model": "Nombre del Modelo",
-          "base_url": "URL del Endpoint DashScope"
+          "model": "Nombre del Modelo (por defecto: qwen-plus-latest)",
+          "base_url": "URL Base del Endpoint"
         },
         "data_description": {
-          "api_key": "Tu clave de API de DashScope / Alibaba Model Studio.",
-          "model": "Recomendado: qwen2.5-coder-32b-instruct, qwen-turbo o qwen-plus.",
-          "base_url": "Por defecto internacional (https://dashscope-intl.aliyuncs.com/compatible-mode/v1). Usa https://dashscope.aliyuncs.com/compatible-mode/v1 para cuentas de China continental."
+          "api_key": "Genera tu clave gratuita en https://modelstudio.console.alibabacloud.com/",
+          "model": "'qwen-plus-latest' apunta siempre a la última versión disponible de Qwen Plus.",
+          "base_url": "Endpoint internacional predeterminado: https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
         }
       },
       "ollama": {

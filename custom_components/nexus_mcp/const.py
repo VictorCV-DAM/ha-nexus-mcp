@@ -20,7 +20,7 @@ CONF_AUTONOMOUS_MODE = "autonomous_mode"
 # Defaults
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 DEFAULT_QWEN_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
-DEFAULT_QWEN_MODEL = "qwen2.5-coder-32b-instruct"
+DEFAULT_QWEN_MODEL = "qwen-plus-latest"
 DEFAULT_OLLAMA_URL = "http://localhost:11434/v1"
 DEFAULT_OLLAMA_MODEL = "qwen2.5-coder:7b"
 DEFAULT_MCP_SERVER_URL = "http://localhost:8000/sse"

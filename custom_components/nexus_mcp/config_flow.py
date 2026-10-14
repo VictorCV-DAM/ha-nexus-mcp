@@ -138,7 +138,7 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=schema,
             errors=errors,
             description_placeholders={
-                "qwen_api_url": "https://bailian.console.aliyun.com/",
+                "qwen_api_url": "https://modelstudio.console.alibabacloud.com/",
             },
         )
 
