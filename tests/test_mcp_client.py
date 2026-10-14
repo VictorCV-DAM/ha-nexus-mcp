@@ -48,10 +48,13 @@ class TestMcpTool(unittest.TestCase):
         self.assertEqual(openai_fmt["function"]["name"], "create_automation")
         self.assertEqual(openai_fmt["function"]["parameters"], tool.input_schema)
 
-        # Gemini format check
+        # Gemini format check (verifies automatic array sanitization with items: {type: object})
         gemini_fmt = tool.to_gemini_tool()
         self.assertEqual(gemini_fmt["name"], "create_automation")
-        self.assertEqual(gemini_fmt["parameters"], tool.input_schema)
+        self.assertEqual(
+            gemini_fmt["parameters"]["properties"]["trigger"]["items"],
+            {"type": "object"},
+        )
 
 
 class TestMcpClient(unittest.IsolatedAsyncioTestCase):

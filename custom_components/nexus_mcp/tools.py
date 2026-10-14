@@ -96,14 +96,17 @@ def get_builtin_tools() -> list[McpTool]:
                     "trigger": {
                         "type": "array",
                         "description": "List of triggers (e.g. time_pattern, state changes, numeric_state).",
+                        "items": {"type": "object"},
                     },
                     "condition": {
                         "type": "array",
                         "description": "Optional list of conditions that must be met.",
+                        "items": {"type": "object"},
                     },
                     "action": {
                         "type": "array",
                         "description": "List of actions to execute when triggered.",
+                        "items": {"type": "object"},
                     },
                     "mode": {
                         "type": "string",
