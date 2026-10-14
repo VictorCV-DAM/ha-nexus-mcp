@@ -13,11 +13,11 @@
         "description": "Para usar Google Gemini necesitas una clave de API de Google AI Studio.\n\n👉 **[Consigue tu clave API gratuita de Gemini aquí (aistudio.google.com)](https://aistudio.google.com/app/apikey)**\n*(La capa gratuita no requiere tarjeta de crédito ni facturación).*\n\nPega tu clave API a continuación:",
         "data": {
           "api_key": "Clave API (API Key)",
-          "model": "Nombre del Modelo"
+          "model": "Nombre del Modelo (por defecto: gemini-3.1-flash-lite)"
         },
         "data_description": {
           "api_key": "Genera tu clave gratuita en https://aistudio.google.com/app/apikey",
-          "model": "Por defecto 'gemini-flash-latest' apunta siempre al modelo Flash más moderno y rápido de Google."
+          "model": "gemini-3.1-flash-lite ofrece 500 peticiones/día gratis (recomendado). gemini-flash-latest / 3.8 Flash está limitado a solo 20 peticiones/día."
         }
       },
       "ollama": {

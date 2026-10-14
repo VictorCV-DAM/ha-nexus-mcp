@@ -143,6 +143,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                                 role="tool",
                                 content=json.dumps(tool_result, ensure_ascii=False),
                                 tool_call_id=tc.call_id,
+                                tool_name=tc.name,
                             )
                         )
                     # Loop continues: send tool results back to LLM for final explanation

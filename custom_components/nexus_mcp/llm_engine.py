@@ -51,6 +51,7 @@ class LlmToolCall:
     call_id: str
     name: str
     arguments: dict[str, Any]
+    thought_signature: str | None = None
 
 
 @dataclass
@@ -60,7 +61,8 @@ class ChatMessage:
     role: str  # "system", "user", "assistant", "tool"
     content: str | None = None
     tool_calls: list[LlmToolCall] = field(default_factory=list)
-    tool_call_id: str | None = None  # Used when role is "tool"
+    tool_call_id: str | None = None  # Used when role is "tool" (call ID for OpenAI)
+    tool_name: str | None = None  # Function name for Gemini functionResponse
 
 
 @dataclass
@@ -236,19 +238,25 @@ class GeminiEngine(BaseLlmEngine):
                 continue  # Handled via systemInstruction
 
             parts: list[dict[str, Any]] = []
-            if msg.content:
+            if msg.content and msg.role != "tool":
                 parts.append({"text": msg.content})
 
             if msg.tool_calls:
                 for tc in msg.tool_calls:
-                    parts.append(
-                        {
-                            "functionCall": {
-                                "name": tc.name,
-                                "args": tc.arguments,
-                            }
-                        }
-                    )
+                    fc_data: dict[str, Any] = {
+                        "name": tc.name,
+                        "args": tc.arguments,
+                    }
+                    if tc.call_id and not tc.call_id.startswith("gemini_call_"):
+                        fc_data["id"] = tc.call_id
+
+                    # Gemini 3 requires thoughtSignature on functionCall parts in multi-turn history.
+                    sig = tc.thought_signature or "skip_thought_signature_validator"
+                    fc_part: dict[str, Any] = {
+                        "functionCall": fc_data,
+                        "thoughtSignature": sig,
+                    }
+                    parts.append(fc_part)
 
             if msg.role == "tool":
                 # Gemini functionResponse format
@@ -257,10 +265,11 @@ class GeminiEngine(BaseLlmEngine):
                 except json.JSONDecodeError:
                     resp_dict = {"output": msg.content}
 
+                func_name = msg.tool_name or msg.tool_call_id or "tool_result"
                 parts.append(
                     {
                         "functionResponse": {
-                            "name": msg.tool_call_id or "tool_result",
+                            "name": func_name,
                             "response": {"result": resp_dict},
                         }
                     }
@@ -268,7 +277,10 @@ class GeminiEngine(BaseLlmEngine):
 
             gemini_role = "user" if msg.role in ("user", "tool") else "model"
             if parts:
-                contents.append({"role": gemini_role, "parts": parts})
+                if contents and contents[-1]["role"] == gemini_role:
+                    contents[-1]["parts"].extend(parts)
+                else:
+                    contents.append({"role": gemini_role, "parts": parts})
 
         payload: dict[str, Any] = {"contents": contents}
 
@@ -291,11 +303,32 @@ class GeminiEngine(BaseLlmEngine):
         for attempt in range(1, max_attempts + 1):
             try:
                 async with self._session.post(url, json=payload, headers=headers) as resp:
-                    if resp.status in (503, 429):
+                    if resp.status == 429:
+                        # If the model hit quota limit and it's gemini-3.8-flash or gemini-flash-latest (only 20 req/day),
+                        # automatically fallback to high-quota gemini-3.1-flash-lite (500 req/day!)
+                        if self._model != "gemini-3.1-flash-lite":
+                            _LOGGER.warning(
+                                "Gemini model '%s' quota exceeded (HTTP 429). Falling back to 'gemini-3.1-flash-lite' (500 req/day)...",
+                                self._model,
+                            )
+                            self._model = "gemini-3.1-flash-lite"
+                            url = f"{GEMINI_API_URL}/{self._model}:generateContent?key={self._api_key}"
+                            await asyncio.sleep(1.0)
+                            continue
+
+                        if attempt < max_attempts:
+                            await asyncio.sleep(backoff_seconds * attempt)
+                            continue
+
+                        raise LlmRateLimitError(
+                            "Has superado el límite de peticiones de Google Gemini (500 peticiones/día en la capa gratuita). "
+                            "Espera unos minutos o revisa tu cuota en Google AI Studio."
+                        )
+
+                    if resp.status == 503:
                         if attempt < max_attempts:
                             _LOGGER.warning(
-                                "Gemini API temporarily busy (HTTP %d, attempt %d/%d). Retrying in %.1fs...",
-                                resp.status,
+                                "Gemini API temporarily busy (HTTP 503, attempt %d/%d). Retrying in %.1fs...",
                                 attempt,
                                 max_attempts,
                                 backoff_seconds * attempt,
@@ -342,11 +375,19 @@ class GeminiEngine(BaseLlmEngine):
                 text_pieces.append(part["text"])
             if "functionCall" in part:
                 fc = part["functionCall"]
+                thought_sig = (
+                    part.get("thoughtSignature")
+                    or part.get("thought_signature")
+                    or fc.get("thoughtSignature")
+                    or fc.get("thought_signature")
+                )
+                call_id = fc.get("id") or f"gemini_call_{idx}"
                 tool_calls.append(
                     LlmToolCall(
-                        call_id=f"gemini_call_{idx}",
+                        call_id=call_id,
                         name=fc.get("name", ""),
                         arguments=fc.get("args", {}),
+                        thought_signature=thought_sig,
                     )
                 )
 

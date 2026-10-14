@@ -13,11 +13,11 @@
         "description": "To use Google Gemini, you need a free API key from Google AI Studio.\n\n👉 **[Get your free Gemini API Key here (aistudio.google.com)](https://aistudio.google.com/app/apikey)**\n*(Free tier requires no credit card or billing).*\n\nPaste your API key below:",
         "data": {
           "api_key": "API Key",
-          "model": "Model Name"
+          "model": "Model Name (default: gemini-3.1-flash-lite)"
         },
         "data_description": {
           "api_key": "Generate your free API key at https://aistudio.google.com/app/apikey",
-          "model": "Default 'gemini-flash-latest' always points to Google's newest and fastest Flash model."
+          "model": "gemini-3.1-flash-lite provides 500 free requests/day (recommended). gemini-flash-latest / 3.8 Flash is limited to 20 requests/day."
         }
       },
       "ollama": {
