@@ -202,7 +202,21 @@ class GeminiEngine(BaseLlmEngine):
     ) -> None:
         super().__init__(session)
         self._api_key = api_key
-        self._model = model
+
+        # Automatically upgrade retired or deprecated models to gemini-3.8-flash
+        clean_model = model.strip()
+        if clean_model.startswith("models/"):
+            clean_model = clean_model[len("models/"):]
+
+        if clean_model in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.0-pro"):
+            _LOGGER.info(
+                "Upgrading deprecated Gemini model '%s' to '%s'",
+                model,
+                DEFAULT_GEMINI_MODEL,
+            )
+            clean_model = DEFAULT_GEMINI_MODEL
+
+        self._model = clean_model
 
     async def generate_response(
         self,

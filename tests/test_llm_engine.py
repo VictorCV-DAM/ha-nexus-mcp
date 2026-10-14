@@ -118,6 +118,7 @@ class TestLlmEngine(unittest.IsolatedAsyncioTestCase):
             api_key="test_api_key",
             model="gemini-2.0-flash",
         )
+        self.assertEqual(engine._model, "gemini-3.8-flash")
 
         messages = [ChatMessage(role="user", content="Create automation")]
         resp = await engine.generate_response(messages)
