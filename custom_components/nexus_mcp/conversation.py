@@ -18,7 +18,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers import intent
 
-from .const import CONF_LLM_PROVIDER, DOMAIN
+from .const import CONF_LLM_PROVIDER, CONF_MCP_SERVER_URL, DEFAULT_MCP_SERVER_URL, DOMAIN
+from .discovery import async_autodiscover_ha_mcp_url
 from .llm_engine import ChatMessage, LlmAuthError, LlmRateLimitError, create_llm_engine
 from .tools import execute_builtin_tool, get_builtin_tools
 
@@ -54,6 +55,14 @@ class NexusMcpConversationEntity(ConversationEntity):
 
         # Built-in Home Assistant tools
         self._tools = get_builtin_tools()
+
+        # Resolve MCP Server URL: configured or auto-discovered
+        mcp_url = entry.data.get(CONF_MCP_SERVER_URL)
+        if not mcp_url or mcp_url == DEFAULT_MCP_SERVER_URL:
+            discovered = async_autodiscover_ha_mcp_url(hass)
+            if discovered:
+                mcp_url = discovered
+        self._mcp_url = mcp_url
 
         # Initialize lightweight engine using shared HA aiohttp session
         session = async_get_clientsession(hass)

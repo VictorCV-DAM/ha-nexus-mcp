@@ -27,6 +27,7 @@ from .const import (
     DEFAULT_MCP_SERVER_URL,
     DEFAULT_AUTONOMOUS_MODE,
 )
+from .discovery import async_autodiscover_ha_mcp_url
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -156,6 +157,10 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Final step: Configure connection to ha-mcp server and autonomy."""
         errors: dict[str, str] = {}
 
+        # Auto-discover HA-MCP Server URL if ha_mcp_tools is installed
+        detected_url = async_autodiscover_ha_mcp_url(self.hass)
+        default_url = detected_url or DEFAULT_MCP_SERVER_URL
+
         if user_input is not None:
             config_data = {
                 **self._llm_data,
@@ -169,7 +174,7 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(
             {
                 vol.Required(
-                    CONF_MCP_SERVER_URL, default=DEFAULT_MCP_SERVER_URL
+                    CONF_MCP_SERVER_URL, default=default_url
                 ): str,
                 vol.Required(
                     CONF_AUTONOMOUS_MODE, default=DEFAULT_AUTONOMOUS_MODE
