@@ -6,6 +6,7 @@ Uses aiohttp directly to eliminate external dependencies in Home Assistant.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import asyncio
 from dataclasses import dataclass, field
 import json
 import logging
