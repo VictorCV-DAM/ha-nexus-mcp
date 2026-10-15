@@ -341,6 +341,36 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                             msg = error_body
                         raise LlmRateLimitError(f"Rate limit exceeded: {msg}", reset_seconds=delay)
 
+                    if resp.status == 413:
+                        error_body = await resp.text()
+                        _LOGGER.warning(
+                            "HTTP 413 Request too large for %s (attempt %d/%d): %s. Trimming messages...",
+                            self._model,
+                            attempt + 1,
+                            max_retries + 1,
+                            error_body,
+                        )
+                        # If on Groq with qwen3.8-27b (limit 7000 ITPM), fallback to gpt-oss-120b
+                        if "groq.com" in self._base_url and self._model == "qwen/qwen3.8-27b":
+                            _LOGGER.warning("Auto-falling back from qwen/qwen3.8-27b to openai/gpt-oss-120b...")
+                            self._model = "openai/gpt-oss-120b"
+                            payload["model"] = "openai/gpt-oss-120b"
+
+                        if attempt < max_retries and len(payload.get("messages", [])) > 2:
+                            sys_msgs = [m for m in payload["messages"] if m.get("role") == "system"]
+                            other_msgs = [m for m in payload["messages"] if m.get("role") != "system"]
+                            # Aggressively keep only the latest 2 messages
+                            payload["messages"] = sys_msgs + other_msgs[-2:]
+                            await asyncio.sleep(0.5)
+                            continue
+
+                        try:
+                            err_json = json.loads(error_body)
+                            msg = err_json.get("error", {}).get("message", error_body)
+                        except Exception:
+                            msg = error_body
+                        raise LlmRateLimitError(f"Request too large: {msg}", reset_seconds=5.0)
+
                     if resp.status == 400:
                         text = await resp.text()
                         # If Groq or OpenAI rejected with tool_use_failed, malformed JSON, or failed_generation

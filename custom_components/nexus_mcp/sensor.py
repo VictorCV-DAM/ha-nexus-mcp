@@ -194,7 +194,7 @@ class NexusMcpHistorySensor(SensorEntity):
             "name": f"Nexus MCP ({model_name})",
             "manufacturer": "Nexus MCP",
             "model": model_name,
-            "sw_version": "1.3.4",
+            "sw_version": "1.3.5",
         }
 
     async def async_added_to_hass(self) -> None:
@@ -326,7 +326,7 @@ class NexusMcpTokenSensor(SensorEntity):
             "name": f"Nexus MCP ({model_name})",
             "manufacturer": "Nexus MCP",
             "model": model_name,
-            "sw_version": "1.3.4",
+            "sw_version": "1.3.5",
         }
 
     async def async_added_to_hass(self) -> None:
@@ -415,7 +415,7 @@ class NexusMcpRateLimitResetSensor(SensorEntity):
             "name": f"Nexus MCP ({model_name})",
             "manufacturer": "Nexus MCP",
             "model": model_name,
-            "sw_version": "1.3.4",
+            "sw_version": "1.3.5",
         }
 
     async def async_added_to_hass(self) -> None:
@@ -507,7 +507,7 @@ class NexusMcpModelLimitSensor(SensorEntity):
             "name": f"Nexus MCP ({model_name})",
             "manufacturer": "Nexus MCP",
             "model": model_name,
-            "sw_version": "1.3.4",
+            "sw_version": "1.3.5",
         }
 
     async def async_added_to_hass(self) -> None:
@@ -601,7 +601,7 @@ class NexusMcpMaxWaitSensor(SensorEntity):
             "name": f"Nexus MCP ({model_name})",
             "manufacturer": "Nexus MCP",
             "model": model_name,
-            "sw_version": "1.3.4",
+            "sw_version": "1.3.5",
         }
 
     async def async_added_to_hass(self) -> None:

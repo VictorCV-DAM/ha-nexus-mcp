@@ -462,6 +462,68 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
             await entity._async_save_history()
             mock_store.async_save.assert_awaited()
 
+    async def test_prune_history_to_token_budget_and_transient_error_detection(self) -> None:
+        """Test token budget pruning and transient error identification."""
+        from custom_components.nexus_mcp.conversation import (
+            ChatMessage,
+            is_transient_error_message,
+            prune_history_to_token_budget,
+        )
+
+        # Transient error checks
+        self.assertTrue(is_transient_error_message("Error communicating with AI server (HTTP 413 from ...: Request too large)"))
+        self.assertTrue(is_transient_error_message("Error al comunicar con el servidor de IA (HTTP 429)"))
+        self.assertTrue(is_transient_error_message("Límite de peticiones alcanzado (Rate limit)"))
+        self.assertTrue(is_transient_error_message("Rate limit reached (TPM)"))
+        self.assertFalse(is_transient_error_message("Hola, aquí tienes el resumen del tiempo."))
+        self.assertFalse(is_transient_error_message(None))
+
+        # Budget pruning
+        long_text = "a" * 8000  # ~2000 tokens
+        msgs = [
+            ChatMessage(role="user", content="msg 1"),
+            ChatMessage(role="assistant", content="Error communicating with AI server (HTTP 413)"),
+            ChatMessage(role="user", content=long_text),
+            ChatMessage(role="assistant", content="Normal reply"),
+            ChatMessage(role="user", content="msg 5"),
+        ]
+        pruned = prune_history_to_token_budget(msgs, max_tokens=1000)
+        # Should exclude the transient error message and older messages exceeding 1000 tokens
+        self.assertTrue(all("Error communicating" not in (m.content or "") for m in pruned))
+        self.assertEqual(pruned[-1].content, "msg 5")
+
+    async def test_async_process_does_not_persist_transient_errors(self) -> None:
+        """Test that transient API errors are not saved into conversation history."""
+        from custom_components.nexus_mcp.llm_engine import LlmRateLimitError
+
+        mock_hass = MagicMock()
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "test_entry_err"
+        mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
+
+        with patch("custom_components.nexus_mcp.conversation.create_llm_engine") as mock_factory, \
+             patch("custom_components.nexus_mcp.conversation.intent.IntentResponse", side_effect=FakeIntentResponse), \
+             patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
+
+            mock_engine = AsyncMock()
+            mock_engine.generate_response.side_effect = LlmRateLimitError("Rate limit exceeded", reset_seconds=10.0)
+            mock_factory.return_value = mock_engine
+
+            entity = NexusMcpConversationEntity(mock_hass, mock_entry)
+
+            user_input = MagicMock()
+            user_input.text = "hi"
+            user_input.conversation_id = "test_err_session"
+            user_input.language = "en"
+
+            result = await entity.async_process(user_input)
+
+            self.assertIn("Rate limit reached", result.response.speech_text)
+            # The failed session should not contain the error message
+            session_history = entity._history.get("test_err_session", [])
+            self.assertFalse(any("Rate limit" in (m.content or "") for m in session_history))
+
 
 if __name__ == "__main__":
     unittest.main()
+

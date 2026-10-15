@@ -56,6 +56,44 @@ RESET_COMMANDS = {
 }
 
 
+def is_transient_error_message(content: str | None) -> bool:
+    """Check if message content is a transient system error that should not be saved or sent back to LLM."""
+    if not content:
+        return False
+    c_lower = str(content).lower().strip()
+    return (
+        c_lower.startswith("error al comunicar")
+        or c_lower.startswith("error communicating")
+        or c_lower.startswith("límite de peticiones")
+        or c_lower.startswith("rate limit reached")
+        or c_lower.startswith("request too large")
+        or "http 413" in c_lower
+        or "http 429" in c_lower
+    )
+
+
+def prune_history_to_token_budget(
+    messages: list[ChatMessage], max_tokens: int = 3500
+) -> list[ChatMessage]:
+    """Ensure conversation history fits safely within the model's input token limits."""
+    if not messages:
+        return []
+    # Strip any transient error messages from history
+    cleaned = [m for m in messages if not is_transient_error_message(m.content)]
+    if not cleaned:
+        cleaned = list(messages)
+    # Always keep the latest message
+    pruned = [cleaned[-1]]
+    current_tokens = max(1, len(cleaned[-1].content or "") // 4) + 20
+    for msg in reversed(cleaned[:-1]):
+        msg_tokens = max(1, len(msg.content or "") // 4) + 20
+        if current_tokens + msg_tokens > max_tokens:
+            break
+        pruned.insert(0, msg)
+        current_tokens += msg_tokens
+    return pruned
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -187,7 +225,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             "name": f"Nexus MCP ({self._model_name})",
             "manufacturer": "Nexus MCP",
             "model": self._model_name,
-            "sw_version": "1.3.4",
+            "sw_version": "1.3.5",
         }
 
     @property
@@ -304,7 +342,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                                 if isinstance(m, dict) and "role" in m and "content" in m:
                                     if m["role"] in ("user", "assistant"):
                                         # Skip transient server communication errors from polluting long-term history
-                                        if not str(m["content"]).startswith("Error al comunicar con el servidor"):
+                                        if not is_transient_error_message(m.get("content")):
                                             chat_msgs.append(
                                                 ChatMessage(role=m["role"], content=m["content"])
                                             )
@@ -357,7 +395,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                     conv_id: [
                         {"role": msg.role, "content": msg.content}
                         for msg in msgs[-MAX_HISTORY_MESSAGES:]
-                        if msg.role in ("user", "assistant") and msg.content
+                        if msg.role in ("user", "assistant") and msg.content and not is_transient_error_message(msg.content)
                     ]
                     for conv_id, msgs in self._history.items()
                 },
@@ -431,7 +469,7 @@ class NexusMcpConversationEntity(ConversationEntity):
 
         try:
             resp = await self._engine.generate_response(
-                messages=history,
+                messages=prune_history_to_token_budget(history, max_tokens=3500),
                 tools=self._tools,
                 system_prompt=system_prompt,
             )
@@ -502,14 +540,15 @@ class NexusMcpConversationEntity(ConversationEntity):
             )
 
         # Automatic continuity: If starting a new session (unknown conversation_id),
-        # inherit the recent context from the previous conversation so the user can
+        # inherit recent context from the previous conversation so the user can
         # seamlessly resume where they left off!
         if conversation_id not in self._history:
             if self._last_conversation_id and self._last_conversation_id in self._history:
                 prev_history = self._history[self._last_conversation_id]
                 if prev_history:
-                    # Seed with up to last 10 messages from previous conversation
-                    self._history[conversation_id] = list(prev_history[-10:])
+                    # Seed with up to last 4 messages from previous conversation pruned to 2000 tokens
+                    seeded = prune_history_to_token_budget(prev_history, max_tokens=2000)[-4:]
+                    self._history[conversation_id] = list(seeded)
                     _LOGGER.debug(
                         "Nexus MCP resumed context from previous conversation [%s] (%d messages) into [%s]",
                         self._last_conversation_id,
@@ -597,7 +636,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             # Multi-turn tool execution loop (up to 4 turns)
             for _ in range(4):
                 response = await self._engine.generate_response(
-                    messages=history,
+                    messages=prune_history_to_token_budget(history, max_tokens=3500),
                     tools=self._tools,
                     system_prompt=system_prompt,
                 )
@@ -700,9 +739,14 @@ class NexusMcpConversationEntity(ConversationEntity):
                 )
             )
 
-        # Ensure assistant reply is stored in history if an exception occurred
-        if not history or history[-1].role != "assistant":
-            history.append(ChatMessage(role="assistant", content=assistant_reply))
+        # Only store assistant reply if not a transient error message to prevent recursion/history bloat
+        if not is_transient_error_message(assistant_reply):
+            if not history or history[-1].role != "assistant":
+                history.append(ChatMessage(role="assistant", content=assistant_reply))
+        else:
+            # If an error occurred, pop the failed user message so the next attempt starts clean
+            if history and history[-1].role == "user":
+                history.pop()
 
         self._last_conversation_id = conversation_id
         await self._async_save_history()
