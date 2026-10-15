@@ -92,7 +92,8 @@ class NexusMcpConversationEntity(ConversationEntity):
         self.hass = hass
         self.entry = entry
         self._attr_unique_id = f"{entry.entry_id}_conversation"
-        model_name = entry.data.get(CONF_MODEL) or entry.data.get(CONF_LLM_PROVIDER, "agent")
+        merged_config = {**entry.data, **entry.options}
+        model_name = merged_config.get(CONF_MODEL) or merged_config.get(CONF_LLM_PROVIDER, "agent")
         self._attr_name = f"Nexus MCP Intercom ({model_name})"
 
         # Conversation history buffer: conversation_id -> list[ChatMessage]
@@ -102,7 +103,7 @@ class NexusMcpConversationEntity(ConversationEntity):
         self._tools = get_builtin_tools()
 
         # Resolve MCP Server URL: configured or auto-discovered
-        mcp_url = entry.data.get(CONF_MCP_SERVER_URL)
+        mcp_url = merged_config.get(CONF_MCP_SERVER_URL)
         if not mcp_url or mcp_url == DEFAULT_MCP_SERVER_URL:
             discovered = async_autodiscover_ha_mcp_url(hass)
             if discovered:
@@ -112,8 +113,8 @@ class NexusMcpConversationEntity(ConversationEntity):
         # Initialize lightweight engine using shared HA aiohttp session
         session = async_get_clientsession(hass)
         self._engine = create_llm_engine(
-            provider=entry.data.get(CONF_LLM_PROVIDER, ""),
-            config=entry.data,
+            provider=merged_config.get(CONF_LLM_PROVIDER, ""),
+            config=merged_config,
             session=session,
         )
 

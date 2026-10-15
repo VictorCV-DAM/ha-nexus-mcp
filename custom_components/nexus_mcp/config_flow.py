@@ -370,9 +370,13 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
             model_name = updated_data.get(CONF_MODEL) or updated_data.get(CONF_LLM_PROVIDER)
             new_title = f"Nexus MCP ({model_name})" if model_name else self.config_entry.title
 
-            self.hass.config_entries.async_update_entry(
-                self.config_entry, title=new_title, data=updated_data, options=user_input
-            )
+            # Sync title and entry data if modified
+            if updated_data != self.config_entry.data or new_title != self.config_entry.title:
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, title=new_title, data=updated_data
+                )
+
+            # Return options flow completion - Home Assistant natively saves entry.options and triggers reload cleanly
             return self.async_create_entry(title="", data=user_input)
 
         data = self.config_entry.data or {}

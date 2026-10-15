@@ -23,9 +23,10 @@ PLATFORMS = ["conversation"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Nexus MCP from a config entry."""
-    provider = entry.data.get(CONF_LLM_PROVIDER)
-    base_url = entry.data.get(CONF_BASE_URL, "")
-    current_model = entry.data.get(CONF_MODEL, "")
+    merged_config = {**entry.data, **entry.options}
+    provider = merged_config.get(CONF_LLM_PROVIDER)
+    base_url = merged_config.get(CONF_BASE_URL, "")
+    current_model = merged_config.get(CONF_MODEL, "")
 
     needs_update = False
     updated_data = dict(entry.data)
@@ -82,7 +83,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry."""
-    await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry)
+    """Reload config entry via Home Assistant's official config entry reload coordinator."""
+    await hass.config_entries.async_reload(entry.entry_id)
 

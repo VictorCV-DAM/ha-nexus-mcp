@@ -1,7 +1,7 @@
 """Unit tests for Nexus MCP Config and Options Flows."""
 import sys
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 if "voluptuous" not in sys.modules:
     vol_mock = MagicMock()
@@ -187,6 +187,45 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
         options_flow.hass.config_entries.async_update_entry.assert_called_once()
         call_kwargs = options_flow.hass.config_entries.async_update_entry.call_args[1]
         self.assertEqual(call_kwargs["title"], "Nexus MCP (openai/gpt-oss-120b)")
+
+    async def test_options_flow_autonomous_mode_toggle_clean(self) -> None:
+        """Verify OptionsFlow cleanly saves autonomous mode into options without deadlocking."""
+        mock_entry = MagicMock()
+        mock_entry.title = "Nexus MCP (openai/gpt-oss-120b)"
+        mock_entry.data = {
+            CONF_LLM_PROVIDER: PROVIDER_GROQ_FREE,
+            CONF_API_KEY: "gsk_test",
+            CONF_MODEL: "openai/gpt-oss-120b",
+            CONF_BASE_URL: "https://api.groq.com/openai/v1",
+            CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
+            CONF_AUTONOMOUS_MODE: False,
+        }
+        mock_entry.options = {CONF_AUTONOMOUS_MODE: False}
+
+        options_flow = NexusMcpOptionsFlow(mock_entry)
+        options_flow.hass = MagicMock()
+
+        result = await options_flow.async_step_init(
+            {
+                CONF_MODEL: "openai/gpt-oss-120b",
+                CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
+                CONF_AUTONOMOUS_MODE: True,
+            }
+        )
+        self.assertEqual(result["type"], "create_entry")
+        self.assertTrue(result["data"][CONF_AUTONOMOUS_MODE])
+
+    async def test_async_reload_entry_calls_ha_reload(self) -> None:
+        """Verify async_reload_entry invokes hass.config_entries.async_reload."""
+        from custom_components.nexus_mcp import async_reload_entry
+
+        mock_hass = MagicMock()
+        mock_hass.config_entries.async_reload = AsyncMock()
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "test_entry_reload_id"
+
+        await async_reload_entry(mock_hass, mock_entry)
+        mock_hass.config_entries.async_reload.assert_awaited_once_with("test_entry_reload_id")
 
 
 if __name__ == "__main__":
