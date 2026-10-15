@@ -125,44 +125,34 @@
   "entity": {
     "sensor": {
       "conversation_history": {
-        "name": "Conversation History",
-        "state_description": "Vista previa del último mensaje y actividad de la conversación."
+        "name": "Conversation History"
       },
       "daily_tokens": {
-        "name": "Daily Tokens Used",
-        "state_description": "Total de tokens (prompt y respuesta) consumidos hoy en todas las consultas."
+        "name": "Daily Tokens Used"
       },
       "daily_requests_used": {
-        "name": "Daily Requests Used",
-        "state_description": "Número total de consultas enviadas al modelo de IA hoy."
+        "name": "Daily Requests Used"
       },
       "daily_requests_remaining": {
-        "name": "Daily Requests Remaining",
-        "state_description": "Peticiones restantes disponibles hoy antes de alcanzar el tope diario."
+        "name": "Daily Requests Remaining"
       },
       "daily_quota_percent": {
-        "name": "Daily Quota Remaining",
-        "state_description": "Porcentaje de cuota diaria de peticiones disponible hasta el reseteo de medianoche UTC."
+        "name": "Daily Quota Remaining"
       },
       "daily_requests_limit": {
-        "name": "Daily Requests Limit",
-        "state_description": "Límite máximo de peticiones al día (RPD) en el tier gratuito del proveedor."
+        "name": "Daily Requests Limit"
       },
       "model_limit": {
-        "name": "Tokens Per Minute Limit",
-        "state_description": "Límite máximo de tokens de entrada por minuto (ITPM/TPM) permitido por el proveedor."
+        "name": "Tokens Per Minute Limit"
       },
       "rpm_limit": {
-        "name": "Requests Per Minute Limit",
-        "state_description": "Límite máximo de peticiones permitidas en cualquier ventana de 60 segundos."
+        "name": "Requests Per Minute Limit"
       },
       "max_wait_time": {
-        "name": "Max Window Wait Time",
-        "state_description": "Duración en segundos de la ventana deslizante para recuperar los tokens por minuto."
+        "name": "Max Window Wait Time"
       },
       "rate_limit_reset": {
-        "name": "Rate Limit Cooldown",
-        "state_description": "Segundos restantes en tiempo real de bloqueo temporal si se excede el límite del proveedor."
+        "name": "Rate Limit Cooldown"
       }
     }
   }
