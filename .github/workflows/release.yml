@@ -1,0 +1,26 @@
+name: Release Asset
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload-asset:
+    name: Build & Attach Release Zip
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Package integration
+        run: |
+          cd "${{ github.workspace }}/custom_components"
+          zip -r "${{ github.workspace }}/nexus_mcp.zip" nexus_mcp/ -x "*.pyc" -x "__pycache__/*"
+
+      - name: Upload asset to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: nexus_mcp.zip
