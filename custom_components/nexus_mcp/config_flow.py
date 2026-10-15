@@ -14,6 +14,7 @@ from .const import (
     DOMAIN,
     CONF_LLM_PROVIDER,
     PROVIDER_GEMINI_FREE,
+    PROVIDER_GROQ_FREE,
     PROVIDER_QWEN_FREE,
     PROVIDER_OLLAMA_LOCAL,
     PROVIDER_CUSTOM_OPENAI,
@@ -23,6 +24,8 @@ from .const import (
     CONF_MCP_SERVER_URL,
     CONF_AUTONOMOUS_MODE,
     DEFAULT_GEMINI_MODEL,
+    DEFAULT_GROQ_URL,
+    DEFAULT_GROQ_MODEL,
     DEFAULT_QWEN_URL,
     DEFAULT_QWEN_MODEL,
     DEFAULT_OLLAMA_URL,
@@ -55,6 +58,8 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._provider = user_input[CONF_LLM_PROVIDER]
             if self._provider == PROVIDER_GEMINI_FREE:
                 return await self.async_step_gemini()
+            if self._provider == PROVIDER_GROQ_FREE:
+                return await self.async_step_groq()
             if self._provider == PROVIDER_QWEN_FREE:
                 return await self.async_step_qwen()
             if self._provider == PROVIDER_OLLAMA_LOCAL:
@@ -68,9 +73,10 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ): vol.In(
                     {
                         PROVIDER_GEMINI_FREE: "Google Gemini (Free Tier / Gratis)",
-                        PROVIDER_QWEN_FREE: "Qwen Cloud / DashScope (API Gratuita / Millones de tokens)",
+                        PROVIDER_GROQ_FREE: "Groq Cloud (Qwen / Llama - 100% Gratis en Europa, 14.400 req/día)",
+                        PROVIDER_QWEN_FREE: "Qwen Cloud / DashScope (Alibaba Model Studio)",
                         PROVIDER_OLLAMA_LOCAL: "Ollama Local (Qwen 2.5 Coder / Gratis Local)",
-                        PROVIDER_CUSTOM_OPENAI: "OpenAI / Custom BYOK",
+                        PROVIDER_CUSTOM_OPENAI: "OpenAI / OpenRouter / Custom BYOK",
                     }
                 )
             }
@@ -107,6 +113,38 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={
                 "api_key_url": "https://aistudio.google.com/app/apikey",
+            },
+        )
+
+    async def async_step_groq(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure Groq Cloud Free Tier."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            self._llm_data = {
+                CONF_LLM_PROVIDER: PROVIDER_GROQ_FREE,
+                CONF_BASE_URL: user_input.get(CONF_BASE_URL, DEFAULT_GROQ_URL).strip(),
+                CONF_API_KEY: user_input[CONF_API_KEY].strip(),
+                CONF_MODEL: user_input.get(CONF_MODEL, DEFAULT_GROQ_MODEL).strip(),
+            }
+            return await self.async_step_mcp_server()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_API_KEY): str,
+                vol.Optional(CONF_MODEL, default=DEFAULT_GROQ_MODEL): str,
+                vol.Optional(CONF_BASE_URL, default=DEFAULT_GROQ_URL): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="groq",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "groq_api_url": "https://console.groq.com/keys",
             },
         )
 

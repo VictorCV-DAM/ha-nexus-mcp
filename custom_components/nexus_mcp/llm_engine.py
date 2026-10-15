@@ -19,12 +19,15 @@ from .const import (
     CONF_BASE_URL,
     CONF_MODEL,
     DEFAULT_GEMINI_MODEL,
+    DEFAULT_GROQ_MODEL,
+    DEFAULT_GROQ_URL,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_OLLAMA_URL,
     DEFAULT_QWEN_MODEL,
     DEFAULT_QWEN_URL,
     PROVIDER_CUSTOM_OPENAI,
     PROVIDER_GEMINI_FREE,
+    PROVIDER_GROQ_FREE,
     PROVIDER_OLLAMA_LOCAL,
     PROVIDER_QWEN_FREE,
 )
@@ -412,6 +415,14 @@ def create_llm_engine(
         api_key = config.get(CONF_API_KEY, "")
         model = config.get(CONF_MODEL, DEFAULT_GEMINI_MODEL)
         return GeminiEngine(session=session, api_key=api_key, model=model)
+
+    if provider == PROVIDER_GROQ_FREE:
+        base_url = config.get(CONF_BASE_URL, DEFAULT_GROQ_URL)
+        model = config.get(CONF_MODEL, DEFAULT_GROQ_MODEL)
+        api_key = config.get(CONF_API_KEY, "")
+        return OpenAiCompatibleEngine(
+            session=session, base_url=base_url, model=model, api_key=api_key
+        )
 
     if provider == PROVIDER_QWEN_FREE:
         base_url = config.get(CONF_BASE_URL, DEFAULT_QWEN_URL)

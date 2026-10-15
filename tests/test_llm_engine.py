@@ -17,6 +17,7 @@ if "homeassistant" not in sys.modules:
 from custom_components.nexus_mcp.const import (
     PROVIDER_CUSTOM_OPENAI,
     PROVIDER_GEMINI_FREE,
+    PROVIDER_GROQ_FREE,
     PROVIDER_OLLAMA_LOCAL,
     PROVIDER_QWEN_FREE,
 )
@@ -212,6 +213,11 @@ class TestLlmEngine(unittest.IsolatedAsyncioTestCase):
             PROVIDER_GEMINI_FREE, {"api_key": "abc"}, mock_session
         )
         self.assertIsInstance(gemini_eng, GeminiEngine)
+
+        groq_eng = create_llm_engine(
+            PROVIDER_GROQ_FREE, {"api_key": "gsk_123"}, mock_session
+        )
+        self.assertIsInstance(groq_eng, OpenAiCompatibleEngine)
 
         qwen_eng = create_llm_engine(
             PROVIDER_QWEN_FREE, {"api_key": "sk-123"}, mock_session

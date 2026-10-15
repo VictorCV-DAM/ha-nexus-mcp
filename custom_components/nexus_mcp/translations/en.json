@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Nexus MCP: Inference Provider",
-        "description": "Select the AI brain for Nexus MCP. Free cloud and local options are available:\n\n• **Google Gemini**: Free tier with Google AI Studio key.\n• **Qwen Cloud (DashScope)**: Free API with millions of free tokens (no tight 20 req/day limit).\n• **Ollama Local**: 100% free and private on your own PC.\n• **OpenAI / Custom**: Bring your own key.",
+        "description": "Select the AI brain for Nexus MCP. Free cloud and local options are available:\n\n• **Google Gemini**: Free tier with Google AI Studio key.\n• **Groq Cloud (Recommended in Europe)**: 100% free with instant Google login. Hosts Qwen & Llama at ultra-fast speed with 14,400 req/day. [Get key at Groq](https://console.groq.com/keys).\n• **Qwen Cloud (DashScope)**: Free API with millions of free tokens (no tight 20 req/day limit).\n• **Ollama Local**: 100% free and private on your own PC.\n• **OpenAI / OpenRouter / Custom**: Bring your own key.",
         "data": {
           "llm_provider": "AI Provider"
         }
@@ -18,6 +18,20 @@
         "data_description": {
           "api_key": "Generate your free API key at https://aistudio.google.com/app/apikey",
           "model": "Use 'gemini-3.1-flash-lite' (500 req/day, recommended) or 'gemini-flash-latest' (latest Flash, 20 req/day on free tier)."
+        }
+      },
+      "groq": {
+        "title": "Groq Cloud (Free Tier - Europe & Worldwide)",
+        "description": "To use Groq Cloud, get a free API key from Groq Console. 1-click login with Google or GitHub, no credit card or phone verification needed.\n\n👉 **[Get your free Groq API Key here (console.groq.com)](https://console.groq.com/keys)**\n\n**Included Models & Limits:**\n• `qwen/qwen3.8-27b`: Advanced multilingual Qwen model on Groq's high-speed LPUs.\n• Up to **14,400 free requests per day** (30 requests/minute).\n• You can also use `llama-3.3-70b-versatile`.\n\nEnter your API key and model below:",
+        "data": {
+          "api_key": "API Key (gsk_...)",
+          "model": "Model Name (default: qwen/qwen3.8-27b)",
+          "base_url": "Groq API Base URL"
+        },
+        "data_description": {
+          "api_key": "Generate your free API key at https://console.groq.com/keys",
+          "model": "Supported models include 'qwen/qwen3.8-27b' or 'llama-3.3-70b-versatile'.",
+          "base_url": "Groq OpenAI-compatible base URL (default: https://api.groq.com/openai/v1)."
         }
       },
       "qwen": {
