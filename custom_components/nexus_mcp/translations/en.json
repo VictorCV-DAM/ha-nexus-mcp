@@ -3,14 +3,14 @@
     "step": {
       "user": {
         "title": "Nexus MCP: Inference Provider",
-        "description": "Select the AI brain for Nexus MCP. Free cloud and local options are available:\n\n• **Google Gemini**: Free tier with Google AI Studio key.\n• **Groq Cloud (Recommended in Europe)**: 100% free with instant Google login. Hosts Qwen & Llama at ultra-fast speed with 14,400 req/day. [Get key at Groq](https://console.groq.com/keys).\n• **Qwen Cloud (DashScope)**: Free API with millions of free tokens (no tight 20 req/day limit).\n• **Ollama Local**: 100% free and private on your own PC.\n• **OpenAI / OpenRouter / Custom**: Bring your own key.",
+        "description": "Select the AI brain for Nexus MCP. Free cloud and local options are available:\n\n• **Google Gemini**: Free tier with Google AI Studio key. [Get free key at Google AI Studio]({gemini_api_url})\n• **Groq Cloud (Recommended in Europe)**: 100% free with instant Google login (14,400 req/day). [Get free key at Groq Console]({groq_api_url})\n• **Qwen Cloud (DashScope)**: Millions of free tokens with newest Qwen models. [Get free key at Alibaba Cloud Model Studio]({qwen_api_url})\n• **Ollama Local**: 100% free and private on your own PC.\n• **OpenAI / OpenRouter / Custom**: Bring your own key. [Get key at OpenRouter]({openrouter_api_url})",
         "data": {
           "llm_provider": "AI Provider"
         }
       },
       "gemini": {
         "title": "Google Gemini (Free Tier)",
-        "description": "To use Google Gemini, you need a free API key from Google AI Studio.\n\n👉 **[Get your free Gemini API Key here (aistudio.google.com)](https://aistudio.google.com/app/apikey)**\n*(Free tier requires no credit card or billing).*\n\n**Available Models:**\n• `gemini-3.1-flash-lite` (Recommended): 500 free requests per day.\n• `gemini-flash-latest`: Always Google's newest Flash (Gemini 3.8 Flash), but limited to 20 requests per day on free tier.\n\nPaste your API key and chosen model below:",
+        "description": "To use Google Gemini, you need a free API key from Google AI Studio.\n\n👉 **[Get your free Gemini API Key here]({api_key_url})** *(URL: https://aistudio.google.com/app/apikey)*\n*(Free tier requires no credit card or billing).*\n\n**Available Models:**\n• `gemini-3.1-flash-lite` (Recommended): 500 free requests per day.\n• `gemini-flash-latest`: Always Google's newest Flash (Gemini 3.8 Flash), but limited to 20 requests per day on free tier.\n\nPaste your API key and chosen model below:",
         "data": {
           "api_key": "API Key",
           "model": "Model Name (e.g. gemini-3.1-flash-lite or gemini-flash-latest)"
@@ -22,7 +22,7 @@
       },
       "groq": {
         "title": "Groq Cloud (Free Tier - Europe & Worldwide)",
-        "description": "To use Groq Cloud, get a free API key from Groq Console. 1-click login with Google or GitHub, no credit card or phone verification needed.\n\n👉 **[Get your free Groq API Key here (console.groq.com)](https://console.groq.com/keys)**\n\n**Included Models & Limits:**\n• `qwen/qwen3.8-27b`: Advanced multilingual Qwen model on Groq's high-speed LPUs.\n• Up to **14,400 free requests per day** (30 requests/minute).\n• You can also use `llama-3.3-70b-versatile`.\n\nEnter your API key and model below:",
+        "description": "To use Groq Cloud, get a free API key from Groq Console. 1-click login with Google or GitHub, no credit card or phone verification needed.\n\n👉 **[Get your free Groq API Key here]({groq_api_url})** *(URL: https://console.groq.com/keys)*\n\n**Included Models & Limits:**\n• `qwen/qwen3.8-27b`: Advanced multilingual Qwen model on Groq's high-speed LPUs.\n• Up to **14,400 free requests per day** (30 requests/minute).\n• You can also use `llama-3.3-70b-versatile`.\n\nEnter your API key and model below:",
         "data": {
           "api_key": "API Key (gsk_...)",
           "model": "Model Name (default: qwen/qwen3.8-27b)",
@@ -36,16 +36,16 @@
       },
       "qwen": {
         "title": "Qwen Cloud (Alibaba Model Studio / DashScope)",
-        "description": "Use Alibaba Qwen's cloud API with millions of free tokens without Google's daily request limitations.\n\n👉 **[Get your free Qwen/DashScope API Key here](https://bailian.console.aliyun.com/)**\n*(Or via Alibaba Cloud Model Studio international console).*\n\nEnter your API key below:",
+        "description": "To use Qwen Cloud, you need a free API key from Alibaba Cloud Model Studio (DashScope), which includes millions of free tokens without Google's tight daily request limits.\n\n👉 **[Get your free Qwen/DashScope API Key here]({qwen_api_url})** *(URL: https://modelstudio.console.alibabacloud.com/)*\n*(Available internationally with free registration).* \n\n**Configured Model:**\n• `qwen-plus-latest`: Always points to the newest released version of Qwen Plus.\n• Also supports `qwen-turbo-latest` or `qwen2.5-coder-32b-instruct`.\n\nEnter your API key and model below:",
         "data": {
           "api_key": "API Key (sk-...)",
-          "model": "Model Name",
+          "model": "Model Name (default: qwen-plus-latest)",
           "base_url": "DashScope Endpoint URL"
         },
         "data_description": {
-          "api_key": "Your DashScope / Model Studio API key.",
-          "model": "Recommended: qwen2.5-coder-32b-instruct, qwen-turbo, or qwen-plus.",
-          "base_url": "Default is international (https://dashscope-intl.aliyuncs.com/compatible-mode/v1). Use https://dashscope.aliyuncs.com/compatible-mode/v1 for mainland China accounts."
+          "api_key": "Generate your free API key at https://modelstudio.console.alibabacloud.com/",
+          "model": "'qwen-plus-latest' always points to the newest available release of Qwen Plus.",
+          "base_url": "Default international endpoint: https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
         }
       },
       "ollama": {
@@ -61,22 +61,22 @@
         }
       },
       "custom_openai": {
-        "title": "Custom OpenAI / DashScope",
-        "description": "Connect to any OpenAI-compatible provider (e.g. Alibaba DashScope for Qwen Coder Cloud).",
+        "title": "OpenAI / OpenRouter / Custom BYOK",
+        "description": "Connect to any OpenAI-compatible provider or multi-model proxy:\n\n• 👉 **[Get free API key at OpenRouter]({openrouter_api_url})** *(URL: https://openrouter.ai/keys - Free Qwen models available)*\n• 👉 **[Get API key at OpenAI Platform]({openai_api_url})** *(URL: https://platform.openai.com/api-keys)*\n• 👉 **[Get API key at DeepSeek Platform]({deepseek_api_url})** *(URL: https://platform.deepseek.com/api_keys)*\n\nEnter your provider details and API key below:",
         "data": {
-          "base_url": "Base URL",
+          "base_url": "Base URL (e.g. https://openrouter.ai/api/v1 or https://api.openai.com/v1)",
           "api_key": "API Key",
-          "model": "Model Name"
+          "model": "Model Name (e.g. qwen/qwen-2.5-coder-32b-instruct:free or gpt-4o-mini)"
         },
         "data_description": {
-          "base_url": "OpenAI-compatible base URL (e.g. https://api.openai.com/v1).",
-          "api_key": "Your API key for this provider.",
-          "model": "Model identifier (e.g. gpt-4o-mini or qwen-coder-turbo)."
+          "base_url": "OpenAI-compatible base URL (OpenRouter: https://openrouter.ai/api/v1 | OpenAI: https://api.openai.com/v1).",
+          "api_key": "Your API key for this provider (OpenRouter: https://openrouter.ai/keys | OpenAI: https://platform.openai.com/api-keys).",
+          "model": "Model identifier to use."
         }
       },
       "mcp_server": {
         "title": "HA-MCP Server Connection",
-        "description": "Nexus MCP connects to an MCP server to provide advanced actions and automation capabilities.\n\n• If you already have **ha-mcp** installed, the endpoint URL was auto-detected below.\n• If you don't have it installed yet, you can get it at the official [HA-MCP GitHub Repository](https://github.com/homeassistant-ai/ha-mcp) via HACS.\n\nConfigure the connection details:",
+        "description": "Nexus MCP connects to an MCP server to provide advanced actions and automation capabilities.\n\n• If you already have **ha-mcp** installed, the endpoint URL was auto-detected below.\n• If you don't have it installed yet, you can get it at the official 👉 **[HA-MCP GitHub Repository]({ha_mcp_repo_url})** *(URL: https://github.com/homeassistant-ai/ha-mcp)* via HACS.\n\nConfigure the connection details:",
         "data": {
           "mcp_server_url": "MCP Server SSE / Endpoint URL",
           "autonomous_mode": "Autonomous Mode (Execute actions without asking confirmation)"
@@ -91,12 +91,20 @@
   "options": {
     "step": {
       "init": {
-        "title": "Nexus MCP Options",
-        "description": "Configure agent runtime behavior.",
+        "title": "Nexus MCP Settings & Credentials",
+        "description": "Configure your Nexus MCP agent settings, credentials, and endpoints. To get or renew your API keys / tokens:\n\n• **Google Gemini**: 👉 [Get key at Google AI Studio]({gemini_api_url}) *(https://aistudio.google.com/app/apikey)*\n• **Groq Cloud (Recommended in Europe)**: 👉 [Get key at Groq Console]({groq_api_url}) *(https://console.groq.com/keys)*\n• **Qwen Cloud**: 👉 [Get key at Alibaba Model Studio]({qwen_api_url}) *(https://modelstudio.console.alibabacloud.com/)*\n• **OpenRouter**: 👉 [Get key at OpenRouter]({openrouter_api_url}) *(https://openrouter.ai/keys)*\n• **HA-MCP Tools**: 👉 [GitHub Repository]({ha_mcp_repo_url}) *(https://github.com/homeassistant-ai/ha-mcp)*",
         "data": {
+          "api_key": "API Key / Token",
+          "model": "Model Name",
+          "base_url": "Endpoint Base URL",
+          "mcp_server_url": "HA-MCP Server URL",
           "autonomous_mode": "Autonomous Mode (Execute without confirmation)"
         },
         "data_description": {
+          "api_key": "Update your API key/token here. Links to obtain keys for each provider are listed above.",
+          "model": "Model identifier to use.",
+          "base_url": "Endpoint Base URL for your provider.",
+          "mcp_server_url": "Endpoint of the ha-mcp server (https://github.com/homeassistant-ai/ha-mcp).",
           "autonomous_mode": "If enabled, Nexus MCP will execute actions directly without asking for confirmation."
         }
       }

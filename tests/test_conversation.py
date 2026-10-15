@@ -17,6 +17,8 @@ if "homeassistant" not in sys.modules:
     sys.modules["homeassistant.helpers.intent"] = ha_mock
     sys.modules["homeassistant.components"] = ha_mock
     sys.modules["homeassistant.components.conversation"] = ha_mock
+else:
+    ha_mock = sys.modules["homeassistant"]
 
 class FakeConversationEntity:
     pass

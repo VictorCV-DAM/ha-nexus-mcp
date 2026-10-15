@@ -83,8 +83,22 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         return self.async_show_form(
-            step_id="user", data_schema=schema, errors=errors
+            step_id="user",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "gemini_api_url": "https://aistudio.google.com/app/apikey",
+                "groq_api_url": "https://console.groq.com/keys",
+                "qwen_api_url": "https://modelstudio.console.alibabacloud.com/",
+                "openrouter_api_url": "https://openrouter.ai/keys",
+            },
         )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle reconfiguring an existing Nexus MCP entry."""
+        return await self.async_step_user()
 
     async def async_step_gemini(
         self, user_input: dict[str, Any] | None = None
@@ -229,7 +243,14 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         return self.async_show_form(
-            step_id="custom_openai", data_schema=schema, errors=errors
+            step_id="custom_openai",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "openrouter_api_url": "https://openrouter.ai/keys",
+                "openai_api_url": "https://platform.openai.com/api-keys",
+                "deepseek_api_url": "https://platform.deepseek.com/api_keys",
+            },
         )
 
     async def async_step_mcp_server(
@@ -291,21 +312,80 @@ class NexusMcpOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage the options."""
+        """Manage options: allow updating credentials, tokens, models, and server URL."""
+        errors: dict[str, str] = {}
+
         if user_input is not None:
+            updated_data = dict(self.config_entry.data)
+            for k in (
+                CONF_API_KEY,
+                CONF_MODEL,
+                CONF_BASE_URL,
+                CONF_MCP_SERVER_URL,
+                CONF_AUTONOMOUS_MODE,
+            ):
+                if k in user_input and user_input[k] is not None:
+                    val = user_input[k]
+                    updated_data[k] = val.strip() if isinstance(val, str) else val
+
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=updated_data, options=user_input
+            )
             return self.async_create_entry(title="", data=user_input)
 
+        provider = self.config_entry.data.get(CONF_LLM_PROVIDER, PROVIDER_GEMINI_FREE)
+        current_api_key = self.config_entry.data.get(CONF_API_KEY, "")
+        current_model = self.config_entry.data.get(CONF_MODEL, "")
+        current_base_url = self.config_entry.data.get(CONF_BASE_URL, "")
+        current_mcp_url = self.config_entry.data.get(
+            CONF_MCP_SERVER_URL, DEFAULT_MCP_SERVER_URL
+        )
         current_autonomous = self.config_entry.options.get(
             CONF_AUTONOMOUS_MODE,
             self.config_entry.data.get(CONF_AUTONOMOUS_MODE, DEFAULT_AUTONOMOUS_MODE),
         )
 
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_AUTONOMOUS_MODE, default=current_autonomous
-                ): bool,
-            }
-        )
+        fields: dict[Any, Any] = {}
+        if provider in (
+            PROVIDER_GEMINI_FREE,
+            PROVIDER_GROQ_FREE,
+            PROVIDER_QWEN_FREE,
+            PROVIDER_CUSTOM_OPENAI,
+        ):
+            fields[vol.Optional(CONF_API_KEY, default=current_api_key)] = str
+        if current_model or provider in (
+            PROVIDER_GEMINI_FREE,
+            PROVIDER_GROQ_FREE,
+            PROVIDER_QWEN_FREE,
+            PROVIDER_OLLAMA_LOCAL,
+            PROVIDER_CUSTOM_OPENAI,
+        ):
+            fields[vol.Optional(CONF_MODEL, default=current_model)] = str
+        if current_base_url or provider in (
+            PROVIDER_GROQ_FREE,
+            PROVIDER_QWEN_FREE,
+            PROVIDER_OLLAMA_LOCAL,
+            PROVIDER_CUSTOM_OPENAI,
+        ):
+            fields[vol.Optional(CONF_BASE_URL, default=current_base_url)] = str
 
-        return self.async_show_form(step_id="init", data_schema=schema)
+        fields[vol.Required(CONF_MCP_SERVER_URL, default=current_mcp_url)] = str
+        fields[vol.Required(CONF_AUTONOMOUS_MODE, default=current_autonomous)] = bool
+
+        schema = vol.Schema(fields)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "provider": provider,
+                "gemini_api_url": "https://aistudio.google.com/app/apikey",
+                "groq_api_url": "https://console.groq.com/keys",
+                "qwen_api_url": "https://modelstudio.console.alibabacloud.com/",
+                "openrouter_api_url": "https://openrouter.ai/keys",
+                "openai_api_url": "https://platform.openai.com/api-keys",
+                "deepseek_api_url": "https://platform.deepseek.com/api_keys",
+                "ha_mcp_repo_url": "https://github.com/homeassistant-ai/ha-mcp",
+            },
+        )
