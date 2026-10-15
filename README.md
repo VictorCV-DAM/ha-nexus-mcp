@@ -9,7 +9,7 @@
   [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
   [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1.0%20%E2%80%94%202026.9.4%2B-41BDF5.svg?logo=home-assistant)](https://www.home-assistant.io/)
   [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
-  [![Tests](https://img.shields.io/badge/Tests-40%2F40%20Passing-brightgreen.svg)](tests/)
+  [![Tests](https://img.shields.io/badge/Tests-50%2F50%20Passing-brightgreen.svg)](tests/)
   [![Downloads](https://img.shields.io/github/downloads/VictorCV-DAM/ha-nexus-mcp/total.svg?color=brightgreen)](https://github.com/VictorCV-DAM/ha-nexus-mcp/releases)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   
@@ -120,9 +120,9 @@ Nexus MCP includes a **100% plug & play custom Lovelace card** that registers au
 ```yaml
 type: custom:nexus-mcp-card
 title: Nexus MCP Intercom
-entity: sensor.nexus_mcp_historial_de_conversaciones
 ```
-*(Tip: If you prefer standard Markdown cards, you can also use `{{ state_attr('sensor.nexus_mcp_historial_de_conversaciones', 'formatted_markdown') }}`)*
+*(Tip: If you prefer standard Markdown cards, you can also use `{{ state_attr('sensor.nexus_mcp_openai_gpt_oss_120b_conversation_history', 'formatted_markdown') }}`)*  
+*(Note: When updating via HACS, do a hard refresh with `Ctrl + F5` or clear your browser/companion app cache so the new card version loads immediately).*
 
 ### 👁️ Multimodal Vision, Image Paste (`Ctrl+V`) & 1-Click Text Selection
 Interact visually with your smart home using vision-capable AI models (e.g. `qwen/qwen3.8-27b`, Google Gemini Flash, or local vision models):
@@ -153,7 +153,7 @@ Interact visually with your smart home using vision-capable AI models (e.g. `qwe
   * `ha_call_service`: Real-time execution of any Home Assistant service (`light.turn_on`, `switch.toggle`, `climate.set_temperature`, etc.).
   * `ha_create_automation`: Dynamic generation and hot-reload of Home Assistant automations (`automations.yaml`), with automatic schema sanitization for time patterns and service actions.
   * **🛡️ Autonomous Mode & Interactive Confirmation**: When Autonomous Mode is disabled (default), Nexus MCP will tell you what it understood, describe the exact planned automation (triggers, conditions, actions, entity IDs), and ask for your confirmation before creating it. If Autonomous Mode is enabled, it creates automations immediately without asking.
-  * **🔄 Persistent Memory, Continuity & Dashboard Sensor**: Conversations are stored on disk via Home Assistant's native storage (`.storage`), ensuring chat history survives restarts and integration reloads. When starting a new session or reopening Assist, Nexus MCP automatically inherits the recent context from your previous conversation so you can seamlessly continue where you left off. Nexus MCP also exposes a dedicated sensor (`sensor.nexus_mcp_historial_de_conversaciones`) with ready-to-use formatted Markdown for your Dashboards, plus the `nexus_mcp.clear_history` action. Saying *"Nueva conversación"*, *"Reset"*, or *"Clear history"* instantly resets memory on demand.
+  * **🔄 Persistent Memory, Continuity & 10 Dedicated Telemetry Sensors**: Conversations are stored on disk via Home Assistant's native storage (`.storage`), ensuring chat history survives restarts and integration reloads. When starting a new session or reopening Assist, Nexus MCP automatically inherits the recent context from your previous conversation so you can seamlessly continue where you left off. Nexus MCP also exposes 10 dedicated sensors (Tokens Used, Requests Remaining, Quota %, TPM/RPM Limits, Window Wait, Rate Limit Cooldown, Conversation History) with ready-to-use formatted Markdown for your Dashboards, plus the `nexus_mcp.clear_history` action. Saying *"Nueva conversación"*, *"Reset"*, or *"Clear history"* instantly resets memory on demand.
 * **🌐 100% Free & Fast Cloud Providers**:
   * **Groq Cloud (Recommended in Europe & Worldwide)**:
     * 1-click Google/GitHub login, zero credit card, zero phone verification required.
@@ -229,15 +229,32 @@ Interact visually with your smart home using vision-capable AI models (e.g. `qwe
 | Provider | Model Identifier | Tokens/Min (**TPM**) | Requests/Day (**RPD**) | Availability (EU / Global) | Best Used For |
 | :--- | :--- | :---: | :---: | :---: | :--- |
 | **Google Gemini** | **`gemini-3.1-flash-lite`** *(Recommended)* | **250,000 TPM** | 500 RPD | Global / Europe | **Best daily driver**: Zero minute-rate-limit friction in fast voice/chat conversations. |
-| **Groq Cloud** | **`openai/gpt-oss-120b`** *(Default Groq)* | 6,000 TPM | **14,400 RPD** | Global / Europe | **Maximum AI intelligence**: 120B open reasoning model for complex automations. |
-| **Groq Cloud** | **`qwen/qwen3.8-27b`** | 6,000 TPM | **14,400 RPD** | Global / Europe | **Ultra-fast inference**: ~0.08s latency, excellent tool calling and multilingual support. |
-| **Groq Cloud** | **`openai/gpt-oss-20b`** | 6,000 TPM | **14,400 RPD** | Global / Europe | Fast and lightweight 20B model for simple queries. |
+| **Groq Cloud** | **`openai/gpt-oss-120b`** *(Default Groq)* | **8,000 TPM** | **14,400 RPD** | Global / Europe | **Maximum AI intelligence**: 120B open reasoning model for complex automations. |
+| **Groq Cloud** | **`qwen/qwen3.8-27b`** | **7,000 TPM** | **14,400 RPD** | Global / Europe | **Ultra-fast inference**: ~0.08s latency, excellent tool calling and multilingual support. |
+| **Groq Cloud** | **`openai/gpt-oss-20b`** | **8,000 TPM** | **14,400 RPD** | Global / Europe | Fast and lightweight 20B model for simple queries. |
 | **Alibaba Cloud**| **`qwen-plus-latest`** | Generous | Generous | Global / Europe | Qwen flagship intelligence via DashScope. |
 | **Ollama Local** | **`qwen2.5-coder:7b`** | Unlimited | Unlimited | Local Network | 100% private, offline home control. |
 
 *Note on Meta Llama models: Groq Cloud restricts Meta models (`llama-3.3-70b`) in European Union regions due to EU licensing. Nexus MCP automatically falls back to `qwen/qwen3.8-27b` or `openai/gpt-oss-120b` to prevent HTTP 404 errors.*
 
 ---
+
+## 📈 10 Dedicated Telemetry & Quota Sensors
+
+Nexus MCP automatically registers independent first-class Home Assistant sensors for complete visibility into your AI limits and usage:
+
+| Sensor Entity ID | Entity Name | Unit | Hover Tooltip Description |
+| :--- | :--- | :---: | :--- |
+| `sensor.<id>_daily_tokens` | **Daily Tokens Used** | tokens | Total prompt and completion tokens used today across all requests. |
+| `sensor.<id>_daily_requests_used` | **Daily Requests Used** | requests | Total number of queries submitted to the AI model today. |
+| `sensor.<id>_daily_quota_remaining` | **Daily Requests Remaining** | requests | Remaining requests available today before hitting the daily quota. |
+| `sensor.<id>_daily_quota_percent` | **Daily Quota Remaining** | % | Percentage of daily provider requests quota remaining until midnight UTC reset. |
+| `sensor.<id>_daily_requests_limit` | **Daily Requests Limit** | requests | Maximum allowable queries per day (RPD) in the provider's free tier. |
+| `sensor.<id>_model_limit` | **Tokens Per Minute Limit** | tokens/min | Maximum input tokens per minute (ITPM/TPM) allowed by the provider. |
+| `sensor.<id>_rpm_limit` | **Requests Per Minute Limit** | req/min | Maximum queries allowed within any 60-second window. |
+| `sensor.<id>_max_wait_time` | **Max Window Wait Time** | s | Sliding window duration in seconds required for per-minute tokens to replenish. |
+| `sensor.<id>_rate_limit_reset` | **Rate Limit Cooldown** | s | Live real-time cooldown seconds remaining if throttled by the provider. |
+| `sensor.<id>_conversation_history` | **Conversation History** | - | Most recent conversation message and activity preview with formatted markdown. |
 
 ## ⚙️ Configuration & Direct Links
 
@@ -320,6 +337,24 @@ python -m unittest discover -s tests
   * Persistent storage sanitizer: ensures `.storage/nexus_mcp_history_*` only stores clean conversational dialogue (`user` and `assistant`), preventing transient server errors from contaminating memory.
 * **🧪 38/38 Unit Tests Passing (100% Success Rate)**:
   * Full test suite coverage updated and passing.
+
+---
+
+## 🏷️ Release Notes: v1.4.0
+
+* **📈 10 Dedicated First-Class Telemetry Sensors**:
+  * Decoupled all quota and limit metrics from hidden modal attributes into 10 independent Home Assistant entities with standard English names and hover descriptions (`state_description` & `description`):
+    * `Daily Tokens Used`, `Daily Requests Used`, `Daily Requests Remaining`, `Daily Quota Remaining (%)`, `Daily Requests Limit`, `Tokens Per Minute Limit`, `Requests Per Minute Limit`, `Max Window Wait Time`, `Rate Limit Cooldown`, and `Conversation History`.
+  * For local models (Ollama), cloud quota sensors are automatically omitted.
+* **🛡️ Defensive Token Budget Pruning (HTTP 413 Prevention)**:
+  * Proactive sliding-window pruning of historical context when prompt tokens approach model input limits (e.g. Qwen's 7,000 TPM limit on Groq).
+  * System prompt and the latest user query are strictly preserved, eliminating HTTP 413 errors while preserving the user's selected model without unwanted mutations.
+* **🔄 Automatic Lovelace Resource Cache-Busting**:
+  * Startup routine automatically detects and upgrades existing Lovelace resource URLs to `?v=1.4.0` via `async_update_item`, preventing stale JavaScript cache issues across browser sessions and companion apps.
+* **⚡ Knowledge Base Limits Harmonization**:
+  * Configured precise specifications in `const.py` (`MODEL_SPECS`): Groq 120B at 8,000 TPM / 14,400 RPD, Qwen 27B at 7,000 TPM / 14,400 RPD.
+* **🧪 50/50 Unit Tests Passing (100% Success Rate)**:
+  * Full test suite updated and passing with 100% test coverage.
 
 ---
 

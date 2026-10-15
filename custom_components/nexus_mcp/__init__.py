@@ -89,6 +89,17 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
             for r in getattr(resources, "async_items", lambda: [])():
                 if r.get("url", "").startswith(url_path):
                     frontend_added = True
+                    # If version parameter differs, update existing resource to bust browser cache
+                    if r.get("url") != f"{url_path}?v=1.4.0":
+                        res_id = r.get("id")
+                        if res_id and getattr(resources, "async_update_item", None):
+                            try:
+                                await resources.async_update_item(res_id, {
+                                    "res_type": r.get("type", "module"),
+                                    "url": f"{url_path}?v=1.4.0",
+                                })
+                            except Exception:
+                                pass
                     break
 
             if not frontend_added:
