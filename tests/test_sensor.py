@@ -193,10 +193,12 @@ class TestSensorHistory(unittest.IsolatedAsyncioTestCase):
             mock_add_js.assert_called_once()
 
     async def test_sensor_setup_entry_cloud_provider(self) -> None:
-        """Test async_setup_entry adds 3 entities for cloud providers (Gemini, Groq, etc.)."""
+        """Test async_setup_entry adds 5 entities for cloud providers (Gemini, Groq, etc.)."""
         from custom_components.nexus_mcp.const import CONF_LLM_PROVIDER, PROVIDER_GROQ_FREE
         from custom_components.nexus_mcp.sensor import (
             NexusMcpHistorySensor,
+            NexusMcpMaxWaitSensor,
+            NexusMcpModelLimitSensor,
             NexusMcpRateLimitResetSensor,
             NexusMcpTokenSensor,
         )
@@ -210,10 +212,12 @@ class TestSensorHistory(unittest.IsolatedAsyncioTestCase):
         await async_setup_sensor_entry(
             self.hass, cloud_entry, lambda entities: added_entities.extend(entities)
         )
-        self.assertEqual(len(added_entities), 3)
+        self.assertEqual(len(added_entities), 5)
         self.assertIsInstance(added_entities[0], NexusMcpHistorySensor)
         self.assertIsInstance(added_entities[1], NexusMcpTokenSensor)
         self.assertIsInstance(added_entities[2], NexusMcpRateLimitResetSensor)
+        self.assertIsInstance(added_entities[3], NexusMcpModelLimitSensor)
+        self.assertIsInstance(added_entities[4], NexusMcpMaxWaitSensor)
 
     async def test_sensor_setup_entry_local_ollama_skips_rate_limits(self) -> None:
         """Test async_setup_entry adds only history sensor for local models like Ollama."""
@@ -301,6 +305,52 @@ class TestSensorHistory(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(attrs["status"], "throttled")
         self.assertEqual(attrs["last_reset_duration"], 4.5)
         self.assertEqual(attrs["model"], "openai/gpt-oss-20b")
+
+    def test_model_limit_sensor_defaults_and_live_update(self) -> None:
+        """Test NexusMcpModelLimitSensor returns theoretical TPM and live confirmed limit."""
+        from custom_components.nexus_mcp.const import CONF_LLM_PROVIDER, CONF_MODEL, PROVIDER_GROQ_FREE
+        from custom_components.nexus_mcp.sensor import NexusMcpModelLimitSensor
+
+        self.entry.data = {CONF_LLM_PROVIDER: PROVIDER_GROQ_FREE, CONF_MODEL: "openai/gpt-oss-120b"}
+        self.entry.options = {}
+
+        limit_sensor = NexusMcpModelLimitSensor(self.hass, self.entry)
+        # Default theoretical TPM for 120b is 8000
+        self.assertEqual(limit_sensor.native_value, 8000)
+
+        attrs = limit_sensor.extra_state_attributes
+        self.assertEqual(attrs["tpm_maximo"], 8000)
+        self.assertEqual(attrs["rpm_maximo"], 30)
+        self.assertEqual(attrs["rpd_maximo_diario"], 14400)
+        self.assertEqual(attrs["context_window_tokens"], 131072)
+
+        # Mock live update from server headers (e.g. user upgraded to dev tier or higher quota)
+        mock_conv_entity = MagicMock()
+        mock_conv_entity.telemetry = {"limit_tokens": 15000, "limit_requests": 60}
+        self.hass.data[DOMAIN][self.entry.entry_id]["conversation_entity"] = mock_conv_entity
+
+        self.assertEqual(limit_sensor.native_value, 15000)
+        attrs_live = limit_sensor.extra_state_attributes
+        self.assertEqual(attrs_live["tpm_maximo"], 15000)
+        self.assertEqual(attrs_live["rpm_maximo"], 60)
+
+    def test_max_wait_sensor_window_and_daily_reset(self) -> None:
+        """Test NexusMcpMaxWaitSensor returns 60s window wait and daily reset calculation."""
+        from custom_components.nexus_mcp.const import CONF_LLM_PROVIDER, CONF_MODEL, PROVIDER_GROQ_FREE
+        from custom_components.nexus_mcp.sensor import NexusMcpMaxWaitSensor
+
+        self.entry.data = {CONF_LLM_PROVIDER: PROVIDER_GROQ_FREE, CONF_MODEL: "openai/gpt-oss-120b"}
+        self.entry.options = {}
+
+        max_wait_sensor = NexusMcpMaxWaitSensor(self.hass, self.entry)
+        self.assertEqual(max_wait_sensor.native_value, 60)
+
+        attrs = max_wait_sensor.extra_state_attributes
+        self.assertIn("60 segundos", attrs["espera_tope_tpm"])
+        self.assertGreater(attrs["segundos_hasta_reseteo_diario"], 0)
+        self.assertLessEqual(attrs["segundos_hasta_reseteo_diario"], 86400)
+        self.assertIn("00:00 UTC", attrs["hora_reseteo_diario"])
+        self.assertIn("h", attrs["espera_tope_diario"])
 
 
 if __name__ == "__main__":
