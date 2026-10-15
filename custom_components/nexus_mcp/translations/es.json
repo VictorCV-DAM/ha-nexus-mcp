@@ -109,5 +109,17 @@
         }
       }
     }
+  },
+  "services": {
+    "clear_history": {
+      "name": "Borrar historial de conversación",
+      "description": "Borra todo el historial de conversación guardado y reinicia la memoria de Nexus MCP.",
+      "fields": {
+        "entry_id": {
+          "name": "ID de Integración",
+          "description": "ID de entrada de integración específica a reiniciar (opcional)."
+        }
+      }
+    }
   }
 }

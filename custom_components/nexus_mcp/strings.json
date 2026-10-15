@@ -109,5 +109,17 @@
         }
       }
     }
+  },
+  "services": {
+    "clear_history": {
+      "name": "Clear conversation history",
+      "description": "Clears all saved conversation history and resets Nexus MCP memory.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Specific integration entry ID to clear (optional)."
+        }
+      }
+    }
   }
 }

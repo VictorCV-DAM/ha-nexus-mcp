@@ -9,7 +9,7 @@
   [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
   [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1.0%20%E2%80%94%202026.9.4%2B-41BDF5.svg?logo=home-assistant)](https://www.home-assistant.io/)
   [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
-  [![Tests](https://img.shields.io/badge/Tests-29%2F29%20Passing-brightgreen.svg)](tests/)
+  [![Tests](https://img.shields.io/badge/Tests-35%2F35%20Passing-brightgreen.svg)](tests/)
   [![Downloads](https://img.shields.io/github/downloads/VictorCV-DAM/ha-nexus-mcp/total.svg?color=brightgreen)](https://github.com/VictorCV-DAM/ha-nexus-mcp/releases)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   
@@ -90,6 +90,32 @@ Toggle between autonomous execution or interactive confirmation anytime via Sett
   <img src="images/10_options_reconfigure_v4.png" width="31%" align="middle" style="vertical-align: middle;" alt="Options Flow Reconfigure" />
 </p>
 
+### 💬 Lovelace Dashboard Card (Conversation History & Quick Resume)
+Display your conversation history and resume chats directly on your Home Assistant Dashboard without installing any third-party cards. Uses the native history sensor and Assist action:
+
+```yaml
+type: vertical-stack
+cards:
+  - type: markdown
+    title: 💬 Conversación con Nexus MCP
+    content: >-
+      {{ state_attr('sensor.nexus_mcp_historial_de_conversaciones', 'formatted_markdown') or '*No hay conversaciones recientes. Abre Assist para empezar.*' }}
+
+  - type: horizontal-stack
+    cards:
+      - type: button
+        name: Continuar / Abrir Assist
+        icon: mdi:microphone-message
+        tap_action:
+          action: assist
+      - type: button
+        name: Nueva Conversación
+        icon: mdi:refresh
+        tap_action:
+          action: call-service
+          service: nexus_mcp.clear_history
+```
+
 ---
 
 ## 🚀 Key Features
@@ -103,7 +129,7 @@ Toggle between autonomous execution or interactive confirmation anytime via Sett
   * `ha_call_service`: Real-time execution of any Home Assistant service (`light.turn_on`, `switch.toggle`, `climate.set_temperature`, etc.).
   * `ha_create_automation`: Dynamic generation and hot-reload of Home Assistant automations (`automations.yaml`), with automatic schema sanitization for time patterns and service actions.
   * **🛡️ Autonomous Mode & Interactive Confirmation**: When Autonomous Mode is disabled (default), Nexus MCP will tell you what it understood, describe the exact planned automation (triggers, conditions, actions, entity IDs), and ask for your confirmation before creating it. If Autonomous Mode is enabled, it creates automations immediately without asking.
-  * **🔄 Persistent Memory & Seamless Conversation Continuity**: Conversations are stored on disk via Home Assistant's native storage (`.storage`), ensuring chat history survives restarts and integration reloads. When starting a new session or reopening Assist, Nexus MCP automatically inherits the recent context from your previous conversation so you can seamlessly continue where you left off. Saying *"Nueva conversación"*, *"Reset"*, or *"Clear history"* instantly resets memory on demand.
+  * **🔄 Persistent Memory, Continuity & Dashboard Sensor**: Conversations are stored on disk via Home Assistant's native storage (`.storage`), ensuring chat history survives restarts and integration reloads. When starting a new session or reopening Assist, Nexus MCP automatically inherits the recent context from your previous conversation so you can seamlessly continue where you left off. Nexus MCP also exposes a dedicated sensor (`sensor.nexus_mcp_historial_de_conversaciones`) with ready-to-use formatted Markdown for your Dashboards, plus the `nexus_mcp.clear_history` action. Saying *"Nueva conversación"*, *"Reset"*, or *"Clear history"* instantly resets memory on demand.
 * **🌐 100% Free & Fast Cloud Providers**:
   * **Groq Cloud (Recommended in Europe & Worldwide)**:
     * 1-click Google/GitHub login, zero credit card, zero phone verification required.

@@ -18,7 +18,27 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["conversation"]
+PLATFORMS = ["conversation", "sensor"]
+
+
+async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
+    """Set up the Nexus MCP integration and global services."""
+    async def handle_clear_history(call) -> None:
+        """Handle clearing conversation history."""
+        entry_id = call.data.get("entry_id")
+        domain_data = hass.data.get(DOMAIN, {})
+        for eid, data in list(domain_data.items()):
+            if entry_id and eid != entry_id:
+                continue
+            conv_entity = data.get("conversation_entity")
+            if conv_entity:
+                conv_entity._history.clear()
+                conv_entity._last_conversation_id = None
+                await conv_entity._async_save_history()
+
+    if not hass.services.has_service(DOMAIN, "clear_history"):
+        hass.services.async_register(DOMAIN, "clear_history", handle_clear_history)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

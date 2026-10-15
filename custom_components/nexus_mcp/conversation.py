@@ -23,6 +23,11 @@ try:
 except (ImportError, AttributeError):
     Store = None
 
+try:
+    from homeassistant.helpers.dispatcher import async_dispatcher_send
+except (ImportError, AttributeError):
+    async_dispatcher_send = None
+
 from .const import (
     CONF_AUTONOMOUS_MODE,
     CONF_LLM_PROVIDER,
@@ -57,7 +62,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Nexus MCP conversation entity."""
-    async_add_entities([NexusMcpConversationEntity(hass, entry)])
+    entity = NexusMcpConversationEntity(hass, entry)
+    hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
+    hass.data[DOMAIN][entry.entry_id]["conversation_entity"] = entity
+    async_add_entities([entity])
 
 
 def _is_user_confirmation(history: list[ChatMessage], current_text: str) -> bool:
@@ -139,6 +147,9 @@ class NexusMcpConversationEntity(ConversationEntity):
             session=session,
         )
 
+        hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
+        hass.data[DOMAIN][entry.entry_id]["conversation_entity"] = self
+
     async def async_added_to_hass(self) -> None:
         """Load persistent conversation history from storage when entity is added."""
         if hasattr(super(), "async_added_to_hass"):
@@ -173,10 +184,24 @@ class NexusMcpConversationEntity(ConversationEntity):
             except Exception as err:
                 _LOGGER.warning("Could not load persistent conversation history: %s", err)
         self._history_loaded = True
+        if async_dispatcher_send:
+            try:
+                async_dispatcher_send(
+                    self.hass, f"{DOMAIN}_{self.entry.entry_id}_history_updated"
+                )
+            except Exception:
+                pass
 
     async def _async_save_history(self) -> None:
         """Save persistent conversation histories to Home Assistant storage."""
         if self._store is None:
+            if async_dispatcher_send:
+                try:
+                    async_dispatcher_send(
+                        self.hass, f"{DOMAIN}_{self.entry.entry_id}_history_updated"
+                    )
+                except Exception:
+                    pass
             return
         try:
             # Prune older conversations to keep storage light (max MAX_STORED_CONVERSATIONS)
@@ -199,6 +224,14 @@ class NexusMcpConversationEntity(ConversationEntity):
             await self._store.async_save(serializable)
         except Exception as err:
             _LOGGER.warning("Could not persist conversation history: %s", err)
+        finally:
+            if async_dispatcher_send:
+                try:
+                    async_dispatcher_send(
+                        self.hass, f"{DOMAIN}_{self.entry.entry_id}_history_updated"
+                    )
+                except Exception:
+                    pass
 
     @property
     def supported_features(self) -> ConversationEntityFeature:
