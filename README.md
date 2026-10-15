@@ -155,7 +155,26 @@ Nexus MCP maintains a rigorous test suite covering config flows, options flows, 
 python -m unittest discover -s tests
 ```
 
-*Result:* **20/20 unit tests passing (100% success rate)**.
+*Result:* **26/26 unit tests passing (100% success rate)**.
+
+---
+
+## 🏷️ Release Notes: v1.2.0
+
+* **🛡️ Interactive Confirmation & Autonomous Mode Control**:
+  * When Autonomous Mode is disabled (default), Nexus MCP explains what it understood, describes planned triggers, conditions, actions, and entities, and asks for explicit user confirmation before creating any automation.
+  * When Autonomous Mode is enabled via options, automations are created directly.
+  * Bulletproof guardrail intercepts unauthorized automation creations at the tool execution level.
+* **⚡ Groq Cloud `openai/gpt-oss-120b` & European Availability**:
+  * `openai/gpt-oss-120b` (120-Billion parameter open reasoning model) is now the preconfigured default model for Groq Cloud.
+  * Seamless support for `qwen/qwen3.8-27b` and `openai/gpt-oss-20b`.
+  * Auto-normalization and redirection for models subject to EU geographical licensing restrictions.
+  * In-app clickable link to the official [Groq Models Catalog](https://console.groq.com/docs/models).
+* **🔧 Options Flow Architecture & Deadlock Prevention**:
+  * Atomic and thread-safe integration reloads utilizing `hass.config_entries.async_reload`.
+  * Fixed options flow deadlock and infinite reload cascade when saving settings.
+* **🧪 26/26 Unit Tests Passing**:
+  * 100% code coverage across conversation flows, options flows, autonomy guards, and LLM providers.
 
 ---
 
