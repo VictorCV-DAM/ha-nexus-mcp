@@ -46,10 +46,14 @@ from custom_components.nexus_mcp.llm_engine import ChatMessage
 from custom_components.nexus_mcp.sensor import (
     NexusMcpHistorySensor,
     NexusMcpTokenSensor,
+    NexusMcpDailyRequestsUsedSensor,
     NexusMcpDailyQuotaSensor,
-    NexusMcpRateLimitResetSensor,
+    NexusMcpDailyQuotaPercentSensor,
+    NexusMcpDailyRequestsLimitSensor,
     NexusMcpModelLimitSensor,
+    NexusMcpRpmLimitSensor,
     NexusMcpMaxWaitSensor,
+    NexusMcpRateLimitResetSensor,
     async_setup_entry as async_setup_sensor_entry,
 )
 from custom_components.nexus_mcp import async_setup
@@ -217,13 +221,17 @@ class TestSensorHistory(unittest.IsolatedAsyncioTestCase):
         await async_setup_sensor_entry(
             self.hass, cloud_entry, lambda entities: added_entities.extend(entities)
         )
-        self.assertEqual(len(added_entities), 6)
+        self.assertEqual(len(added_entities), 10)
         self.assertIsInstance(added_entities[0], NexusMcpHistorySensor)
         self.assertIsInstance(added_entities[1], NexusMcpTokenSensor)
-        self.assertIsInstance(added_entities[2], NexusMcpDailyQuotaSensor)
-        self.assertIsInstance(added_entities[3], NexusMcpRateLimitResetSensor)
-        self.assertIsInstance(added_entities[4], NexusMcpModelLimitSensor)
-        self.assertIsInstance(added_entities[5], NexusMcpMaxWaitSensor)
+        self.assertIsInstance(added_entities[2], NexusMcpDailyRequestsUsedSensor)
+        self.assertIsInstance(added_entities[3], NexusMcpDailyQuotaSensor)
+        self.assertIsInstance(added_entities[4], NexusMcpDailyQuotaPercentSensor)
+        self.assertIsInstance(added_entities[5], NexusMcpDailyRequestsLimitSensor)
+        self.assertIsInstance(added_entities[6], NexusMcpModelLimitSensor)
+        self.assertIsInstance(added_entities[7], NexusMcpRpmLimitSensor)
+        self.assertIsInstance(added_entities[8], NexusMcpMaxWaitSensor)
+        self.assertIsInstance(added_entities[9], NexusMcpRateLimitResetSensor)
 
     async def test_sensor_setup_entry_local_ollama_skips_rate_limits(self) -> None:
         """Test async_setup_entry adds only history sensor for local models like Ollama."""

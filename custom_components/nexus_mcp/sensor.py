@@ -162,10 +162,14 @@ async def async_setup_entry(
         PROVIDER_CUSTOM_OPENAI,
     ):
         entities.append(NexusMcpTokenSensor(hass, entry))
+        entities.append(NexusMcpDailyRequestsUsedSensor(hass, entry))
         entities.append(NexusMcpDailyQuotaSensor(hass, entry))
-        entities.append(NexusMcpRateLimitResetSensor(hass, entry))
+        entities.append(NexusMcpDailyQuotaPercentSensor(hass, entry))
+        entities.append(NexusMcpDailyRequestsLimitSensor(hass, entry))
         entities.append(NexusMcpModelLimitSensor(hass, entry))
+        entities.append(NexusMcpRpmLimitSensor(hass, entry))
         entities.append(NexusMcpMaxWaitSensor(hass, entry))
+        entities.append(NexusMcpRateLimitResetSensor(hass, entry))
 
     async_add_entities(entities)
 
@@ -182,7 +186,8 @@ class NexusMcpHistorySensor(SensorEntity):
         self.hass = hass
         self.entry = entry
         self._attr_unique_id = f"{entry.entry_id}_conversation_history"
-        self._attr_name = "Historial de Conversaciones"
+        self._attr_name = "Conversation History"
+        self._attr_translation_key = "conversation_history"
 
     @property
     def device_info(self) -> dict[str, Any]:
@@ -300,21 +305,16 @@ class NexusMcpHistorySensor(SensorEntity):
         }
 
 
-class NexusMcpTokenSensor(SensorEntity):
-    """Sensor exposing daily token consumption and telemetry for the LLM model."""
+class NexusMcpBaseTelemetrySensor(SensorEntity):
+    """Base class for Nexus MCP telemetry, quota, and limit sensors."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
-    _attr_icon = "mdi:chart-timeline-variant-shimmer"
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize the token sensor."""
+        """Initialize the base telemetry sensor."""
         self.hass = hass
         self.entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_daily_tokens"
-        self._attr_name = "Consumo de Tokens Diario"
-        self._attr_native_unit_of_measurement = "tokens"
-        self._attr_state_class = getattr(SensorStateClass, "TOTAL_INCREASING", "total_increasing")
 
     @property
     def device_info(self) -> dict[str, Any]:
@@ -353,421 +353,337 @@ class NexusMcpTokenSensor(SensorEntity):
         return entry_data.get("conversation_entity")
 
     @property
+    def telemetry(self) -> dict[str, Any]:
+        """Return live telemetry metrics."""
+        conv = self._conversation_entity
+        return getattr(conv, "telemetry", {}) if conv else {}
+
+    @property
+    def model_specs(self) -> dict[str, Any]:
+        """Return theoretical specs for model."""
+        model_name = self.entry.options.get(CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent"))
+        provider = self.entry.options.get(CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, ""))
+        return get_model_specs(model_name, provider)
+
+
+class NexusMcpTokenSensor(NexusMcpBaseTelemetrySensor):
+    """Sensor exposing daily token consumption for the LLM model."""
+
+    _attr_icon = "mdi:chart-timeline-variant-shimmer"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the daily tokens used sensor."""
+        super().__init__(hass, entry)
+        self._attr_unique_id = f"{entry.entry_id}_daily_tokens"
+        self._attr_name = "Daily Tokens Used"
+        self._attr_translation_key = "daily_tokens"
+        self._attr_native_unit_of_measurement = "tokens"
+        self._attr_state_class = getattr(SensorStateClass, "TOTAL_INCREASING", "total_increasing")
+
+    @property
     def native_value(self) -> int:
         """Return the total tokens used today."""
-        conv_entity = self._conversation_entity
-        if not conv_entity:
-            return 0
-        telem = getattr(conv_entity, "telemetry", {})
-        return int(telem.get("tokens_today", 0))
+        return int(self.telemetry.get("tokens_today", 0))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return detailed token telemetry attributes."""
-        conv_entity = self._conversation_entity
-        if not conv_entity:
-            return {
-                "prompt_tokens_today": 0,
-                "completion_tokens_today": 0,
-                "last_total_tokens": 0,
-            }
-        telem = getattr(conv_entity, "telemetry", {})
+        telem = self.telemetry
         return {
+            "description": "Total prompt and completion tokens used today across all requests.",
             "prompt_tokens_today": telem.get("prompt_tokens_today", 0),
             "completion_tokens_today": telem.get("completion_tokens_today", 0),
             "last_prompt_tokens": telem.get("last_prompt_tokens", 0),
             "last_completion_tokens": telem.get("last_completion_tokens", 0),
             "last_total_tokens": telem.get("last_total_tokens", 0),
-            "requests_today": telem.get("requests_today", 0),
-            "model": telem.get("model", ""),
-            "provider": telem.get("provider", ""),
             "remaining_tokens_minute": telem.get("remaining_tokens"),
             "limit_tokens_minute": telem.get("limit_tokens"),
-            "remaining_requests_minute": telem.get("remaining_requests"),
-            "limit_requests_minute": telem.get("limit_requests"),
+            "model": telem.get("model", ""),
+            "provider": telem.get("provider", ""),
             "date": telem.get("date"),
             "last_updated": telem.get("last_updated"),
         }
 
 
-class NexusMcpDailyQuotaSensor(SensorEntity):
-    """Sensor exposing remaining daily requests quota and usage percentage."""
+class NexusMcpDailyRequestsUsedSensor(NexusMcpBaseTelemetrySensor):
+    """Sensor exposing total requests made today."""
 
-    _attr_has_entity_name = True
-    _attr_should_poll = False
+    _attr_icon = "mdi:message-badge-outline"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the daily requests used sensor."""
+        super().__init__(hass, entry)
+        self._attr_unique_id = f"{entry.entry_id}_daily_requests_used"
+        self._attr_name = "Daily Requests Used"
+        self._attr_translation_key = "daily_requests_used"
+        self._attr_native_unit_of_measurement = "requests"
+        self._attr_state_class = getattr(SensorStateClass, "TOTAL_INCREASING", "total_increasing")
+
+    @property
+    def native_value(self) -> int:
+        """Return total queries submitted today."""
+        return int(self.telemetry.get("requests_today", 0))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra description and date attributes."""
+        return {
+            "description": "Total number of queries submitted to the AI model today.",
+            "date": self.telemetry.get("date"),
+            "last_updated": self.telemetry.get("last_updated"),
+        }
+
+
+class NexusMcpDailyQuotaSensor(NexusMcpBaseTelemetrySensor):
+    """Sensor exposing remaining daily requests quota."""
+
     _attr_icon = "mdi:counter"
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize the daily quota sensor."""
-        self.hass = hass
-        self.entry = entry
+        """Initialize the daily requests remaining sensor."""
+        super().__init__(hass, entry)
         self._attr_unique_id = f"{entry.entry_id}_daily_quota_remaining"
-        self._attr_name = "Cuota Diaria Restante"
-        self._attr_native_unit_of_measurement = "peticiones"
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        """Link sensor to the Nexus MCP device."""
-        model_name = self.entry.options.get(
-            CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent")
-        )
-        return {
-            "identifiers": {(DOMAIN, self.entry.entry_id)},
-            "name": f"Nexus MCP ({model_name})",
-            "manufacturer": "Nexus MCP",
-            "model": model_name,
-            "sw_version": "1.3.5",
-        }
-
-    async def async_added_to_hass(self) -> None:
-        """Register dispatcher when entity is added."""
-        if hasattr(super(), "async_added_to_hass"):
-            await super().async_added_to_hass()
-
-        if async_dispatcher_connect:
-            signal = f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
-            self.async_on_remove(
-                async_dispatcher_connect(self.hass, signal, self._handle_telemetry_updated)
-            )
-
-    @callback
-    def _handle_telemetry_updated(self) -> None:
-        """Handle telemetry update signal."""
-        self.async_write_ha_state()
-
-    @property
-    def _conversation_entity(self) -> Any:
-        """Retrieve the associated conversation entity from hass.data."""
-        entry_data = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
-        return entry_data.get("conversation_entity")
+        self._attr_name = "Daily Requests Remaining"
+        self._attr_translation_key = "daily_requests_remaining"
+        self._attr_native_unit_of_measurement = "requests"
 
     @property
     def native_value(self) -> int:
         """Return remaining requests for today."""
-        model_name = self.entry.options.get(CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent"))
-        provider = self.entry.options.get(CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, ""))
-        specs = get_model_specs(model_name, provider)
-        max_rpd = int(specs.get("rpd", 14400))
-
-        conv_entity = self._conversation_entity
-        reqs_today = 0
-        if conv_entity:
-            telem = getattr(conv_entity, "telemetry", {})
-            reqs_today = int(telem.get("requests_today", 0))
-
-        return max(0, max_rpd - reqs_today)
+        max_rpd = int(self.model_specs.get("rpd", 14400))
+        used = int(self.telemetry.get("requests_today", 0))
+        return max(0, max_rpd - used)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return detailed daily quota attributes."""
+        max_rpd = int(self.model_specs.get("rpd", 14400))
+        used = int(self.telemetry.get("requests_today", 0))
+        remaining = max(0, max_rpd - used)
+        tokens_today = int(self.telemetry.get("tokens_today", 0))
+        pct_str = f"{round((remaining / max_rpd) * 100, 2)}%" if max_rpd > 0 else "100.0%"
+        return {
+            "description": "Remaining requests available today before hitting the daily quota.",
+            "daily_limit": max_rpd,
+            "requests_used_today": used,
+            "requests_remaining": remaining,
+            "peticiones_restantes_hoy": remaining,
+            "peticiones_usadas_hoy": used,
+            "limite_diario_peticiones": max_rpd,
+            "porcentaje_cuota_restante": pct_str,
+            "tokens_consumidos_hoy": tokens_today,
+        }
+
+
+class NexusMcpDailyQuotaPercentSensor(NexusMcpBaseTelemetrySensor):
+    """Sensor exposing remaining daily requests quota as percentage."""
+
+    _attr_icon = "mdi:percent-outline"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the daily quota percent sensor."""
+        super().__init__(hass, entry)
+        self._attr_unique_id = f"{entry.entry_id}_daily_quota_percent"
+        self._attr_name = "Daily Quota Remaining"
+        self._attr_translation_key = "daily_quota_percent"
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_suggested_display_precision = 1
+
+    @property
+    def native_value(self) -> float:
+        """Return remaining quota percentage."""
+        max_rpd = int(self.model_specs.get("rpd", 14400))
+        used = int(self.telemetry.get("requests_today", 0))
+        remaining = max(0, max_rpd - used)
+        return round((remaining / max_rpd) * 100, 1) if max_rpd > 0 else 100.0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return description attribute."""
+        return {
+            "description": "Percentage of daily provider requests quota remaining until midnight UTC reset.",
+            "reset_hour": f"{self.model_specs.get('daily_reset_hour_utc', 0):02d}:00 UTC",
+        }
+
+
+class NexusMcpDailyRequestsLimitSensor(NexusMcpBaseTelemetrySensor):
+    """Sensor exposing maximum daily requests limit (RPD)."""
+
+    _attr_icon = "mdi:shield-check-outline"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the daily requests limit sensor."""
+        super().__init__(hass, entry)
+        self._attr_unique_id = f"{entry.entry_id}_daily_requests_limit"
+        self._attr_name = "Daily Requests Limit"
+        self._attr_translation_key = "daily_requests_limit"
+        self._attr_native_unit_of_measurement = "requests/day"
+
+    @property
+    def native_value(self) -> int:
+        """Return maximum allowable requests per day."""
+        return int(self.model_specs.get("rpd", 14400))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return description and timezone."""
+        return {
+            "description": "Maximum allowable queries per day (RPD) in the provider's free tier.",
+            "timezone": self.model_specs.get("reset_tz", "UTC"),
+        }
+
+
+class NexusMcpModelLimitSensor(NexusMcpBaseTelemetrySensor):
+    """Sensor exposing theoretical or live confirmed tokens per minute (TPM)."""
+
+    _attr_icon = "mdi:gauge-full"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the tokens per minute limit sensor."""
+        super().__init__(hass, entry)
+        self._attr_unique_id = f"{entry.entry_id}_model_limit"
+        self._attr_name = "Tokens Per Minute Limit"
+        self._attr_translation_key = "model_limit"
+        self._attr_native_unit_of_measurement = "tokens/min"
+
+    @property
+    def native_value(self) -> int:
+        """Return the maximum input tokens per minute."""
+        live = self.telemetry.get("limit_tokens")
+        if live is not None:
+            try:
+                return int(live)
+            except (ValueError, TypeError):
+                pass
+        return int(self.model_specs.get("tpm", 7000))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return description and context window."""
         model_name = self.entry.options.get(CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent"))
         provider = self.entry.options.get(CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, ""))
-        specs = get_model_specs(model_name, provider)
-        max_rpd = int(specs.get("rpd", 14400))
+        live_rpm = self.telemetry.get("limit_requests")
+        rpm_val = int(live_rpm) if live_rpm is not None else self.model_specs.get("rpm", 30)
+        return {
+            "description": "Maximum input tokens per minute (ITPM/TPM) allowed by the provider.",
+            "tpm_maximo": self.native_value,
+            "rpm_maximo": rpm_val,
+            "rpd_maximo_diario": int(self.model_specs.get("rpd", 14400)),
+            "context_window_tokens": self.model_specs.get("context_window", 131072),
+            "model": model_name,
+            "provider": provider,
+        }
 
-        conv_entity = self._conversation_entity
-        reqs_today = 0
-        tokens_today = 0
-        if conv_entity:
-            telem = getattr(conv_entity, "telemetry", {})
-            reqs_today = int(telem.get("requests_today", 0))
-            tokens_today = int(telem.get("tokens_today", 0))
 
-        remaining = max(0, max_rpd - reqs_today)
-        pct_remaining = round((remaining / max_rpd) * 100, 2) if max_rpd > 0 else 100.0
+class NexusMcpRpmLimitSensor(NexusMcpBaseTelemetrySensor):
+    """Sensor exposing theoretical or live confirmed requests per minute (RPM)."""
 
+    _attr_icon = "mdi:speedometer"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the requests per minute limit sensor."""
+        super().__init__(hass, entry)
+        self._attr_unique_id = f"{entry.entry_id}_rpm_limit"
+        self._attr_name = "Requests Per Minute Limit"
+        self._attr_translation_key = "rpm_limit"
+        self._attr_native_unit_of_measurement = "req/min"
+
+    @property
+    def native_value(self) -> int:
+        """Return the maximum requests per minute."""
+        live = self.telemetry.get("limit_requests")
+        if live is not None:
+            try:
+                return int(live)
+            except (ValueError, TypeError):
+                pass
+        return int(self.model_specs.get("rpm", 30))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return description."""
+        return {
+            "description": "Maximum queries allowed within any 60-second window.",
+        }
+
+
+class NexusMcpMaxWaitSensor(NexusMcpBaseTelemetrySensor):
+    """Sensor exposing maximum wait time in seconds for the sliding window."""
+
+    _attr_icon = "mdi:timer-sand-complete"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the max wait time sensor."""
+        super().__init__(hass, entry)
+        self._attr_unique_id = f"{entry.entry_id}_max_wait_time"
+        self._attr_name = "Max Window Wait Time"
+        self._attr_translation_key = "max_wait_time"
+        self._attr_native_unit_of_measurement = "s"
+        self._attr_suggested_display_precision = 0
+
+    @property
+    def native_value(self) -> int:
+        """Return maximum wait seconds for per-minute token replenishment."""
+        return int(self.model_specs.get("tpm_window_seconds", 60))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return description and wait breakdown."""
         now_utc = datetime.datetime.now(datetime.timezone.utc)
-        reset_hour = specs.get("daily_reset_hour_utc", 0)
+        reset_hour = self.model_specs.get("daily_reset_hour_utc", 0)
         target_dt = now_utc.replace(hour=reset_hour, minute=0, second=0, microsecond=0)
         if target_dt <= now_utc:
             target_dt += datetime.timedelta(days=1)
         sec_to_daily_reset = int((target_dt - now_utc).total_seconds())
         hours = sec_to_daily_reset // 3600
         minutes = (sec_to_daily_reset % 3600) // 60
-
+        formatted_daily_wait = f"{hours}h {minutes}m"
         return {
-            "peticiones_restantes_hoy": remaining,
-            "peticiones_usadas_hoy": reqs_today,
-            "limite_diario_peticiones": max_rpd,
-            "porcentaje_cuota_restante": f"{pct_remaining}%",
-            "tokens_consumidos_hoy": tokens_today,
-            "tiempo_hasta_reseteo": f"{hours}h {minutes}m",
+            "description": "Sliding window duration in seconds required for per-minute tokens to replenish.",
+            "espera_tope_tpm": "60 segundos (1 minuto para renovación completa de la ventana deslizante)",
+            "segundos_hasta_reseteo_diario": sec_to_daily_reset,
             "hora_reseteo_diario": f"{reset_hour:02d}:00 UTC",
-            "tipo_limite": "Diario (RPD - Requests Per Day)",
-            "aclaracion": "En Groq, el límite diario mide peticiones al día (14.400 req/día). El límite de tokens (7.000 TPM) se renueva cada 60 segundos.",
-            "model": model_name,
-            "provider": provider,
+            "espera_tope_diario": formatted_daily_wait,
         }
 
 
-class NexusMcpRateLimitResetSensor(SensorEntity):
-    """Sensor exposing real-time countdown / seconds until next rate limit renewal."""
+class NexusMcpRateLimitResetSensor(NexusMcpBaseTelemetrySensor):
+    """Sensor exposing real-time countdown seconds until next rate limit renewal."""
 
-    _attr_has_entity_name = True
-    _attr_should_poll = False
     _attr_icon = "mdi:timer-sand"
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize the rate limit reset sensor."""
-        self.hass = hass
-        self.entry = entry
+        """Initialize the rate limit cooldown sensor."""
+        super().__init__(hass, entry)
         self._attr_unique_id = f"{entry.entry_id}_rate_limit_reset"
-        self._attr_name = "Tiempo Desbloqueo Rate Limit"
+        self._attr_name = "Rate Limit Cooldown"
+        self._attr_translation_key = "rate_limit_reset"
         self._attr_native_unit_of_measurement = "s"
         self._attr_suggested_display_precision = 1
 
     @property
-    def device_info(self) -> dict[str, Any]:
-        """Link sensor to the Nexus MCP device."""
-        model_name = self.entry.options.get(
-            CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent")
-        )
-        return {
-            "identifiers": {(DOMAIN, self.entry.entry_id)},
-            "name": f"Nexus MCP ({model_name})",
-            "manufacturer": "Nexus MCP",
-            "model": model_name,
-            "sw_version": "1.3.5",
-        }
-
-    async def async_added_to_hass(self) -> None:
-        """Register dispatcher when entity is added."""
-        if hasattr(super(), "async_added_to_hass"):
-            await super().async_added_to_hass()
-
-        if async_dispatcher_connect:
-            signal = f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
-            self.async_on_remove(
-                async_dispatcher_connect(self.hass, signal, self._handle_telemetry_updated)
-            )
-
-    @callback
-    def _handle_telemetry_updated(self) -> None:
-        """Handle telemetry update signal."""
-        self.async_write_ha_state()
-
-    @property
-    def _conversation_entity(self) -> Any:
-        """Retrieve the associated conversation entity from hass.data."""
-        entry_data = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
-        return entry_data.get("conversation_entity")
-
-    @property
     def native_value(self) -> float:
         """Return remaining seconds until rate limit unblock/reset (0 if ready)."""
-        conv_entity = self._conversation_entity
-        if not conv_entity:
-            return 0.0
-        telem = getattr(conv_entity, "telemetry", {})
+        telem = self.telemetry
         reset_at_iso = telem.get("rate_limit_reset_at")
         if not reset_at_iso:
             return 0.0
         try:
             reset_dt = datetime.datetime.fromisoformat(reset_at_iso)
             now_dt = datetime.datetime.now(datetime.timezone.utc)
-            diff = (reset_dt - now_dt).total_seconds()
-            if diff > 0:
-                return round(diff, 1)
+            rem = (reset_dt - now_dt).total_seconds()
+            return max(0.0, round(rem, 1))
         except Exception:
-            pass
-        return 0.0
+            return 0.0
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return rate limit details."""
-        conv_entity = self._conversation_entity
-        if not conv_entity:
-            return {"status": "ready"}
-        telem = getattr(conv_entity, "telemetry", {})
+        """Return description, status, model, and provider."""
         rem_sec = self.native_value
         return {
+            "description": "Live real-time cooldown seconds remaining if throttled by the provider.",
             "status": "throttled" if rem_sec > 0 else "ready",
-            "reset_at": telem.get("rate_limit_reset_at"),
-            "last_reset_duration": telem.get("rate_limit_reset_seconds", 0.0),
-            "model": telem.get("model", ""),
-            "provider": telem.get("provider", ""),
-            "remaining_tokens_minute": telem.get("remaining_tokens"),
-            "limit_tokens_minute": telem.get("limit_tokens"),
-            "remaining_requests_minute": telem.get("remaining_requests"),
-            "limit_requests_minute": telem.get("limit_requests"),
-        }
-
-
-class NexusMcpModelLimitSensor(SensorEntity):
-    """Sensor exposing theoretical maximum limits (TPM, RPM, RPD, Context Window) for the model."""
-
-    _attr_has_entity_name = True
-    _attr_should_poll = False
-    _attr_icon = "mdi:gauge-full"
-
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize the model limit sensor."""
-        self.hass = hass
-        self.entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_model_limit"
-        self._attr_name = "Límite Teórico del Modelo"
-        self._attr_native_unit_of_measurement = "tokens/min"
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        """Link sensor to the Nexus MCP device."""
-        model_name = self.entry.options.get(
-            CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent")
-        )
-        return {
-            "identifiers": {(DOMAIN, self.entry.entry_id)},
-            "name": f"Nexus MCP ({model_name})",
-            "manufacturer": "Nexus MCP",
-            "model": model_name,
-            "sw_version": "1.3.5",
-        }
-
-    async def async_added_to_hass(self) -> None:
-        """Register dispatcher when entity is added."""
-        if hasattr(super(), "async_added_to_hass"):
-            await super().async_added_to_hass()
-
-        if async_dispatcher_connect:
-            signal = f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
-            self.async_on_remove(
-                async_dispatcher_connect(self.hass, signal, self._handle_telemetry_updated)
-            )
-
-    @callback
-    def _handle_telemetry_updated(self) -> None:
-        """Handle telemetry update signal."""
-        self.async_write_ha_state()
-
-    @property
-    def _conversation_entity(self) -> Any:
-        """Retrieve the associated conversation entity from hass.data."""
-        entry_data = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
-        return entry_data.get("conversation_entity")
-
-    @property
-    def native_value(self) -> int:
-        """Return the theoretical or live confirmed maximum tokens per minute (TPM)."""
-        model_name = self.entry.options.get(CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent"))
-        provider = self.entry.options.get(CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, ""))
-        specs = get_model_specs(model_name, provider)
-
-        conv_entity = self._conversation_entity
-        if conv_entity:
-            telem = getattr(conv_entity, "telemetry", {})
-            live_limit = telem.get("limit_tokens")
-            if live_limit is not None:
-                try:
-                    return int(live_limit)
-                except (ValueError, TypeError):
-                    pass
-        return int(specs.get("tpm", 8000))
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return detailed theoretical limit specifications."""
-        model_name = self.entry.options.get(CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent"))
-        provider = self.entry.options.get(CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, ""))
-        specs = get_model_specs(model_name, provider)
-
-        conv_entity = self._conversation_entity
-        telem = getattr(conv_entity, "telemetry", {}) if conv_entity else {}
-        live_rpm = telem.get("limit_requests")
-        rpm_val = int(live_rpm) if live_rpm is not None else specs.get("rpm", 30)
-
-        return {
-            "tpm_maximo": self.native_value,
-            "rpm_maximo": rpm_val,
-            "rpd_maximo_diario": specs.get("rpd", 14400),
-            "context_window_tokens": specs.get("context_window", 131072),
-            "tipo_limite": "Ventana deslizante por minuto (TPM / RPM) y cuota diaria (RPD)",
-            "zona_horaria_reseteo": specs.get("reset_tz", "UTC"),
-            "model": model_name,
-            "provider": provider,
-        }
-
-
-class NexusMcpMaxWaitSensor(SensorEntity):
-    """Sensor exposing maximum wait time when hitting theoretical limits (TPM window vs daily quota)."""
-
-    _attr_has_entity_name = True
-    _attr_should_poll = False
-    _attr_icon = "mdi:timer-sand-complete"
-
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize the max wait time sensor."""
-        self.hass = hass
-        self.entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_max_wait_time"
-        self._attr_name = "Tiempo de Espera al Tope Teórico"
-        self._attr_native_unit_of_measurement = "s"
-        self._attr_suggested_display_precision = 0
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        """Link sensor to the Nexus MCP device."""
-        model_name = self.entry.options.get(
-            CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent")
-        )
-        return {
-            "identifiers": {(DOMAIN, self.entry.entry_id)},
-            "name": f"Nexus MCP ({model_name})",
-            "manufacturer": "Nexus MCP",
-            "model": model_name,
-            "sw_version": "1.3.5",
-        }
-
-    async def async_added_to_hass(self) -> None:
-        """Register dispatcher when entity is added."""
-        if hasattr(super(), "async_added_to_hass"):
-            await super().async_added_to_hass()
-
-        if async_dispatcher_connect:
-            signal = f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
-            self.async_on_remove(
-                async_dispatcher_connect(self.hass, signal, self._handle_telemetry_updated)
-            )
-
-    @callback
-    def _handle_telemetry_updated(self) -> None:
-        """Handle telemetry update signal."""
-        self.async_write_ha_state()
-
-    @property
-    def native_value(self) -> int:
-        """Return maximum wait seconds for the per-minute token replenishment (standard: 60s)."""
-        model_name = self.entry.options.get(CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent"))
-        provider = self.entry.options.get(CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, ""))
-        specs = get_model_specs(model_name, provider)
-        return int(specs.get("tpm_window_seconds", 60))
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return breakdown of maximum wait times (per-minute vs daily reset)."""
-        model_name = self.entry.options.get(CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent"))
-        provider = self.entry.options.get(CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, ""))
-        specs = get_model_specs(model_name, provider)
-
-        now_utc = datetime.datetime.now(datetime.timezone.utc)
-        reset_hour = specs.get("daily_reset_hour_utc", 0)
-
-        target_dt = now_utc.replace(hour=reset_hour, minute=0, second=0, microsecond=0)
-        if target_dt <= now_utc:
-            target_dt += datetime.timedelta(days=1)
-        sec_to_daily_reset = int((target_dt - now_utc).total_seconds())
-
-        hours = sec_to_daily_reset // 3600
-        minutes = (sec_to_daily_reset % 3600) // 60
-        formatted_daily_wait = f"{hours}h {minutes}m"
-
-        return {
-            "espera_tope_tpm": "60 segundos (1 minuto para renovación completa de la ventana deslizante)",
-            "ventana_recuperacion": "Ventana deslizante de 60 segundos (los tokens se recuperan segundo a segundo)",
-            "espera_tope_diario": formatted_daily_wait,
-            "segundos_hasta_reseteo_diario": sec_to_daily_reset,
-            "hora_reseteo_diario": f"{reset_hour:02d}:00 UTC ({specs.get('reset_tz', 'UTC')})",
-            "proximo_reseteo_diario": target_dt.isoformat(),
-            "comportamiento_al_tope": (
-                "Si agotas los tokens/min (TPM), el tiempo de espera máximo es de 60 segundos. "
-                "Si agotas el límite diario (RPD), el servicio se restablece en el próximo reseteo diario."
-            ),
+            "last_reset_duration": self.telemetry.get("rate_limit_reset_seconds", 0.0),
+            "model": self.telemetry.get("model", ""),
+            "provider": self.telemetry.get("provider", ""),
         }

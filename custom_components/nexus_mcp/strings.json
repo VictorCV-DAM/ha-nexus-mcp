@@ -121,5 +121,49 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "conversation_history": {
+        "name": "Conversation History",
+        "state_description": "Most recent conversation message and activity preview."
+      },
+      "daily_tokens": {
+        "name": "Daily Tokens Used",
+        "state_description": "Total prompt and completion tokens used today across all requests."
+      },
+      "daily_requests_used": {
+        "name": "Daily Requests Used",
+        "state_description": "Total number of queries submitted to the AI model today."
+      },
+      "daily_requests_remaining": {
+        "name": "Daily Requests Remaining",
+        "state_description": "Remaining requests available today before hitting the daily quota."
+      },
+      "daily_quota_percent": {
+        "name": "Daily Quota Remaining",
+        "state_description": "Percentage of daily provider requests quota remaining until midnight UTC reset."
+      },
+      "daily_requests_limit": {
+        "name": "Daily Requests Limit",
+        "state_description": "Maximum allowable queries per day (RPD) in the provider's free tier."
+      },
+      "model_limit": {
+        "name": "Tokens Per Minute Limit",
+        "state_description": "Maximum input tokens per minute (ITPM/TPM) allowed by the provider."
+      },
+      "rpm_limit": {
+        "name": "Requests Per Minute Limit",
+        "state_description": "Maximum queries allowed within any 60-second window."
+      },
+      "max_wait_time": {
+        "name": "Max Window Wait Time",
+        "state_description": "Sliding window duration in seconds required for per-minute tokens to replenish."
+      },
+      "rate_limit_reset": {
+        "name": "Rate Limit Cooldown",
+        "state_description": "Live real-time cooldown seconds remaining if throttled by the provider."
+      }
+    }
   }
 }
