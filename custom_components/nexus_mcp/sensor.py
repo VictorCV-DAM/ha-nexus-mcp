@@ -52,7 +52,7 @@ MODEL_THEORETICAL_SPECS: dict[str, dict[str, Any]] = {
         "reset_tz": "UTC",
     },
     "qwen/qwen3.8-27b": {
-        "tpm": 8000,
+        "tpm": 7000,
         "rpm": 30,
         "rpd": 14400,
         "context_window": 131072,
