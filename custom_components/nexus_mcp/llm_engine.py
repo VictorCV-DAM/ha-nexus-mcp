@@ -133,7 +133,13 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
         m = self._model.lower()
         if "gpt-oss" in m:
             return False
-        vision_indicators = ("vision", "-vl", "gemini", "gpt-4o", "omni", "claude-3", "qwen", "llava", "pixtral")
+        vision_indicators = (
+            "vision", "-vl", "vl-", "_vl", "vl:", "/vl",
+            "gemini", "gpt-4o", "omni", "claude-3", "qwen",
+            "llava", "bakllava", "moondream", "minicpm",
+            "pixtral", "paligemma", "cogvlm", "internvl",
+            "glm-4v", "multimodal", "clip", "mllama"
+        )
         return any(ind in m for ind in vision_indicators)
 
     async def generate_response(

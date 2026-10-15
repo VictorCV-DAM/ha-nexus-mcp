@@ -909,17 +909,14 @@ class NexusMcpCard extends HTMLElement {
     if (str.includes("gpt-oss") || str.includes("120b") || str.includes("20b")) {
       return false;
     }
-    return Boolean(
-      str.includes("gemini") ||
-      str.includes("vision") ||
-      str.includes("-vl") ||
-      str.includes("gpt-4o") ||
-      str.includes("omni") ||
-      str.includes("qwen") ||
-      str.includes("llava") ||
-      str.includes("claude-3") ||
-      str.includes("pixtral")
-    );
+    const visionKeywords = [
+      "vision", "-vl", "vl-", "_vl", "vl:", "/vl",
+      "gemini", "gpt-4o", "omni", "claude-3", "qwen",
+      "llava", "bakllava", "moondream", "minicpm",
+      "pixtral", "paligemma", "cogvlm", "internvl",
+      "glm-4v", "multimodal", "clip", "mllama"
+    ];
+    return visionKeywords.some((kw) => str.includes(kw));
   }
 
   _updateVisionBadge() {
