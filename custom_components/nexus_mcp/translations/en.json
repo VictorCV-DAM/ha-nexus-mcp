@@ -22,15 +22,15 @@
       },
       "groq": {
         "title": "Groq Cloud (Free Tier - Europe & Worldwide)",
-        "description": "To use Groq Cloud, get a free API key from Groq Console. 1-click login with Google or GitHub, no credit card or phone verification needed.\n\n👉 **[Get your free Groq API Key here]({groq_api_url})** *(URL: https://console.groq.com/keys)*\n👉 **[Check official Groq models list here]({groq_models_url})** *(URL: https://console.groq.com/docs/models)*\n\n**Included Models & Limits:**\n• `qwen/qwen3.8-27b` (Default): High-speed multilingual Qwen on Groq LPUs.\n• `openai/gpt-oss-120b`: 120-Billion open-weights model with reasoning and tool calling.\n• `openai/gpt-oss-20b`: Lightweight and ultra-fast 20B open model.\n\nEnter your API key and model below:",
+        "description": "To use Groq Cloud, get a free API key from Groq Console. 1-click login with Google or GitHub, no credit card or phone verification needed.\n\n👉 **[Get your free Groq API Key here]({groq_api_url})** *(URL: https://console.groq.com/keys)*\n👉 **[Check official Groq models list here]({groq_models_url})** *(URL: https://console.groq.com/docs/models)*\n\n**Included Models & Limits:**\n• `openai/gpt-oss-120b` (Default): 120-Billion open-weights reasoning model with deep tool calling.\n• `qwen/qwen3.8-27b`: High-speed multilingual Qwen on Groq LPUs (~0.08s latency).\n• `openai/gpt-oss-20b`: Lightweight and ultra-fast 20B open model.\n\nEnter your API key and model below:",
         "data": {
           "api_key": "API Key (gsk_...)",
-          "model": "Model Name (default: qwen/qwen3.8-27b)",
+          "model": "Model Name (default: openai/gpt-oss-120b)",
           "base_url": "Groq API Base URL"
         },
         "data_description": {
           "api_key": "Generate your free API key at https://console.groq.com/keys",
-          "model": "Use 'qwen/qwen3.8-27b' (default) or 'openai/gpt-oss-120b'. Full list: https://console.groq.com/docs/models",
+          "model": "Use 'openai/gpt-oss-120b' (default) or 'qwen/qwen3.8-27b'. Full list: https://console.groq.com/docs/models",
           "base_url": "Groq OpenAI-compatible base URL (default: https://api.groq.com/openai/v1)."
         }
       },

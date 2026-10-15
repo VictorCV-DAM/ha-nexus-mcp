@@ -192,16 +192,24 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                         if retry_after and retry_after.replace(".", "", 1).isdigit():
                             delay = max(1.0, min(float(retry_after), 5.0))
 
-                        # If on Groq and hit rate limit on Qwen, attempt fallback to openai/gpt-oss-120b
-                        if "groq.com" in self._base_url and self._model == "qwen/qwen3.8-27b":
-                            _LOGGER.warning(
-                                "Groq rate limit on %s. Auto-falling back to openai/gpt-oss-120b...",
-                                self._model,
-                            )
-                            self._model = "openai/gpt-oss-120b"
-                            payload["model"] = "openai/gpt-oss-120b"
-                            await asyncio.sleep(1.0)
-                            continue
+                        # If on Groq and hit rate limit, attempt bidirectional fallback between 120b and qwen
+                        if "groq.com" in self._base_url:
+                            if self._model == "openai/gpt-oss-120b":
+                                _LOGGER.warning(
+                                    "Groq rate limit on openai/gpt-oss-120b. Auto-falling back to qwen/qwen3.8-27b...",
+                                )
+                                self._model = "qwen/qwen3.8-27b"
+                                payload["model"] = "qwen/qwen3.8-27b"
+                                await asyncio.sleep(1.0)
+                                continue
+                            if self._model == "qwen/qwen3.8-27b":
+                                _LOGGER.warning(
+                                    "Groq rate limit on qwen/qwen3.8-27b. Auto-falling back to openai/gpt-oss-120b...",
+                                )
+                                self._model = "openai/gpt-oss-120b"
+                                payload["model"] = "openai/gpt-oss-120b"
+                                await asyncio.sleep(1.0)
+                                continue
 
                         if attempt < max_retries:
                             _LOGGER.warning(

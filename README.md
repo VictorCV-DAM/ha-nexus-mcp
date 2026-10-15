@@ -55,7 +55,7 @@ Click the badge above or use the direct link to open this repository directly in
   * **Groq Cloud (Recommended in Europe & Worldwide)**:
     * 1-click Google/GitHub login, zero credit card, zero phone verification required.
     * Up to **14,400 free requests per day** at ultra-high inference speeds (~0.08s latency).
-    * Supported models: `qwen/qwen3.8-27b` (default), `openai/gpt-oss-120b` (120B reasoning model!), and `openai/gpt-oss-20b`.
+    * Supported models: `openai/gpt-oss-120b` (default - 120B reasoning model!), `qwen/qwen3.8-27b` (ultra-fast ~0.08s latency), and `openai/gpt-oss-20b`.
     * Direct in-app link to official catalog: [Groq Model Catalog](https://console.groq.com/docs/models).
   * **Google Gemini (Free Tier)**:
     * Free API key from [Google AI Studio](https://aistudio.google.com/app/apikey) (no billing required).
@@ -124,8 +124,8 @@ Click the badge above or use the direct link to open this repository directly in
 | Provider | Model Identifier | Tokens/Min (**TPM**) | Requests/Day (**RPD**) | Availability (EU / Global) | Best Used For |
 | :--- | :--- | :---: | :---: | :---: | :--- |
 | **Google Gemini** | **`gemini-3.1-flash-lite`** *(Recommended)* | **250,000 TPM** | 500 RPD | Global / Europe | **Best daily driver**: Zero minute-rate-limit friction in fast voice/chat conversations. |
-| **Groq Cloud** | **`openai/gpt-oss-120b`** | 6,000 TPM | **14,400 RPD** | Global / Europe | **Maximum AI intelligence**: 120B open reasoning model for complex automations. |
-| **Groq Cloud** | **`qwen/qwen3.8-27b`** *(Default Groq)* | 6,000 TPM | **14,400 RPD** | Global / Europe | **Ultra-fast inference**: ~0.08s latency, excellent tool calling and multilingual support. |
+| **Groq Cloud** | **`openai/gpt-oss-120b`** *(Default Groq)* | 6,000 TPM | **14,400 RPD** | Global / Europe | **Maximum AI intelligence**: 120B open reasoning model for complex automations. |
+| **Groq Cloud** | **`qwen/qwen3.8-27b`** | 6,000 TPM | **14,400 RPD** | Global / Europe | **Ultra-fast inference**: ~0.08s latency, excellent tool calling and multilingual support. |
 | **Groq Cloud** | **`openai/gpt-oss-20b`** | 6,000 TPM | **14,400 RPD** | Global / Europe | Fast and lightweight 20B model for simple queries. |
 | **Alibaba Cloud**| **`qwen-plus-latest`** | Generous | Generous | Global / Europe | Qwen flagship intelligence via DashScope. |
 | **Ollama Local** | **`qwen2.5-coder:7b`** | Unlimited | Unlimited | Local Network | 100% private, offline home control. |

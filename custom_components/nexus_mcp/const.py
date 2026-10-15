@@ -21,7 +21,7 @@ CONF_AUTONOMOUS_MODE = "autonomous_mode"
 # Defaults
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 DEFAULT_GROQ_URL = "https://api.groq.com/openai/v1"
-DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 DEFAULT_QWEN_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 DEFAULT_QWEN_MODEL = "qwen-plus-latest"
 DEFAULT_OLLAMA_URL = "http://localhost:11434/v1"
