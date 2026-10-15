@@ -78,7 +78,7 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
             mock_engine.generate_response.assert_awaited_once()
 
     async def test_async_process_error_handling(self) -> None:
-        """Test error handling when the server fails."""
+        """Test error handling when the server fails in Spanish."""
         mock_hass = MagicMock()
         mock_entry = MagicMock()
         mock_entry.entry_id = "test_entry_2"
@@ -102,6 +102,32 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
             result = await entity.async_process(user_input)
 
             self.assertIn("Error al comunicar con el servidor de IA", result.response.speech_text)
+
+    async def test_async_process_error_handling_english(self) -> None:
+        """Test error handling when the server fails in English."""
+        mock_hass = MagicMock()
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "test_entry_en"
+        mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
+
+        with patch("custom_components.nexus_mcp.conversation.create_llm_engine") as mock_factory, \
+             patch("custom_components.nexus_mcp.conversation.intent.IntentResponse", side_effect=FakeIntentResponse), \
+             patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
+
+            mock_engine = AsyncMock()
+            mock_engine.generate_response.side_effect = RuntimeError("Connection refused")
+            mock_factory.return_value = mock_engine
+
+            entity = NexusMcpConversationEntity(mock_hass, mock_entry)
+
+            user_input = MagicMock()
+            user_input.text = "What is the status of my lights?"
+            user_input.conversation_id = "conv_en"
+            user_input.language = "en"
+
+            result = await entity.async_process(user_input)
+
+            self.assertIn("Error communicating with AI server", result.response.speech_text)
 
     def test_is_user_confirmation(self) -> None:
         """Test detection of user confirmation based on history."""
@@ -127,6 +153,20 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(_is_user_confirmation(proposal_history, "vale"))
         self.assertFalse(_is_user_confirmation(proposal_history, "no, cancela"))
         self.assertFalse(_is_user_confirmation(proposal_history, "cambia la hora a las 10"))
+
+        # English proposal & confirmation
+        proposal_en = [
+            ChatMessage(role="user", content="Turn off living room light at 11pm"),
+            ChatMessage(
+                role="assistant",
+                content="I understood you want to turn off the living room light at 23:00. Would you like me to proceed with creating this automation? Reply 'yes' to confirm.",
+            ),
+        ]
+        self.assertTrue(_is_user_confirmation(proposal_en, "yes"))
+        self.assertTrue(_is_user_confirmation(proposal_en, "sure, proceed"))
+        self.assertTrue(_is_user_confirmation(proposal_en, "confirm"))
+        self.assertTrue(_is_user_confirmation(proposal_en, "do it"))
+        self.assertFalse(_is_user_confirmation(proposal_en, "no, wait"))
 
         # First request without prior assistant proposal should be False
         first_turn_history = [

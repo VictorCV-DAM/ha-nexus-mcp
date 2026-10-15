@@ -183,6 +183,7 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
         if tools:
             payload["tools"] = [tool.to_openai_tool() for tool in tools]
             payload["tool_choice"] = "auto"
+            payload["temperature"] = 0.1
 
         data = None
         max_retries = 2
@@ -233,6 +234,22 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                         except Exception:
                             msg = error_body
                         raise LlmRateLimitError(f"Rate limit exceeded: {msg}")
+
+                    if resp.status == 400:
+                        text = await resp.text()
+                        # If Groq or OpenAI rejected with tool_use_failed, malformed JSON, or failed_generation
+                        if any(w in text.lower() for w in ("malformed", "tool_use_failed", "failed_generation", "invalid json")):
+                            _LOGGER.warning(
+                                "Model generated malformed tool call JSON (attempt %d/%d): %s. Retrying with deterministic temperature...",
+                                attempt + 1,
+                                max_retries + 1,
+                                text,
+                            )
+                            if attempt < max_retries:
+                                payload["temperature"] = 0.0
+                                await asyncio.sleep(1.0)
+                                continue
+                        raise LlmError(f"HTTP 400 Bad Request from {url}: {text}")
 
                     if resp.status != 200:
                         text = await resp.text()
@@ -410,8 +427,8 @@ class GeminiEngine(BaseLlmEngine):
                             continue
 
                         raise LlmRateLimitError(
-                            "Has superado el límite de peticiones de Google Gemini (500 peticiones/día en la capa gratuita). "
-                            "Espera unos minutos o revisa tu cuota en Google AI Studio."
+                            "Google Gemini free tier daily request limit reached. "
+                            "Please wait a few moments or verify your quota in Google AI Studio."
                         )
 
                     if resp.status == 503:
@@ -425,14 +442,14 @@ class GeminiEngine(BaseLlmEngine):
                             await asyncio.sleep(backoff_seconds * attempt)
                             continue
                         raise LlmRateLimitError(
-                            "Los servidores de Gemini están experimentando una sobrecarga temporal de alta demanda. Por favor, vuelve a intentarlo en unos instantes."
+                            "Google Gemini servers are temporarily experiencing high demand. Please try again shortly."
                         )
 
                     if resp.status == 400:
                         text = await resp.text()
                         raise LlmError(f"Gemini Bad Request: {text}")
                     if resp.status in (401, 403):
-                        raise LlmAuthError("Clave de API de Gemini inválida o no autorizada.")
+                        raise LlmAuthError("Invalid or unauthorized Google Gemini API key.")
                     if resp.status != 200:
                         text = await resp.text()
                         raise LlmError(f"HTTP {resp.status} from Gemini: {text}")
@@ -443,10 +460,10 @@ class GeminiEngine(BaseLlmEngine):
                 if attempt < max_attempts:
                     await asyncio.sleep(backoff_seconds * attempt)
                     continue
-                raise LlmError(f"Error de red al conectar con Gemini: {err}") from err
+                raise LlmError(f"Network error connecting to Gemini: {err}") from err
 
         if data is None:
-            raise LlmError("No se recibió respuesta válida del servidor de Gemini.")
+            raise LlmError("No valid response received from Google Gemini server.")
 
         candidates = data.get("candidates", [])
         if not candidates:

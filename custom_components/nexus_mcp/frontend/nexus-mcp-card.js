@@ -129,8 +129,24 @@ class NexusMcpCard extends HTMLElement {
     }
   }
 
+  _isSpanish() {
+    const lang = this._hass?.locale?.language || this._hass?.language || navigator.language || "en";
+    return String(lang).toLowerCase().startsWith("es");
+  }
+
   _render() {
     if (!this.shadowRoot) return;
+
+    const isEs = this._isSpanish();
+    const txtConfig = isEs ? "Configurar Nexus MCP" : "Configure Nexus MCP";
+    const txtSelectModel = isEs ? "Seleccionar IA / Modelo" : "Select AI / Model";
+    const txtAssist = isEs ? "Abrir Assist / Voz" : "Open Assist / Voice";
+    const txtReset = isEs ? "Reiniciar Conversación" : "Reset Conversation";
+    const txtRemoveImg = isEs ? "Eliminar imagen" : "Remove image";
+    const txtAttached = isEs ? "Imagen adjunta (lista para enviar)" : "Attached image (ready to send)";
+    const txtAttach = isEs ? "Adjuntar imagen (o pega con Ctrl+V)" : "Attach image (or paste with Ctrl+V)";
+    const txtPlaceholder = isEs ? "Escribe un mensaje o pega una imagen (Ctrl+V)..." : "Type a message or paste an image (Ctrl+V)...";
+    const txtSend = isEs ? "Enviar" : "Send";
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -466,16 +482,16 @@ class NexusMcpCard extends HTMLElement {
       <ha-card>
         <div class="header">
           <div class="header-title-group">
-            <button class="header-icon-btn" id="btn-config" title="Configurar Nexus MCP">
+            <button class="header-icon-btn" id="btn-config" title="${txtConfig}">
               <ha-icon icon="mdi:robot-happy-outline"></ha-icon>
             </button>
-            <select class="agent-select" id="agent-select" title="Seleccionar IA / Modelo"></select>
+            <select class="agent-select" id="agent-select" title="${txtSelectModel}"></select>
           </div>
           <div class="header-actions">
-            <button class="icon-btn" id="btn-assist" title="Abrir Assist / Voz">
+            <button class="icon-btn" id="btn-assist" title="${txtAssist}">
               <ha-icon icon="mdi:microphone"></ha-icon>
             </button>
-            <button class="icon-btn" id="btn-reset" title="Reiniciar Conversación">
+            <button class="icon-btn" id="btn-reset" title="${txtReset}">
               <ha-icon icon="mdi:refresh"></ha-icon>
             </button>
           </div>
@@ -486,26 +502,26 @@ class NexusMcpCard extends HTMLElement {
         <div class="image-preview-bar" id="image-preview-bar">
           <div class="preview-box">
             <img id="preview-img" src="" alt="Vista previa" />
-            <button class="preview-remove-btn" id="btn-remove-image" title="Eliminar imagen">
+            <button class="preview-remove-btn" id="btn-remove-image" title="${txtRemoveImg}">
               <ha-icon icon="mdi:close"></ha-icon>
             </button>
           </div>
-          <span class="preview-caption">Imagen adjunta (lista para enviar)</span>
+          <span class="preview-caption">${txtAttached}</span>
         </div>
 
         <div class="input-bar">
           <input type="file" id="file-input" accept="image/*" style="display: none;" />
-          <button class="action-btn-attach" id="btn-attach" title="Adjuntar imagen (o pega con Ctrl+V)">
+          <button class="action-btn-attach" id="btn-attach" title="${txtAttach}">
             <ha-icon icon="mdi:paperclip"></ha-icon>
           </button>
           <input
             type="text"
             class="chat-input"
             id="chat-input"
-            placeholder="Escribe un mensaje o pega una imagen (Ctrl+V)..."
+            placeholder="${txtPlaceholder}"
             autocomplete="off"
           />
-          <button class="action-btn" id="btn-send" title="Enviar">
+          <button class="action-btn" id="btn-send" title="${txtSend}">
             <ha-icon icon="mdi:send"></ha-icon>
           </button>
         </div>
@@ -645,9 +661,10 @@ class NexusMcpCard extends HTMLElement {
     const select = this.shadowRoot.getElementById("agent-select");
     if (!select) return;
 
+    const isEs = this._isSpanish();
     const agents = this._getAvailableAgents();
     if (agents.length === 0) {
-      select.innerHTML = `<option value="">Buscando IAs...</option>`;
+      select.innerHTML = `<option value="">${isEs ? "Buscando IAs..." : "Searching for AIs..."}</option>`;
       return;
     }
 
@@ -664,12 +681,14 @@ class NexusMcpCard extends HTMLElement {
     const container = this.shadowRoot.getElementById("messages-container");
     if (!container) return;
 
+    const isEs = this._isSpanish();
+
     if (this._messages.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
           <ha-icon icon="mdi:chat-outline"></ha-icon>
-          <div>Sin mensajes con esta IA.</div>
-          <small>Escribe abajo, pega una imagen (Ctrl+V) o pulsa el micrófono.</small>
+          <div>${isEs ? "Sin mensajes con esta IA." : "No messages with this AI yet."}</div>
+          <small>${isEs ? "Escribe abajo, pega una imagen (Ctrl+V) o pulsa el micrófono." : "Type below, paste an image (Ctrl+V), or press the microphone."}</small>
         </div>
       `;
       return;
@@ -678,17 +697,18 @@ class NexusMcpCard extends HTMLElement {
     let html = "";
     this._messages.forEach((msg, idx) => {
       const isUser = msg.role === "user";
-      const label = isUser ? "🧑 Tú" : "🤖 " + (msg.agent_name || "IA");
+      const label = isUser ? (isEs ? "🧑 Tú" : "🧑 You") : "🤖 " + (msg.agent_name || (isEs ? "IA" : "AI"));
       const content = (msg.content || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       const imageHtml = msg.image
-        ? `<img class="bubble-image" src="${msg.image}" alt="Imagen adjunta" />`
+        ? `<img class="bubble-image" src="${msg.image}" alt="${isEs ? "Imagen adjunta" : "Attached image"}" />`
         : "";
+      const copyTitle = isEs ? "Copiar texto al portapapeles" : "Copy text to clipboard";
 
       html += `
         <div class="message-bubble ${isUser ? "user" : "assistant"}">
           <div class="bubble-header">
             <div class="bubble-label">${label}</div>
-            <button class="bubble-copy-btn" data-index="${idx}" title="Copiar texto al portapapeles">
+            <button class="bubble-copy-btn" data-index="${idx}" title="${copyTitle}">
               <ha-icon icon="mdi:content-copy"></ha-icon>
             </button>
           </div>

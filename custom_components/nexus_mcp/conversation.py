@@ -367,6 +367,11 @@ class NexusMcpConversationEntity(ConversationEntity):
         )
         user_confirmed = _is_user_confirmation(history, text)
 
+        user_lang = getattr(user_input, "language", "") or "en"
+        is_spanish = user_lang.lower().startswith("es") or any(
+            w in text.lower() for w in ("hola", "¿", "qué", "que", "cómo", "como", "cuál", "enciende", "apaga", "luz", "crea")
+        )
+
         base_system_prompt = (
             "You are Nexus MCP, an autonomous AI assistant embedded directly inside Home Assistant. "
             "You have direct access to tools to search entities (ha_search_entities), read states (ha_get_entity_state), "
@@ -374,6 +379,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             "Rules for creating automations with ha_create_automation:\n"
             "1. In 'trigger', for time intervals use: [{'platform': 'time_pattern', 'seconds': '/5'}]. Never use 'pattern'.\n"
             "2. In 'action', call services using: [{'service': 'domain.service_name', 'target': {'entity_id': '...'}}]. Never use 'domain' as a separate key.\n"
+            "3. Tool argument formatting: You must provide strictly valid JSON in all tool arguments. Never include unescaped characters, backticks, conversational filler, or malformed tags inside tool calls.\n"
         )
 
         if autonomous_mode:
@@ -391,6 +397,11 @@ class NexusMcpConversationEntity(ConversationEntity):
                 "Once created, inform the user that it has been successfully created and activated."
             )
         else:
+            confirm_example = (
+                "¿Deseas que proceda a crear esta automatización? Responde 'sí' para confirmar."
+                if is_spanish
+                else "Would you like me to proceed with creating this automation? Reply 'yes' to confirm."
+            )
             autonomy_prompt = (
                 "AUTONOMOUS MODE: DISABLED (CONFIRMATION REQUIRED BEFORE CREATING AUTOMATIONS).\n"
                 "When the user asks to create or modify an automation, you MUST NOT call ha_create_automation yet.\n"
@@ -398,11 +409,25 @@ class NexusMcpConversationEntity(ConversationEntity):
                 "1. If needed, use ha_search_entities or ha_get_entity_state to find the correct entity IDs and verify devices.\n"
                 "2. Explain clearly to the user what you understood from their request.\n"
                 "3. Describe the exact automation you plan to create: specify the trigger(s), condition(s), action(s), and entity IDs.\n"
-                "4. Ask the user for explicit confirmation before proceeding (for example: '¿Deseas que proceda a crear esta automatización? Responde \"sí\" para confirmar.').\n"
+                f"4. Ask the user for explicit confirmation before proceeding (for example: '{confirm_example}').\n"
                 "5. Wait for their confirmation in the next turn. DO NOT call ha_create_automation until the user confirms."
             )
 
-        system_prompt = f"{base_system_prompt}\n{autonomy_prompt}\nRespond clearly, concisely, and helpfully in the user's language."
+        if is_spanish:
+            lang_prompt = (
+                "REGLA OBLIGATORIA DE IDIOMA:\n"
+                "El usuario se está comunicando en español. Debes responder, explicar y formular TODAS tus preguntas estrictamente en español. "
+                "Nunca respondas en inglés a una petición en español."
+            )
+        else:
+            lang_prompt = (
+                "MANDATORY LANGUAGE RULE:\n"
+                f"The user is communicating in English (locale code: '{user_lang}'). "
+                "You MUST formulate ALL your responses, explanations, questions, and replies strictly in English. "
+                "NEVER respond in Spanish to an English query."
+            )
+
+        system_prompt = f"{base_system_prompt}\n{autonomy_prompt}\n{lang_prompt}"
 
         assistant_reply = "OK."
 
@@ -435,14 +460,22 @@ class NexusMcpConversationEntity(ConversationEntity):
                             _LOGGER.info(
                                 "Intercepted ha_create_automation: Autonomous Mode is OFF and user has not confirmed yet."
                             )
-                            tool_result = {
-                                "status": "confirmation_required",
-                                "error": (
+                            intercept_err = (
+                                "El modo autónomo está desactivado. No debes crear la automatización todavía. "
+                                "Explica al usuario lo que has entendido, describe la automatización exacta (disparador, condición, acción, entidades) "
+                                "y pide explícitamente su confirmación (por ejemplo: '¿Deseas que proceda a crear esta automatización? Responde \"sí\" para confirmar.'). "
+                                "NO vuelvas a llamar a ha_create_automation hasta que el usuario confirme en el siguiente turno."
+                                if is_spanish
+                                else (
                                     "Autonomous Mode is disabled. You must NOT create the automation yet. "
                                     "Tell the user what you understood, describe the exact automation (trigger, condition, action, entities), "
-                                    "and explicitly ask for their confirmation (e.g. '¿Deseas que proceda a crear esta automatización? Responde \"sí\" para confirmar.'). "
+                                    "and explicitly ask for their confirmation (e.g. 'Would you like me to proceed with creating this automation? Reply \"yes\" to confirm.'). "
                                     "DO NOT call ha_create_automation again until the user confirms in the next turn."
-                                ),
+                                )
+                            )
+                            tool_result = {
+                                "status": "confirmation_required",
+                                "error": intercept_err,
                             }
                         else:
                             tool_result = await execute_builtin_tool(
@@ -461,7 +494,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                     continue
 
                 # When no tool calls are returned, we have the final assistant answer
-                assistant_reply = response.content or "Acción completada."
+                assistant_reply = response.content or ("Acción completada." if is_spanish else "Action completed.")
                 history.append(ChatMessage(role="assistant", content=assistant_reply))
                 break
 
@@ -471,19 +504,36 @@ class NexusMcpConversationEntity(ConversationEntity):
                 f"Límite de peticiones alcanzado ({err}). "
                 "Los servidores gratuitos tienen un límite temporal de tokens por minuto (TPM). "
                 "Por favor, espera unos segundos antes de volver a intentarlo. "
-                "Consejo: En Groq puedes usar 'llama-3.3-70b-versatile' o en Google 'gemini-3.1-flash-lite' para límites mucho más amplios."
+                "Consejo: En Groq puedes usar 'openai/gpt-oss-120b' o en Google 'gemini-3.1-flash-lite' para límites mucho más amplios."
+                if is_spanish
+                else (
+                    f"Rate limit reached ({err}). "
+                    "Free tier servers have temporary tokens-per-minute (TPM) limits. "
+                    "Please wait a few seconds before trying again. "
+                    "Tip: On Groq you can use 'openai/gpt-oss-120b' or on Google 'gemini-3.1-flash-lite' for generous limits."
+                )
             )
         except LlmAuthError as err:
             _LOGGER.error("Nexus MCP authentication error: %s", err)
             assistant_reply = (
                 f"Error de autenticación ({err}). "
                 "Verifica tu clave de API en Ajustes > Dispositivos y Servicios."
+                if is_spanish
+                else (
+                    f"Authentication error ({err}). "
+                    "Please verify your API key in Settings > Devices & Services."
+                )
             )
         except Exception as err:
             _LOGGER.error("Nexus MCP Intercom error communicating with server: %s", err)
             assistant_reply = (
                 f"Error al comunicar con el servidor de IA ({err}). "
                 "Verifica la conexión y configuración en Ajustes > Dispositivos y Servicios."
+                if is_spanish
+                else (
+                    f"Error communicating with AI server ({err}). "
+                    "Please verify your connection and settings in Settings > Devices & Services."
+                )
             )
 
         # Ensure assistant reply is stored in history if an exception occurred
