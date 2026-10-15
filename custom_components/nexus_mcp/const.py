@@ -28,3 +28,43 @@ DEFAULT_OLLAMA_URL = "http://localhost:11434/v1"
 DEFAULT_OLLAMA_MODEL = "qwen2.5-coder:7b"
 DEFAULT_MCP_SERVER_URL = "http://localhost:8000/sse"
 DEFAULT_AUTONOMOUS_MODE = False
+
+# Entity Descriptions (Bilingual Support for Tooltips & Attributes)
+ENTITY_DESCRIPTIONS_EN = {
+    "conversation_history": "Most recent conversation message and activity preview.",
+    "daily_tokens": "Total prompt and completion tokens used today across all requests.",
+    "daily_requests_used": "Total number of queries submitted to the AI model today.",
+    "daily_requests_remaining": "Remaining requests available today before hitting the daily quota.",
+    "daily_quota_percent": "Percentage of daily provider requests quota remaining until midnight UTC reset.",
+    "daily_requests_limit": "Maximum allowable queries per day (RPD) in the provider's free tier.",
+    "model_limit": "Maximum input tokens per minute (ITPM/TPM) allowed by the provider.",
+    "rpm_limit": "Maximum queries allowed within any 60-second window.",
+    "max_wait_time": "Sliding window duration in seconds required for per-minute tokens to replenish.",
+    "rate_limit_reset": "Live real-time cooldown seconds remaining if throttled by the provider.",
+}
+
+ENTITY_DESCRIPTIONS_ES = {
+    "conversation_history": "Vista previa del último mensaje y actividad de la conversación.",
+    "daily_tokens": "Total de tokens (prompt y respuesta) consumidos hoy en todas las consultas.",
+    "daily_requests_used": "Número total de consultas enviadas al modelo de IA hoy.",
+    "daily_requests_remaining": "Peticiones restantes disponibles hoy antes de alcanzar el tope diario.",
+    "daily_quota_percent": "Porcentaje de cuota diaria de peticiones disponible hasta el reseteo de medianoche UTC.",
+    "daily_requests_limit": "Límite máximo de peticiones al día (RPD) en el tier gratuito del proveedor.",
+    "model_limit": "Límite máximo de tokens de entrada por minuto (ITPM/TPM) permitido por el proveedor.",
+    "rpm_limit": "Límite máximo de peticiones permitidas en cualquier ventana de 60 segundos.",
+    "max_wait_time": "Duración en segundos de la ventana deslizante para recuperar los tokens por minuto.",
+    "rate_limit_reset": "Segundos restantes en tiempo real de bloqueo temporal si se excede el límite del proveedor.",
+}
+
+
+def get_entity_description(key: str, hass=None) -> str:
+    """Retrieve entity functional description localized to the user's Home Assistant language."""
+    if not key:
+        return ""
+    lang = "en"
+    if hass and hasattr(hass, "config") and getattr(hass.config, "language", None):
+        lang = str(hass.config.language).lower()
+    if lang.startswith("es"):
+        return ENTITY_DESCRIPTIONS_ES.get(key, ENTITY_DESCRIPTIONS_EN.get(key, ""))
+    return ENTITY_DESCRIPTIONS_EN.get(key, ENTITY_DESCRIPTIONS_ES.get(key, ""))
+

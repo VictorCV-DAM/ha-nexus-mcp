@@ -26,6 +26,7 @@ from .const import (
     PROVIDER_GEMINI_FREE,
     PROVIDER_GROQ_FREE,
     PROVIDER_QWEN_FREE,
+    get_entity_description,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -295,6 +296,7 @@ class NexusMcpHistorySensor(SensorEntity):
             formatted_md = "\n".join(md_lines).strip()
 
         return {
+            "description": get_entity_description("conversation_history", self.hass),
             "conversation_id": last_conv_id,
             "total_conversations": len(history_dict),
             "total_messages": len(active_msgs),
@@ -390,7 +392,7 @@ class NexusMcpTokenSensor(NexusMcpBaseTelemetrySensor):
         """Return detailed token telemetry attributes."""
         telem = self.telemetry
         return {
-            "description": "Total prompt and completion tokens used today across all requests.",
+            "description": get_entity_description("daily_tokens", self.hass),
             "prompt_tokens_today": telem.get("prompt_tokens_today", 0),
             "completion_tokens_today": telem.get("completion_tokens_today", 0),
             "last_prompt_tokens": telem.get("last_prompt_tokens", 0),
@@ -428,7 +430,7 @@ class NexusMcpDailyRequestsUsedSensor(NexusMcpBaseTelemetrySensor):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra description and date attributes."""
         return {
-            "description": "Total number of queries submitted to the AI model today.",
+            "description": get_entity_description("daily_requests_used", self.hass),
             "date": self.telemetry.get("date"),
             "last_updated": self.telemetry.get("last_updated"),
         }
@@ -463,7 +465,7 @@ class NexusMcpDailyQuotaSensor(NexusMcpBaseTelemetrySensor):
         tokens_today = int(self.telemetry.get("tokens_today", 0))
         pct_str = f"{round((remaining / max_rpd) * 100, 2)}%" if max_rpd > 0 else "100.0%"
         return {
-            "description": "Remaining requests available today before hitting the daily quota.",
+            "description": get_entity_description("daily_requests_remaining", self.hass),
             "daily_limit": max_rpd,
             "requests_used_today": used,
             "requests_remaining": remaining,
@@ -501,7 +503,7 @@ class NexusMcpDailyQuotaPercentSensor(NexusMcpBaseTelemetrySensor):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return description attribute."""
         return {
-            "description": "Percentage of daily provider requests quota remaining until midnight UTC reset.",
+            "description": get_entity_description("daily_quota_percent", self.hass),
             "reset_hour": f"{self.model_specs.get('daily_reset_hour_utc', 0):02d}:00 UTC",
         }
 
@@ -528,7 +530,7 @@ class NexusMcpDailyRequestsLimitSensor(NexusMcpBaseTelemetrySensor):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return description and timezone."""
         return {
-            "description": "Maximum allowable queries per day (RPD) in the provider's free tier.",
+            "description": get_entity_description("daily_requests_limit", self.hass),
             "timezone": self.model_specs.get("reset_tz", "UTC"),
         }
 
@@ -565,7 +567,7 @@ class NexusMcpModelLimitSensor(NexusMcpBaseTelemetrySensor):
         live_rpm = self.telemetry.get("limit_requests")
         rpm_val = int(live_rpm) if live_rpm is not None else self.model_specs.get("rpm", 30)
         return {
-            "description": "Maximum input tokens per minute (ITPM/TPM) allowed by the provider.",
+            "description": get_entity_description("model_limit", self.hass),
             "tpm_maximo": self.native_value,
             "rpm_maximo": rpm_val,
             "rpd_maximo_diario": int(self.model_specs.get("rpd", 14400)),
@@ -603,7 +605,7 @@ class NexusMcpRpmLimitSensor(NexusMcpBaseTelemetrySensor):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return description."""
         return {
-            "description": "Maximum queries allowed within any 60-second window.",
+            "description": get_entity_description("rpm_limit", self.hass),
         }
 
 
@@ -639,7 +641,7 @@ class NexusMcpMaxWaitSensor(NexusMcpBaseTelemetrySensor):
         minutes = (sec_to_daily_reset % 3600) // 60
         formatted_daily_wait = f"{hours}h {minutes}m"
         return {
-            "description": "Sliding window duration in seconds required for per-minute tokens to replenish.",
+            "description": get_entity_description("max_wait_time", self.hass),
             "espera_tope_tpm": "60 segundos (1 minuto para renovación completa de la ventana deslizante)",
             "segundos_hasta_reseteo_diario": sec_to_daily_reset,
             "hora_reseteo_diario": f"{reset_hour:02d}:00 UTC",
@@ -681,7 +683,7 @@ class NexusMcpRateLimitResetSensor(NexusMcpBaseTelemetrySensor):
         """Return description, status, model, and provider."""
         rem_sec = self.native_value
         return {
-            "description": "Live real-time cooldown seconds remaining if throttled by the provider.",
+            "description": get_entity_description("rate_limit_reset", self.hass),
             "status": "throttled" if rem_sec > 0 else "ready",
             "last_reset_duration": self.telemetry.get("rate_limit_reset_seconds", 0.0),
             "model": self.telemetry.get("model", ""),
