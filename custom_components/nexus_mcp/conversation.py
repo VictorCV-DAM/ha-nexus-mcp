@@ -38,7 +38,7 @@ from .const import (
     DOMAIN,
 )
 from .discovery import async_autodiscover_ha_mcp_url
-from .llm_engine import ChatMessage, LlmAuthError, LlmRateLimitError, create_llm_engine
+from .llm_engine import ChatMessage, GeminiEngine, LlmAuthError, LlmRateLimitError, create_llm_engine
 from .tools import execute_builtin_tool, get_builtin_tools
 
 _LOGGER = logging.getLogger(__name__)
@@ -250,6 +250,25 @@ class NexusMcpConversationEntity(ConversationEntity):
     def supported_languages(self) -> list[str] | Literal["*"]:
         """Return supported languages."""
         return "*"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes for frontend discovery."""
+        is_vision = False
+        if hasattr(self._engine, "_is_vision_model"):
+            is_vision = bool(self._engine._is_vision_model())
+        elif isinstance(self._engine, GeminiEngine):
+            is_vision = True
+
+        return {
+            "has_vision": is_vision,
+            "provider": self.entry.options.get(
+                CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, "")
+            ),
+            "model": self.entry.options.get(
+                CONF_MODEL, self.entry.data.get(CONF_MODEL, "")
+            ),
+        }
 
     async def async_chat_process(
         self,

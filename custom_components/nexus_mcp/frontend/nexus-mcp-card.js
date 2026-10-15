@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.3.3)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.3.4)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -111,6 +111,7 @@ class NexusMcpCard extends HTMLElement {
 
     if (!oldHass) {
       this._updateAgentDropdown();
+      this._updateVisionBadge();
       if (this._selectedAgent) {
         this._loadHistoryForAgent(this._selectedAgent);
       }
@@ -303,6 +304,42 @@ class NexusMcpCard extends HTMLElement {
           align-items: center;
           gap: 6px;
           flex-shrink: 0;
+        }
+        .vision-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 8px;
+          border-radius: 12px;
+          font-size: 0.72rem;
+          font-weight: 500;
+          cursor: default;
+          user-select: none;
+          transition: background 0.2s, color 0.2s, border-color 0.2s;
+          flex-shrink: 0;
+        }
+        .vision-badge.has-vision {
+          background: rgba(76, 175, 80, 0.15);
+          color: #81c784;
+          border: 1px solid rgba(76, 175, 80, 0.35);
+        }
+        .vision-badge.has-vision ha-icon {
+          --mdc-icon-size: 15px;
+          color: #81c784;
+        }
+        .vision-badge.no-vision {
+          background: rgba(255, 255, 255, 0.05);
+          color: var(--secondary-text-color, #8e8e8e);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .vision-badge.no-vision ha-icon {
+          --mdc-icon-size: 15px;
+          color: var(--secondary-text-color, #8e8e8e);
+        }
+        @media (max-width: 420px) {
+          .vision-badge span {
+            display: none;
+          }
         }
         .icon-btn {
           background: transparent;
@@ -646,6 +683,7 @@ class NexusMcpCard extends HTMLElement {
             <select class="agent-select" id="agent-select" title="${txtSelectModel}"></select>
           </div>
           <div class="header-actions">
+            <div class="vision-badge" id="vision-badge"></div>
             <button class="icon-btn" id="btn-assist" title="${txtAssist}">
               <ha-icon icon="mdi:microphone"></ha-icon>
             </button>
@@ -688,6 +726,7 @@ class NexusMcpCard extends HTMLElement {
 
     this._setupListeners();
     this._updateAgentDropdown();
+    this._updateVisionBadge();
     this._updateMessagesView();
   }
 
@@ -801,6 +840,7 @@ class NexusMcpCard extends HTMLElement {
         } catch (err) {
           console.warn("Could not save selected agent to localStorage:", err);
         }
+        this._updateVisionBadge();
         this._conversationId = null;
         this._loadHistoryForAgent(this._selectedAgent);
       };
@@ -842,6 +882,46 @@ class NexusMcpCard extends HTMLElement {
     }
   }
 
+  _agentHasVision(agentId) {
+    if (!this._hass || !agentId) return false;
+    const stateObj = this._hass.states[agentId];
+    if (stateObj?.attributes?.has_vision !== undefined) {
+      return Boolean(stateObj.attributes.has_vision);
+    }
+    const str = `${agentId} ${stateObj?.attributes?.friendly_name || ""}`.toLowerCase();
+    return Boolean(
+      str.includes("gemini") ||
+      str.includes("vision") ||
+      str.includes("-vl") ||
+      str.includes("gpt-4o") ||
+      str.includes("omni") ||
+      str.includes("llava") ||
+      str.includes("claude-3")
+    );
+  }
+
+  _updateVisionBadge() {
+    if (!this.shadowRoot) return;
+    const badge = this.shadowRoot.getElementById("vision-badge");
+    if (!badge) return;
+
+    const hasVision = this._agentHasVision(this._selectedAgent);
+    const isEs = this._isSpanish();
+
+    badge.className = `vision-badge ${hasVision ? "has-vision" : "no-vision"}`;
+    const iconName = hasVision ? "mdi:eye-outline" : "mdi:eye-off-outline";
+    const label = hasVision ? (isEs ? "Visión" : "Vision") : (isEs ? "Sin visión" : "No vision");
+    const title = hasVision
+      ? (isEs ? "Modelo con visión: admite análisis de imágenes" : "Vision model: supports image analysis")
+      : (isEs ? "Modelo solo de texto: no admite imágenes" : "Text-only model: does not support images");
+
+    badge.title = title;
+    badge.innerHTML = `
+      <ha-icon icon="${iconName}"></ha-icon>
+      <span>${label}</span>
+    `;
+  }
+
   _updateAgentDropdown() {
     if (!this.shadowRoot) return;
     const select = this.shadowRoot.getElementById("agent-select");
@@ -857,7 +937,9 @@ class NexusMcpCard extends HTMLElement {
     let html = "";
     for (const ag of agents) {
       const isSelected = ag.id === this._selectedAgent ? "selected" : "";
-      html += `<option value="${ag.id}" ${isSelected}>${ag.name}</option>`;
+      const hasVision = this._agentHasVision(ag.id);
+      const visionTag = hasVision ? (isEs ? " [👁️ Visión]" : " [👁️ Vision]") : "";
+      html += `<option value="${ag.id}" ${isSelected}>${ag.name}${visionTag}</option>`;
     }
     select.innerHTML = html;
   }
