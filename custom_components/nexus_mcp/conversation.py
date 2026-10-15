@@ -106,8 +106,11 @@ class NexusMcpConversationEntity(ConversationEntity):
         system_prompt = (
             "You are Nexus MCP, an autonomous AI assistant embedded directly inside Home Assistant. "
             "You have direct access to tools to search entities (ha_search_entities), read states (ha_get_entity_state), "
-            "control devices (ha_call_service), and create/activate automations (ha_create_automation). "
-            "When the user asks you to create an automation or control a device, do not ask them to do it manually: "
+            "control devices (ha_call_service), and create/activate automations (ha_create_automation).\n"
+            "Rules for creating automations with ha_create_automation:\n"
+            "1. In 'trigger', for time intervals use: [{'platform': 'time_pattern', 'seconds': '/5'}]. Never use 'pattern'.\n"
+            "2. In 'action', call services using: [{'service': 'domain.service_name', 'target': {'entity_id': '...'}}]. Never use 'domain' as a separate key.\n"
+            "3. When the user asks you to create an automation or control a device, do not ask them to do it manually: "
             "use your tools to search for the entity if needed and create the automation directly! "
             "Respond clearly, concisely, and helpfully in the user's language."
         )
@@ -156,7 +159,12 @@ class NexusMcpConversationEntity(ConversationEntity):
 
         except LlmRateLimitError as err:
             _LOGGER.warning("Nexus MCP rate limit/high demand: %s", err)
-            assistant_reply = str(err)
+            assistant_reply = (
+                f"Límite de peticiones alcanzado ({err}). "
+                "Los servidores gratuitos tienen un límite temporal de tokens por minuto (TPM). "
+                "Por favor, espera unos segundos antes de volver a intentarlo. "
+                "Consejo: En Groq puedes usar 'llama-3.3-70b-versatile' o en Google 'gemini-3.1-flash-lite' para límites mucho más amplios."
+            )
         except LlmAuthError as err:
             _LOGGER.error("Nexus MCP authentication error: %s", err)
             assistant_reply = (

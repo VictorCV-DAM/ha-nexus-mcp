@@ -119,6 +119,93 @@ def get_builtin_tools() -> list[McpTool]:
     ]
 
 
+def sanitize_automation_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize and normalize triggers and actions into valid Home Assistant syntax."""
+    # Ensure triggers is a list
+    raw_triggers = entry.get("trigger", [])
+    if isinstance(raw_triggers, dict):
+        raw_triggers = [raw_triggers]
+
+    sanitized_triggers = []
+    for trg in raw_triggers:
+        if not isinstance(trg, dict):
+            continue
+        t = dict(trg)
+
+        # Handle time_pattern triggers
+        is_time_pattern = (
+            t.get("trigger") == "time_pattern"
+            or t.get("platform") == "time_pattern"
+            or "pattern" in t
+            or "seconds" in t
+            or "minutes" in t
+            or "hours" in t
+        )
+        if is_time_pattern:
+            t["platform"] = "time_pattern"
+            t.pop("trigger", None)
+
+            # Fix 'pattern: 00:00:05' -> seconds: '/5'
+            if "pattern" in t:
+                pat = str(t.pop("pattern")).strip()
+                if ":" in pat:
+                    parts = [p.strip() for p in pat.split(":")]
+                    secs = parts[-1].lstrip("0") or "5"
+                    t["seconds"] = f"/{secs}"
+                else:
+                    t["seconds"] = f"/{pat}" if pat.isdigit() else pat
+
+            # Fix 'seconds: 5' where interval is intended
+            if "seconds" in t:
+                s = str(t["seconds"]).strip()
+                if s.isdigit():
+                    t["seconds"] = f"/{s}"
+
+        sanitized_triggers.append(t)
+    entry["trigger"] = sanitized_triggers
+
+    # Ensure actions is a list
+    raw_actions = entry.get("action", [])
+    if isinstance(raw_actions, dict):
+        raw_actions = [raw_actions]
+
+    sanitized_actions = []
+    for act in raw_actions:
+        if not isinstance(act, dict):
+            continue
+        a = dict(act)
+
+        # Fix domain: button, service: press -> service: button.press
+        if "domain" in a and "service" in a:
+            domain = str(a.pop("domain")).strip()
+            srv = str(a.get("service")).strip()
+            if "." not in srv:
+                a["service"] = f"{domain}.{srv}"
+
+        # If 'action' is used instead of 'service' or vice versa, ensure valid format
+        if "action" in a and "domain" in a:
+            domain = str(a.pop("domain")).strip()
+            act_name = str(a.get("action")).strip()
+            if "." not in act_name:
+                a["action"] = f"{domain}.{act_name}"
+
+        # Normalize target / entity_id
+        if "entity_id" in a and "target" not in a:
+            eid = a.pop("entity_id")
+            a["target"] = {"entity_id": eid}
+
+        sanitized_actions.append(a)
+    entry["action"] = sanitized_actions
+
+    # Ensure condition is a list
+    raw_conditions = entry.get("condition", [])
+    if isinstance(raw_conditions, dict):
+        raw_conditions = [raw_conditions]
+    entry["condition"] = raw_conditions
+
+    return entry
+
+
 async def execute_builtin_tool(
     hass: HomeAssistant, name: str, arguments: dict[str, Any]
 ) -> dict[str, Any]:
@@ -147,7 +234,7 @@ async def execute_builtin_tool(
                         "state": state.state,
                     }
                 )
-                if len(results) >= 15:
+                if len(results) >= 10:
                     break
 
         return {"results": results, "count": len(results)}
@@ -157,10 +244,19 @@ async def execute_builtin_tool(
         state = hass.states.get(entity_id)
         if not state:
             return {"error": f"Entity '{entity_id}' not found in Home Assistant."}
+
+        # Filter heavy attributes to keep token consumption low
+        attrs = dict(state.attributes)
+        trimmed_attrs = {}
+        for k, v in attrs.items():
+            if isinstance(v, (list, dict)) and len(str(v)) > 200:
+                continue
+            trimmed_attrs[k] = v
+
         return {
             "entity_id": entity_id,
             "state": state.state,
-            "attributes": dict(state.attributes),
+            "attributes": trimmed_attrs,
         }
 
     if name == "ha_call_service":
@@ -194,7 +290,7 @@ async def execute_builtin_tool(
         mode = arguments.get("mode", "single")
 
         auto_id = str(int(time.time() * 1000))
-        automation_entry = {
+        raw_entry = {
             "id": auto_id,
             "alias": alias,
             "description": description,
@@ -203,6 +299,7 @@ async def execute_builtin_tool(
             "action": action,
             "mode": mode,
         }
+        automation_entry = sanitize_automation_entry(raw_entry)
 
         automations_path = hass.config.path("automations.yaml")
 

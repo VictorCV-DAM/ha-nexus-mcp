@@ -162,19 +162,62 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
             payload["tools"] = [tool.to_openai_tool() for tool in tools]
             payload["tool_choice"] = "auto"
 
-        try:
-            async with self._session.post(url, json=payload, headers=headers) as resp:
-                if resp.status == 401:
-                    raise LlmAuthError("Invalid API key or unauthorized access.")
-                if resp.status == 429:
-                    raise LlmRateLimitError("Rate limit exceeded for provider.")
-                if resp.status != 200:
-                    text = await resp.text()
-                    raise LlmError(f"HTTP {resp.status} from {url}: {text}")
+        data = None
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                async with self._session.post(url, json=payload, headers=headers) as resp:
+                    if resp.status == 401:
+                        raise LlmAuthError("Invalid API key or unauthorized access.")
+                    if resp.status == 429:
+                        error_body = await resp.text()
+                        retry_after = resp.headers.get("Retry-After")
+                        delay = 2.0 * (attempt + 1)
+                        if retry_after and retry_after.replace(".", "", 1).isdigit():
+                            delay = max(1.0, min(float(retry_after), 5.0))
 
-                data = await resp.json()
-        except aiohttp.ClientError as err:
-            raise LlmError(f"Network error connecting to {url}: {err}") from err
+                        # If on Groq and hit rate limit, attempt fallback to llama-3.3-70b-versatile
+                        if "groq.com" in self._base_url and self._model != "llama-3.3-70b-versatile":
+                            _LOGGER.warning(
+                                "Groq rate limit on %s. Auto-falling back to llama-3.3-70b-versatile...",
+                                self._model,
+                            )
+                            self._model = "llama-3.3-70b-versatile"
+                            payload["model"] = "llama-3.3-70b-versatile"
+                            await asyncio.sleep(1.0)
+                            continue
+
+                        if attempt < max_retries:
+                            _LOGGER.warning(
+                                "HTTP 429 rate limit from %s (attempt %d). Retrying in %.1fs...",
+                                url,
+                                attempt + 1,
+                                delay,
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+
+                        try:
+                            err_json = json.loads(error_body)
+                            msg = err_json.get("error", {}).get("message", error_body)
+                        except Exception:
+                            msg = error_body
+                        raise LlmRateLimitError(f"Rate limit exceeded: {msg}")
+
+                    if resp.status != 200:
+                        text = await resp.text()
+                        raise LlmError(f"HTTP {resp.status} from {url}: {text}")
+
+                    data = await resp.json()
+                    break
+            except aiohttp.ClientError as err:
+                if attempt < max_retries:
+                    await asyncio.sleep(1.0)
+                    continue
+                raise LlmError(f"Network error connecting to {url}: {err}") from err
+
+        if not data:
+            raise LlmError(f"No response received from {url}.")
 
         choice = data["choices"][0]
         message_data = choice["message"]
