@@ -243,7 +243,29 @@ Nexus MCP maintains a rigorous test suite covering config flows, options flows, 
 python -m unittest discover -s tests
 ```
 
-*Result:* **29/29 unit tests passing (100% success rate)**.
+*Result:* **36/36 unit tests passing (100% success rate)**.
+
+---
+
+## 🏷️ Release Notes: v1.3.0
+
+* **🎴 Plug & Play Lovelace Card with Visual Card Picker Integration**:
+  * Native auto-registration of frontend card assets into Home Assistant's Lovelace resources upon integration startup.
+  * Discovered automatically in the Home Assistant visual card picker (`nexus-mcp-card`) with live card preview and custom visual card editor (`nexus-mcp-card-editor`).
+* **🤖 Live Multi-Agent AI Selector & Direct WebSocket Communication**:
+  * Interactive dropdown selector right in the card header allowing the user to seamlessly switch between any configured conversation agent (`qwen/qwen3.8-27b`, `openai/gpt-oss-120b`, `gemini-3.1-flash-lite`, etc.) on the fly.
+  * Direct real-time WebSocket communication via `conversation/process` with sub-second response times and live typing indicators.
+  * Independent persistent history per AI model stored in client storage with instant conversation reset button.
+  * Quick-access microphone button triggering Home Assistant's native Assist overlay for voice interaction.
+* **📊 Dedicated Conversation History Sensor (`sensor.nexus_mcp_historial_de_conversaciones`)**:
+  * Native sensor exposing state, last queries, total message counters, and formatted Markdown (`formatted_markdown`) attribute for standard Markdown cards and dashboards.
+  * Reactive dispatcher updates (`async_dispatcher_send` / `async_dispatcher_connect`) on every message.
+  * Registered `nexus_mcp.clear_history` action with safe frontend fallback and execution.
+* **⚡ Hot-Reconfiguration & Options Flow Deadlock Fix**:
+  * Non-blocking, debounced background task coordination (`hass.async_create_task` with 50ms debounce) for `async_reload_entry`.
+  * Completely eliminates Home Assistant UI hanging or freezing when saving options in hot-reconfiguration.
+* **🧪 36/36 Unit Tests Passing (100% Success Rate)**:
+  * Comprehensive unit test coverage across all components, config flows, options flows, sensor platforms, services, and conversation pipelines.
 
 ---
 

@@ -1,6 +1,7 @@
 """The Nexus MCP integration for Home Assistant."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -68,17 +69,44 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     # Register extra JS URL so Home Assistant frontend loads the card automatically
     if add_extra_js_url:
         try:
-            add_extra_js_url(hass, f"{url_path}?v=1.2.0")
+            add_extra_js_url(hass, f"{url_path}?v=1.3.0")
         except Exception as err:
             _LOGGER.debug("Could not add extra JS URL: %s", err)
+
+    # Also register as a Lovelace resource so it is discovered by the card picker automatically
+    try:
+        lovelace_data = hass.data.get("lovelace")
+        resources = getattr(lovelace_data, "resources", None) if lovelace_data else None
+        if resources:
+            if not getattr(resources, "loaded", True):
+                await resources.async_load()
+                resources.loaded = True
+
+            frontend_added = False
+            for r in getattr(resources, "async_items", lambda: [])():
+                if r.get("url", "").startswith(url_path):
+                    frontend_added = True
+                    break
+
+            if not frontend_added:
+                if getattr(resources, "async_create_item", None):
+                    await resources.async_create_item({
+                        "res_type": "module",
+                        "url": f"{url_path}?v=1.3.0",
+                    })
+                elif getattr(resources, "data", None) and getattr(resources.data, "append", None):
+                    resources.data.append({
+                        "type": "module",
+                        "url": f"{url_path}?v=1.3.0",
+                    })
+    except Exception as err:
+        _LOGGER.debug("Could not auto-register Lovelace resource: %s", err)
 
     domain_data["frontend_registered"] = True
 
 
-async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
-    """Set up the Nexus MCP integration and global services."""
-    await _async_register_frontend(hass)
-
+def _async_setup_services(hass: HomeAssistant) -> None:
+    """Register Nexus MCP integration services if not already registered."""
     async def handle_clear_history(call) -> None:
         """Handle clearing conversation history."""
         entry_id = call.data.get("entry_id")
@@ -94,12 +122,19 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
     if not hass.services.has_service(DOMAIN, "clear_history"):
         hass.services.async_register(DOMAIN, "clear_history", handle_clear_history)
+
+
+async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
+    """Set up the Nexus MCP integration and global services."""
+    await _async_register_frontend(hass)
+    _async_setup_services(hass)
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Nexus MCP from a config entry."""
     await _async_register_frontend(hass)
+    _async_setup_services(hass)
 
     merged_config = {**entry.data, **entry.options}
     provider = merged_config.get(CONF_LLM_PROVIDER)
@@ -160,7 +195,28 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
+_RELOAD_TASKS: dict[str, Any] = {}
+
+
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry via Home Assistant's official config entry reload coordinator."""
-    await hass.config_entries.async_reload(entry.entry_id)
+    # Check if a reload is already scheduled for this entry to debounce multiple consecutive updates
+    existing_task = _RELOAD_TASKS.get(entry.entry_id)
+    if existing_task and not existing_task.done():
+        return
+
+    async def _debounced_reload() -> None:
+        await asyncio.sleep(0.05)
+        try:
+            await hass.config_entries.async_reload(entry.entry_id)
+        except Exception as err:
+            _LOGGER.debug("Error during debounced reload of %s: %s", entry.entry_id, err)
+        finally:
+            _RELOAD_TASKS.pop(entry.entry_id, None)
+
+    if hasattr(hass, "async_create_task"):
+        task = hass.async_create_task(_debounced_reload())
+        _RELOAD_TASKS[entry.entry_id] = task
+    else:
+        await hass.config_entries.async_reload(entry.entry_id)
 

@@ -1,4 +1,5 @@
 """Unit tests for Nexus MCP Config and Options Flows."""
+import asyncio
 import sys
 import unittest
 from unittest.mock import AsyncMock, MagicMock
@@ -224,7 +225,9 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
         mock_entry = MagicMock()
         mock_entry.entry_id = "test_entry_reload_id"
 
+        mock_hass.async_create_task = MagicMock(side_effect=lambda coro: asyncio.create_task(coro))
         await async_reload_entry(mock_hass, mock_entry)
+        await asyncio.sleep(0.1)
         mock_hass.config_entries.async_reload.assert_awaited_once_with("test_entry_reload_id")
 
 

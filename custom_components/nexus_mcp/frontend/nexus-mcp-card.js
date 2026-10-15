@@ -553,17 +553,23 @@ class NexusMcpCard extends HTMLElement {
 
     // Try to notify HA to clear memory
     if (this._hass) {
-      try {
-        await this._hass.callService("nexus_mcp", "clear_history", {});
-      } catch (e) {
-        // If clear_history action isn't available, send conversational reset command
+      if (this._hass.services?.nexus_mcp?.clear_history) {
         try {
-          await this._hass.callWS({
-            type: "conversation/process",
-            text: "nueva conversación",
-            agent_id: agentId,
-          });
-        } catch (err2) {}
+          await this._hass.callService("nexus_mcp", "clear_history", {});
+        } catch (e) {
+          console.debug("Could not call clear_history:", e);
+        }
+      }
+
+      // Send conversational reset command to active agent via WebSocket
+      try {
+        await this._hass.callWS({
+          type: "conversation/process",
+          text: "nueva conversación",
+          agent_id: agentId,
+        });
+      } catch (e) {
+        console.debug("Could not send conversational reset:", e);
       }
     }
 
@@ -662,7 +668,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c Multi-Agent Ready ",
+  "%c NEXUS MCP CARD %c v1.3.0 Multi-Agent Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
