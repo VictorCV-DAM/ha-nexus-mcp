@@ -16,8 +16,8 @@
           "model": "Model Name (e.g. gemini-3.1-flash-lite or gemini-flash-latest)"
         },
         "data_description": {
-          "api_key": "Generate your free API key at https://aistudio.google.com/app/apikey",
-          "model": "Use 'gemini-3.1-flash-lite' (500 req/day, recommended) or 'gemini-flash-latest' (latest Flash, 20 req/day on free tier)."
+          "api_key": "Enter your API key for this provider.",
+          "model": "Model identifier to use."
         }
       },
       "groq": {
@@ -29,9 +29,9 @@
           "base_url": "Groq API Base URL"
         },
         "data_description": {
-          "api_key": "Generate your free API key at https://console.groq.com/keys",
-          "model": "Use 'openai/gpt-oss-120b' (default) or 'qwen/qwen3.8-27b'. Full list: https://console.groq.com/docs/models",
-          "base_url": "Groq OpenAI-compatible base URL (default: https://api.groq.com/openai/v1)."
+          "api_key": "Enter your API key for this provider.",
+          "model": "Model identifier to use.",
+          "base_url": "Endpoint base URL for this provider."
         }
       },
       "qwen": {
@@ -43,9 +43,9 @@
           "base_url": "DashScope Endpoint URL"
         },
         "data_description": {
-          "api_key": "Generate your free API key at https://modelstudio.console.alibabacloud.com/",
-          "model": "'qwen-plus-latest' always points to the newest available release of Qwen Plus.",
-          "base_url": "Default international endpoint: https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+          "api_key": "Enter your API key for this provider.",
+          "model": "Model identifier to use.",
+          "base_url": "Endpoint base URL for this provider."
         }
       },
       "ollama": {
@@ -56,8 +56,8 @@
           "model": "Model Tag"
         },
         "data_description": {
-          "base_url": "URL where Ollama is listening (default: http://127.0.0.1:11434).",
-          "model": "Model tag to use (e.g. qwen2.5-coder:7b or qwen2.5-coder:latest)."
+          "base_url": "Endpoint base URL for this provider.",
+          "model": "Model identifier to use."
         }
       },
       "custom_openai": {
@@ -69,8 +69,8 @@
           "model": "Model Name (e.g. qwen/qwen-2.5-coder-32b-instruct:free or gpt-4o-mini)"
         },
         "data_description": {
-          "base_url": "OpenAI-compatible base URL (OpenRouter: https://openrouter.ai/api/v1 | OpenAI: https://api.openai.com/v1).",
-          "api_key": "Your API key for this provider (OpenRouter: https://openrouter.ai/keys | OpenAI: https://platform.openai.com/api-keys).",
+          "base_url": "Endpoint base URL for this provider.",
+          "api_key": "Enter your API key for this provider.",
           "model": "Model identifier to use."
         }
       },
@@ -82,7 +82,7 @@
           "autonomous_mode": "Autonomous Mode (Execute actions without asking confirmation)"
         },
         "data_description": {
-          "mcp_server_url": "Auto-detected from ha_mcp_tools. If not installed, get it at https://github.com/homeassistant-ai/ha-mcp",
+          "mcp_server_url": "SSE endpoint URL of the HA-MCP server.",
           "autonomous_mode": "If enabled, Nexus MCP will execute actions without requiring an interactive confirmation prompt."
         }
       }
@@ -101,10 +101,10 @@
           "autonomous_mode": "Autonomous Mode (Execute without confirmation)"
         },
         "data_description": {
-          "api_key": "Update your API key/token here. Links to obtain keys for each provider are listed above.",
+          "api_key": "Enter your API key for this provider.",
           "model": "Model identifier to use.",
-          "base_url": "Endpoint Base URL for your provider.",
-          "mcp_server_url": "Endpoint of the ha-mcp server (https://github.com/homeassistant-ai/ha-mcp).",
+          "base_url": "Endpoint base URL for this provider.",
+          "mcp_server_url": "SSE endpoint URL of the HA-MCP server.",
           "autonomous_mode": "If enabled, Nexus MCP will create automations directly. If disabled (default), it will explain what it understood and ask for your confirmation before proceeding."
         }
       }

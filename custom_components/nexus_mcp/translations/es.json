@@ -16,8 +16,8 @@
           "model": "Nombre del Modelo (ej. gemini-3.1-flash-lite o gemini-flash-latest)"
         },
         "data_description": {
-          "api_key": "Genera tu clave gratuita en https://aistudio.google.com/app/apikey",
-          "model": "Puedes indicar 'gemini-3.1-flash-lite' (500 peticiones/día, recomendado) o 'gemini-flash-latest' (última versión Flash, 20 peticiones/día gratis)."
+          "api_key": "Introduce tu clave API para este proveedor.",
+          "model": "Identificador del modelo a utilizar."
         }
       },
       "groq": {
@@ -29,9 +29,9 @@
           "base_url": "URL Base del Endpoint de Groq"
         },
         "data_description": {
-          "api_key": "Genera tu clave gratuita en https://console.groq.com/keys",
-          "model": "Usa 'openai/gpt-oss-120b' (predeterminado) o 'qwen/qwen3.8-27b'. Catálogo oficial: https://console.groq.com/docs/models",
-          "base_url": "URL base compatible con OpenAI de Groq (por defecto: https://api.groq.com/openai/v1)."
+          "api_key": "Introduce tu clave API para este proveedor.",
+          "model": "Identificador del modelo a utilizar.",
+          "base_url": "URL del endpoint para este proveedor."
         }
       },
       "qwen": {
@@ -43,9 +43,9 @@
           "base_url": "URL Base del Endpoint"
         },
         "data_description": {
-          "api_key": "Genera tu clave gratuita en https://modelstudio.console.alibabacloud.com/",
-          "model": "'qwen-plus-latest' apunta siempre a la última versión disponible de Qwen Plus.",
-          "base_url": "Endpoint internacional predeterminado: https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+          "api_key": "Introduce tu clave API para este proveedor.",
+          "model": "Identificador del modelo a utilizar.",
+          "base_url": "URL del endpoint para este proveedor."
         }
       },
       "ollama": {
@@ -56,8 +56,8 @@
           "model": "Etiqueta del Modelo"
         },
         "data_description": {
-          "base_url": "URL donde Ollama está escuchando (por defecto: http://127.0.0.1:11434).",
-          "model": "Etiqueta del modelo a utilizar (ej. qwen2.5-coder:7b o qwen2.5-coder:latest)."
+          "base_url": "URL del endpoint para este proveedor.",
+          "model": "Identificador del modelo a utilizar."
         }
       },
       "custom_openai": {
@@ -69,8 +69,8 @@
           "model": "Nombre del Modelo (ej. qwen/qwen-2.5-coder-32b-instruct:free o gpt-4o-mini)"
         },
         "data_description": {
-          "base_url": "URL base compatible con OpenAI (OpenRouter: https://openrouter.ai/api/v1 | OpenAI: https://api.openai.com/v1).",
-          "api_key": "Tu clave de API para este proveedor (OpenRouter: https://openrouter.ai/keys | OpenAI: https://platform.openai.com/api-keys).",
+          "base_url": "URL del endpoint para este proveedor.",
+          "api_key": "Introduce tu clave API para este proveedor.",
           "model": "Identificador del modelo a utilizar."
         }
       },
@@ -82,7 +82,7 @@
           "autonomous_mode": "Modo Autónomo (Ejecutar acciones sin solicitar confirmación interactiva)"
         },
         "data_description": {
-          "mcp_server_url": "Auto-detectado de ha_mcp_tools. Si no está instalado, consíguelo en https://github.com/homeassistant-ai/ha-mcp",
+          "mcp_server_url": "URL del endpoint SSE del servidor HA-MCP.",
           "autonomous_mode": "Si se activa, Nexus MCP ejecutará las acciones directamente sin requerir una pregunta de confirmación previa."
         }
       }
@@ -101,10 +101,10 @@
           "autonomous_mode": "Modo Autónomo (Ejecutar sin confirmación)"
         },
         "data_description": {
-          "api_key": "Actualiza tu clave de API/token aquí. Tienes los enlaces directos arriba para cada proveedor.",
+          "api_key": "Introduce tu clave API para este proveedor.",
           "model": "Identificador del modelo a utilizar.",
-          "base_url": "URL base del endpoint para tu proveedor.",
-          "mcp_server_url": "Endpoint del servidor ha-mcp (https://github.com/homeassistant-ai/ha-mcp).",
+          "base_url": "URL del endpoint para este proveedor.",
+          "mcp_server_url": "URL del endpoint SSE del servidor HA-MCP.",
           "autonomous_mode": "Si está activado, Nexus MCP creará automatizaciones directamente. Si está desactivado (por defecto), te explicará lo que ha entendido y te pedirá confirmación antes de proceder a su creación."
         }
       }
