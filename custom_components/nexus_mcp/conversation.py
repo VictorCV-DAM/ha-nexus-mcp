@@ -76,6 +76,7 @@ def _is_user_confirmation(history: list[ChatMessage], current_text: str) -> bool
         "ok", "vale", "de acuerdo", "perfecto", "correcto", "yes",
         "confirm", "confirmed", "proceed", "sure", "yep", "yeah", "claro",
         "do it", "create it", "go ahead", "approved", "looks good",
+        "ja", "bekræft", "fortsæt", "oui", "d'accord", "genau",
     }
     cleaned_lower = current_text.lower().strip()
     words = re.findall(r"[\wáéíóúÁÉÍÓÚñÑ]+", cleaned_lower)
@@ -400,7 +401,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             confirm_example = (
                 "¿Deseas que proceda a crear esta automatización? Responde 'sí' para confirmar."
                 if is_spanish
-                else "Would you like me to proceed with creating this automation? Reply 'yes' to confirm."
+                else "Would you like me to proceed with creating this automation? Reply 'yes' to confirm (in user's language)."
             )
             autonomy_prompt = (
                 "AUTONOMOUS MODE: DISABLED (CONFIRMATION REQUIRED BEFORE CREATING AUTOMATIONS).\n"
@@ -413,19 +414,12 @@ class NexusMcpConversationEntity(ConversationEntity):
                 "5. Wait for their confirmation in the next turn. DO NOT call ha_create_automation until the user confirms."
             )
 
-        if is_spanish:
-            lang_prompt = (
-                "REGLA OBLIGATORIA DE IDIOMA:\n"
-                "El usuario se está comunicando en español. Debes responder, explicar y formular TODAS tus preguntas estrictamente en español. "
-                "Nunca respondas en inglés a una petición en español."
-            )
-        else:
-            lang_prompt = (
-                "MANDATORY LANGUAGE RULE:\n"
-                f"The user is communicating in English (locale code: '{user_lang}'). "
-                "You MUST formulate ALL your responses, explanations, questions, and replies strictly in English. "
-                "NEVER respond in Spanish to an English query."
-            )
+        lang_prompt = (
+            "LANGUAGE DIRECTIVE:\n"
+            f"Always detect and formulate ALL your responses, explanations, and questions strictly in the language used by the user in their query "
+            f"(user query language / locale: '{user_lang}'). If the user writes in Danish, reply in Danish; if in Spanish, reply in Spanish; "
+            f"if in English, reply in English; if in French/German, reply in French/German. Never reply in an unrelated language."
+        )
 
         system_prompt = f"{base_system_prompt}\n{autonomy_prompt}\n{lang_prompt}"
 
