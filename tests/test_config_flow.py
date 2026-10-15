@@ -126,9 +126,23 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
         placeholders = result["description_placeholders"]
         self.assertIn("gemini_api_url", placeholders)
         self.assertIn("groq_api_url", placeholders)
+        self.assertIn("groq_models_url", placeholders)
         self.assertIn("qwen_api_url", placeholders)
         self.assertIn("openrouter_api_url", placeholders)
         self.assertIn("ha_mcp_repo_url", placeholders)
+
+    async def test_step_groq_has_models_link(self) -> None:
+        """Verify step_groq provides links to Groq console and official models catalog."""
+        flow = NexusMcpConfigFlow()
+        flow.hass = MagicMock()
+
+        result = await flow.async_step_groq()
+        self.assertEqual(result["type"], "form")
+        self.assertEqual(result["step_id"], "groq")
+        placeholders = result["description_placeholders"]
+        self.assertIn("groq_api_url", placeholders)
+        self.assertIn("groq_models_url", placeholders)
+        self.assertEqual(placeholders["groq_models_url"], "https://console.groq.com/docs/models")
 
     async def test_step_mcp_server_creates_entry_with_model_in_title(self) -> None:
         """Verify async_step_mcp_server sets model in entry title."""

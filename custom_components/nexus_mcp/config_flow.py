@@ -169,6 +169,7 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={
                 "groq_api_url": "https://console.groq.com/keys",
+                "groq_models_url": "https://console.groq.com/docs/models",
             },
         )
 
@@ -426,6 +427,7 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
                 "provider": provider,
                 "gemini_api_url": "https://aistudio.google.com/app/apikey",
                 "groq_api_url": "https://console.groq.com/keys",
+                "groq_models_url": "https://console.groq.com/docs/models",
                 "qwen_api_url": "https://modelstudio.console.alibabacloud.com/",
                 "openrouter_api_url": "https://openrouter.ai/keys",
                 "openai_api_url": "https://platform.openai.com/api-keys",

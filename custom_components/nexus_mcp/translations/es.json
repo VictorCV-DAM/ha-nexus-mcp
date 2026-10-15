@@ -22,7 +22,7 @@
       },
       "groq": {
         "title": "Groq Cloud (Capa Gratuita - Europa y Global)",
-        "description": "Para usar Groq Cloud necesitas una clave de API gratuita de Groq Console. Inicio de sesión en 1 clic con Google o GitHub, sin tarjeta de crédito ni verificación de teléfono.\n\n👉 **[Consigue tu clave API gratuita de Groq aquí]({groq_api_url})** *(URL: https://console.groq.com/keys)*\n\n**Modelos y Límites incluidos:**\n• `qwen/qwen3.8-27b` (Predeterminado): Modelo multilingüe de alta velocidad Qwen 3.8 en chips LPU de Groq.\n• `openai/gpt-oss-120b`: Modelo abierto de OpenAI de 120B parámetros con razonamiento profundo y Tool Calling.\n• `openai/gpt-oss-20b`: Modelo abierto ultra-rápido de 20B.\n\nIntroduce tu clave API y el modelo a continuación:",
+        "description": "Para usar Groq Cloud necesitas una clave de API gratuita de Groq Console. Inicio de sesión en 1 clic con Google o GitHub, sin tarjeta de crédito ni verificación de teléfono.\n\n👉 **[Consigue tu clave API gratuita de Groq aquí]({groq_api_url})** *(URL: https://console.groq.com/keys)*\n👉 **[Consulta la lista oficial de modelos Groq aquí]({groq_models_url})** *(URL: https://console.groq.com/docs/models)*\n\n**Modelos y Límites incluidos:**\n• `qwen/qwen3.8-27b` (Predeterminado): Modelo multilingüe de alta velocidad Qwen 3.8 en chips LPU de Groq.\n• `openai/gpt-oss-120b`: Modelo abierto de OpenAI de 120B parámetros con razonamiento profundo y Tool Calling.\n• `openai/gpt-oss-20b`: Modelo abierto ultra-rápido de 20B.\n\nIntroduce tu clave API y el modelo a continuación:",
         "data": {
           "api_key": "Clave API (gsk_...)",
           "model": "Nombre del Modelo (por defecto: qwen/qwen3.8-27b)",
@@ -30,7 +30,7 @@
         },
         "data_description": {
           "api_key": "Genera tu clave gratuita en https://console.groq.com/keys",
-          "model": "Usa 'qwen/qwen3.8-27b' (predeterminado) o 'openai/gpt-oss-120b'.",
+          "model": "Usa 'qwen/qwen3.8-27b' (predeterminado) o 'openai/gpt-oss-120b'. Catálogo oficial: https://console.groq.com/docs/models",
           "base_url": "URL base compatible con OpenAI de Groq (por defecto: https://api.groq.com/openai/v1)."
         }
       },
@@ -92,7 +92,7 @@
     "step": {
       "init": {
         "title": "Nexus MCP: Configuración y Credenciales",
-        "description": "Modifica los parámetros de tu agente Nexus MCP, credenciales y endpoints. Para obtener o renovar tu clave API / token:\n\n• **Google Gemini**: 👉 [Obtener clave en Google AI Studio]({gemini_api_url}) *(https://aistudio.google.com/app/apikey)*\n• **Groq Cloud (Recomendado en Europa)**: 👉 [Obtener clave en Groq Console]({groq_api_url}) *(https://console.groq.com/keys)*\n• **Qwen Cloud**: 👉 [Obtener clave en Alibaba Model Studio]({qwen_api_url}) *(https://modelstudio.console.alibabacloud.com/)*\n• **OpenRouter**: 👉 [Obtener clave en OpenRouter]({openrouter_api_url}) *(https://openrouter.ai/keys)*\n• **HA-MCP Tools**: 👉 [Repositorio GitHub]({ha_mcp_repo_url}) *(https://github.com/homeassistant-ai/ha-mcp)*",
+        "description": "Modifica los parámetros de tu agente Nexus MCP, credenciales y endpoints. Para obtener o renovar tu clave API / token:\n\n• **Google Gemini**: 👉 [Obtener clave en Google AI Studio]({gemini_api_url}) *(https://aistudio.google.com/app/apikey)*\n• **Groq Cloud (Recomendado en Europa)**: 👉 [Obtener clave en Groq Console]({groq_api_url}) *(https://console.groq.com/keys)* | [Catálogo de Modelos]({groq_models_url}) *(https://console.groq.com/docs/models)*\n• **Qwen Cloud**: 👉 [Obtener clave en Alibaba Model Studio]({qwen_api_url}) *(https://modelstudio.console.alibabacloud.com/)*\n• **OpenRouter**: 👉 [Obtener clave en OpenRouter]({openrouter_api_url}) *(https://openrouter.ai/keys)*\n• **HA-MCP Tools**: 👉 [Repositorio GitHub]({ha_mcp_repo_url}) *(https://github.com/homeassistant-ai/ha-mcp)*",
         "data": {
           "api_key": "Clave API / Token",
           "model": "Nombre del Modelo",
