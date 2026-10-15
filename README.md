@@ -86,7 +86,7 @@ Toggle between autonomous execution or interactive confirmation anytime via Sett
 <p align="center">
   <img src="images/08_config_mcp_uncheck_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Unchecked" />
   <img src="images/09_config_mcp_check_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Checked" />
-  <img src="images/10_options_reconfigure_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Options Flow Reconfigure" />
+  <img src="images/10_options_reconfigure_v3.png" width="31%" align="middle" style="vertical-align: middle;" alt="Options Flow Reconfigure" />
 </p>
 
 ---
