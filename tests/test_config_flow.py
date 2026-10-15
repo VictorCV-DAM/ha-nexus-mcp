@@ -24,8 +24,8 @@ class FakeConfigFlow:
 class FakeOptionsFlow:
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-    def __init__(self, config_entry):
-        self.config_entry = config_entry
+    def __init__(self, config_entry=None):
+        self._config_entry = config_entry
         self.hass = MagicMock()
     def async_show_form(self, **kwargs):
         return {"type": "form", **kwargs}
@@ -38,6 +38,7 @@ if "homeassistant" not in sys.modules:
     config_entries_mock = MagicMock()
     config_entries_mock.ConfigFlow = FakeConfigFlow
     config_entries_mock.OptionsFlow = FakeOptionsFlow
+    config_entries_mock.OptionsFlowWithConfigEntry = FakeOptionsFlow
     ha_mock.config_entries = config_entries_mock
     sys.modules["homeassistant.config_entries"] = config_entries_mock
     sys.modules["homeassistant.core"] = ha_mock
@@ -53,8 +54,10 @@ if "homeassistant" not in sys.modules:
 else:
     sys.modules["homeassistant.config_entries"].ConfigFlow = FakeConfigFlow
     sys.modules["homeassistant.config_entries"].OptionsFlow = FakeOptionsFlow
+    sys.modules["homeassistant.config_entries"].OptionsFlowWithConfigEntry = FakeOptionsFlow
     sys.modules["homeassistant"].config_entries.ConfigFlow = FakeConfigFlow
     sys.modules["homeassistant"].config_entries.OptionsFlow = FakeOptionsFlow
+    sys.modules["homeassistant"].config_entries.OptionsFlowWithConfigEntry = FakeOptionsFlow
 
 from custom_components.nexus_mcp.config_flow import NexusMcpConfigFlow, NexusMcpOptionsFlow
 from custom_components.nexus_mcp.const import (

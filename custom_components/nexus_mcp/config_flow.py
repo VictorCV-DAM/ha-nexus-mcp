@@ -303,12 +303,28 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return NexusMcpOptionsFlow(config_entry)
 
 
-class NexusMcpOptionsFlow(config_entries.OptionsFlow):
+_BaseOptionsFlow = getattr(
+    config_entries, "OptionsFlowWithConfigEntry", config_entries.OptionsFlow
+)
+
+
+class NexusMcpOptionsFlow(_BaseOptionsFlow):
     """Handle options flow for Nexus MCP."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+    def __init__(self, config_entry: config_entries.ConfigEntry | None = None) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        try:
+            super().__init__(config_entry)
+        except TypeError:
+            super().__init__()
+        self._config_entry = config_entry
+
+    @property
+    def config_entry(self) -> config_entries.ConfigEntry:
+        """Return the config entry."""
+        if getattr(self, "_config_entry", None) is not None:
+            return self._config_entry
+        return super().config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -317,7 +333,7 @@ class NexusMcpOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            updated_data = dict(self.config_entry.data)
+            updated_data = dict(self.config_entry.data or {})
             for k in (
                 CONF_API_KEY,
                 CONF_MODEL,
@@ -337,17 +353,20 @@ class NexusMcpOptionsFlow(config_entries.OptionsFlow):
             )
             return self.async_create_entry(title="", data=user_input)
 
-        provider = self.config_entry.data.get(CONF_LLM_PROVIDER, PROVIDER_GEMINI_FREE)
-        current_api_key = self.config_entry.data.get(CONF_API_KEY, "")
-        current_model = self.config_entry.data.get(CONF_MODEL, "")
-        current_base_url = self.config_entry.data.get(CONF_BASE_URL, "")
-        current_mcp_url = self.config_entry.data.get(
-            CONF_MCP_SERVER_URL, DEFAULT_MCP_SERVER_URL
-        )
-        current_autonomous = self.config_entry.options.get(
+        data = self.config_entry.data or {}
+        options = self.config_entry.options or {}
+
+        provider = data.get(CONF_LLM_PROVIDER, PROVIDER_GEMINI_FREE)
+        current_api_key = data.get(CONF_API_KEY, "") or ""
+        current_model = data.get(CONF_MODEL, "") or ""
+        current_base_url = data.get(CONF_BASE_URL, "") or ""
+        current_mcp_url = data.get(CONF_MCP_SERVER_URL, DEFAULT_MCP_SERVER_URL) or DEFAULT_MCP_SERVER_URL
+        current_autonomous = options.get(
             CONF_AUTONOMOUS_MODE,
-            self.config_entry.data.get(CONF_AUTONOMOUS_MODE, DEFAULT_AUTONOMOUS_MODE),
+            data.get(CONF_AUTONOMOUS_MODE, DEFAULT_AUTONOMOUS_MODE),
         )
+        if current_autonomous is None:
+            current_autonomous = DEFAULT_AUTONOMOUS_MODE
 
         fields: dict[Any, Any] = {}
         if provider in (
@@ -374,7 +393,7 @@ class NexusMcpOptionsFlow(config_entries.OptionsFlow):
             fields[vol.Optional(CONF_BASE_URL, default=current_base_url)] = str
 
         fields[vol.Required(CONF_MCP_SERVER_URL, default=current_mcp_url)] = str
-        fields[vol.Required(CONF_AUTONOMOUS_MODE, default=current_autonomous)] = bool
+        fields[vol.Required(CONF_AUTONOMOUS_MODE, default=bool(current_autonomous))] = bool
 
         schema = vol.Schema(fields)
 
