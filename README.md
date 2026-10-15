@@ -41,6 +41,56 @@ Click the badge above or use the direct link to open this repository directly in
 
 ---
 
+## 📸 Visual Showcase & Real-World Demo
+
+### 💬 Interactive Chat & Automation Creator (with Safety Confirmation)
+Ask your smart home in plain natural language (voice or text). Nexus MCP searches entities, designs the automation, explains what it understood, and asks for your confirmation before writing changes:
+
+<p align="center">
+  <img src="images/12_chat_search_explain.png" width="48%" alt="Entity Search & Plan Explanation" />
+  <img src="images/13_chat_confirm_create.png" width="48%" alt="Confirmation & Automation Creation" />
+</p>
+
+### ⚙️ Live Automation & Real-Time Traces
+The created automation is immediately visible, editable in the Home Assistant visual editor, and running with live execution traces:
+
+<p align="center">
+  <img src="images/15_automation_visual.png" width="48%" alt="Created Automation in Home Assistant UI" />
+  <img src="images/16_automation_traces.png" width="48%" alt="Live Automation Traces" />
+</p>
+
+### 🎙️ Home Assistant Assist Pipeline Integration
+Select Nexus MCP directly as your active Conversation Agent in any Assist pipeline with local Whisper speech-to-text and Edge TTS:
+
+<p align="center">
+  <img src="images/17_assist_pipeline.png" width="60%" alt="Assist Pipeline with Nexus MCP" />
+</p>
+
+### 🧩 1-Click Click & Install Setup Across 5 AI Brains
+Seamlessly connect free cloud providers or local models with automatic discovery:
+
+<p align="center">
+  <img src="images/01_select_brand.png" width="31%" alt="Select Nexus MCP" />
+  <img src="images/02_select_provider.png" width="31%" alt="Select AI Provider" />
+  <img src="images/04_config_groq.png" width="31%" alt="Groq Cloud 120B Setup" />
+</p>
+<p align="center">
+  <img src="images/03_config_gemini.png" width="31%" alt="Google Gemini Setup" />
+  <img src="images/05_config_qwen.png" width="31%" alt="Qwen Cloud Setup" />
+  <img src="images/06_config_ollama.png" width="31%" alt="Ollama Local Setup" />
+</p>
+
+### 🛡️ Autonomous Mode & Hot-Reconfiguration
+Toggle between autonomous execution or interactive confirmation anytime via Settings without restarting Home Assistant:
+
+<p align="center">
+  <img src="images/08_config_mcp_uncheck.png" width="31%" alt="Autonomous Mode Unchecked" />
+  <img src="images/09_config_mcp_check.png" width="31%" alt="Autonomous Mode Checked" />
+  <img src="images/10_options_reconfigure.png" width="31%" alt="Options Flow Reconfigure" />
+</p>
+
+---
+
 ## 🚀 Key Features
 
 * **⚡ Native Home Assistant Voice & Chat (`ConversationEntity`)**:
