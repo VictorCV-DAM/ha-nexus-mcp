@@ -53,6 +53,32 @@ class NexusMcpCard extends HTMLElement {
     this._render();
   }
 
+  connectedCallback() {
+    this._scrollToBottom(false);
+  }
+
+  _scrollToBottom(smooth = false) {
+    const doScroll = () => {
+      if (!this.shadowRoot) return;
+      const container = this.shadowRoot.getElementById("messages-container");
+      if (!container) return;
+      if (smooth) {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      } else {
+        container.scrollTop = container.scrollHeight;
+      }
+    };
+
+    doScroll();
+    requestAnimationFrame(() => {
+      doScroll();
+      setTimeout(doScroll, 40);
+      setTimeout(doScroll, 120);
+      setTimeout(doScroll, 300);
+      setTimeout(doScroll, 600);
+    });
+  }
+
   set hass(hass) {
     const oldHass = this._hass;
     this._hass = hass;
@@ -840,7 +866,7 @@ class NexusMcpCard extends HTMLElement {
     return text;
   }
 
-  _updateMessagesView() {
+  _updateMessagesView(smooth = false) {
     if (!this.shadowRoot) return;
     const container = this.shadowRoot.getElementById("messages-container");
     if (!container) return;
@@ -882,7 +908,15 @@ class NexusMcpCard extends HTMLElement {
     });
 
     container.innerHTML = html;
-    container.scrollTop = container.scrollHeight;
+    this._scrollToBottom(smooth);
+
+    // Ensure images triggering layout expansion keep the scroll anchored at bottom
+    const images = container.querySelectorAll(".bubble-image");
+    images.forEach((img) => {
+      if (!img.complete) {
+        img.addEventListener("load", () => this._scrollToBottom(smooth), { once: true });
+      }
+    });
 
     // Attach copy button click events for entire bubble
     const copyButtons = container.querySelectorAll(".bubble-copy-btn");
@@ -974,7 +1008,7 @@ class NexusMcpCard extends HTMLElement {
       timestamp: Date.now(),
     });
     this._saveHistoryForAgent(agentId);
-    this._updateMessagesView();
+    this._updateMessagesView(true);
 
     // 2. Add waiting bubble
     const container = this.shadowRoot.getElementById("messages-container");
@@ -988,7 +1022,7 @@ class NexusMcpCard extends HTMLElement {
         <div class="bubble-content" style="font-style: italic; opacity: 0.7;">${imageToSend ? "Analizando imagen y pensando..." : "Pensando..."}</div>
       `;
       container.appendChild(waitingBubble);
-      container.scrollTop = container.scrollHeight;
+      this._scrollToBottom(true);
     }
 
     const sendBtn = this.shadowRoot.getElementById("btn-send");
@@ -1057,7 +1091,7 @@ class NexusMcpCard extends HTMLElement {
     } finally {
       this._isSending = false;
       if (sendBtn) sendBtn.disabled = false;
-      this._updateMessagesView();
+      this._updateMessagesView(true);
     }
   }
 
@@ -1214,7 +1248,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.3.4 Synced History & Code Boxes Ready ",
+  "%c NEXUS MCP CARD %c v1.3.5 Auto-Scroll & Synced History Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
