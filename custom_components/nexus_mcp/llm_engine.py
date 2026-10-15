@@ -128,6 +128,15 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
         self._model = clean_model
         self._api_key = api_key or "sk-no-key-required"
 
+    def _is_vision_model(self) -> bool:
+        """Check if the configured model supports vision/multimodal input."""
+        m = self._model.lower()
+        if "groq.com" in self._base_url:
+            # Groq currently only supports vision on specific models like llama-3.2-*-vision
+            return "vision" in m
+        vision_indicators = ("vision", "-vl", "gemini", "gpt-4o", "omni", "claude-3")
+        return any(ind in m for ind in vision_indicators)
+
     async def generate_response(
         self,
         messages: list[ChatMessage],
@@ -181,13 +190,16 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                 continue
 
             msg_dict: dict[str, Any] = {"role": msg.role}
-            if msg.image_data and msg.role == "user":
+            if msg.image_data and msg.role == "user" and self._is_vision_model():
                 msg_dict["content"] = [
                     {"type": "text", "text": msg.content or ""},
                     {"type": "image_url", "image_url": {"url": msg.image_data}},
                 ]
-            elif msg.content is not None:
-                msg_dict["content"] = msg.content
+            else:
+                text_content = msg.content or ""
+                if msg.image_data and msg.role == "user":
+                    text_content = f"[Attached Image] {text_content}".strip()
+                msg_dict["content"] = text_content
             if msg.tool_calls:
                 msg_dict["tool_calls"] = [
                     {

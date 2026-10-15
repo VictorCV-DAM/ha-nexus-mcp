@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.3.0 Dev)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.3.3)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -49,6 +49,13 @@ class NexusMcpCard extends HTMLElement {
     };
     if (this._config.agent_id) {
       this._selectedAgent = this._config.agent_id;
+    } else {
+      try {
+        const saved = localStorage.getItem("nexus_mcp_selected_agent");
+        if (saved) {
+          this._selectedAgent = saved;
+        }
+      } catch (e) {}
     }
     this._render();
   }
@@ -86,8 +93,14 @@ class NexusMcpCard extends HTMLElement {
     // Auto-select agent if not already selected
     if (!this._selectedAgent) {
       const agents = this._getAvailableAgents();
-      // Prefer Groq 120b or any nexus_mcp agent
-      const nexusAgent = agents.find((a) => a.id.includes("nexus_mcp_intercom_openai_gpt_oss_120b"))
+      let savedAgent = null;
+      try {
+        savedAgent = localStorage.getItem("nexus_mcp_selected_agent");
+      } catch (e) {}
+      const matchedSaved = savedAgent && agents.find((a) => a.id === savedAgent);
+      // Prefer saved agent from localStorage, then Groq 120b, then any nexus_mcp agent
+      const nexusAgent = matchedSaved
+        || agents.find((a) => a.id.includes("nexus_mcp_intercom_openai_gpt_oss_120b"))
         || agents.find((a) => a.id.startsWith("conversation.nexus_mcp_"))
         || agents[0];
       if (nexusAgent) {
@@ -543,7 +556,7 @@ class NexusMcpCard extends HTMLElement {
         }
         .input-bar {
           display: flex;
-          align-items: center;
+          align-items: flex-end;
           gap: 8px;
           padding: 10px 14px;
           border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
@@ -562,6 +575,7 @@ class NexusMcpCard extends HTMLElement {
           cursor: pointer;
           transition: color 0.2s, background 0.2s;
           flex-shrink: 0;
+          margin-bottom: 1px;
         }
         .action-btn-attach:hover {
           color: var(--primary-text-color, #fff);
@@ -573,16 +587,30 @@ class NexusMcpCard extends HTMLElement {
         .chat-input {
           flex: 1;
           border: 1px solid var(--divider-color, rgba(255,255,255,0.15));
-          border-radius: 20px;
-          padding: 10px 16px;
+          border-radius: 18px;
+          padding: 9px 16px;
           font-size: 0.92rem;
+          font-family: inherit;
+          line-height: 1.4;
           outline: none;
           background: var(--secondary-background-color, rgba(255,255,255,0.05));
           color: var(--primary-text-color, #fff);
           transition: border-color 0.2s;
+          resize: none;
+          overflow-y: auto;
+          box-sizing: border-box;
+          height: 38px;
+          max-height: 130px;
         }
         .chat-input:focus {
           border-color: var(--primary-color, #03a9f4);
+        }
+        .chat-input::-webkit-scrollbar {
+          width: 4px;
+        }
+        .chat-input::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 4px;
         }
         .action-btn {
           background: var(--primary-color, #03a9f4);
@@ -644,13 +672,13 @@ class NexusMcpCard extends HTMLElement {
           <button class="action-btn-attach" id="btn-attach" title="${txtAttach}">
             <ha-icon icon="mdi:paperclip"></ha-icon>
           </button>
-          <input
-            type="text"
+          <textarea
             class="chat-input"
             id="chat-input"
+            rows="1"
             placeholder="${txtPlaceholder}"
             autocomplete="off"
-          />
+          ></textarea>
           <button class="action-btn" id="btn-send" title="${txtSend}">
             <ha-icon icon="mdi:send"></ha-icon>
           </button>
@@ -674,19 +702,42 @@ class NexusMcpCard extends HTMLElement {
     const removeImgBtn = this.shadowRoot.getElementById("btn-remove-image");
 
     if (input && sendBtn) {
+      const adjustHeight = () => {
+        input.style.height = "auto";
+        const newHeight = Math.min(input.scrollHeight, 130);
+        input.style.height = `${Math.max(newHeight, 38)}px`;
+      };
+
+      input.addEventListener("input", adjustHeight);
+
       const handleSend = () => {
         const text = input.value.trim();
         if ((text || this._attachedImage) && !this._isSending) {
           this._sendMessage(text);
           input.value = "";
+          input.style.height = "38px";
         }
       };
 
       sendBtn.onclick = handleSend;
       input.onkeydown = (e) => {
         if (e.key === "Enter") {
-          e.preventDefault();
-          handleSend();
+          if (e.ctrlKey || e.shiftKey) {
+            // Newline on Ctrl+Enter or Shift+Enter
+            if (e.ctrlKey && !e.shiftKey) {
+              e.preventDefault();
+              const start = input.selectionStart;
+              const end = input.selectionEnd;
+              const val = input.value;
+              input.value = val.substring(0, start) + "\n" + val.substring(end);
+              input.selectionStart = input.selectionEnd = start + 1;
+              adjustHeight();
+            }
+          } else {
+            // Standard Enter sends message
+            e.preventDefault();
+            handleSend();
+          }
         }
       };
     }
@@ -745,6 +796,11 @@ class NexusMcpCard extends HTMLElement {
     if (agentSelect) {
       agentSelect.onchange = (e) => {
         this._selectedAgent = e.target.value;
+        try {
+          localStorage.setItem("nexus_mcp_selected_agent", this._selectedAgent);
+        } catch (err) {
+          console.warn("Could not save selected agent to localStorage:", err);
+        }
         this._conversationId = null;
         this._loadHistoryForAgent(this._selectedAgent);
       };

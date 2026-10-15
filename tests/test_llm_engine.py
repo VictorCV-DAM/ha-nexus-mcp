@@ -88,6 +88,89 @@ class TestLlmEngine(unittest.IsolatedAsyncioTestCase):
             resp.tool_calls[0].arguments, {"query": "living room"}
         )
 
+    async def test_openai_compatible_assistant_tool_call_string_content(self) -> None:
+        """Test that assistant messages with tool_calls and content=None have content as empty string, never omitted."""
+        mock_session = MagicMock()
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(
+            return_value={
+                "choices": [{"message": {"role": "assistant", "content": "Done"}}]
+            }
+        )
+        mock_session.post.return_value.__aenter__.return_value = mock_response
+
+        engine = OpenAiCompatibleEngine(
+            session=mock_session,
+            base_url="https://api.groq.com/openai/v1",
+            model="openai/gpt-oss-120b",
+        )
+
+        from custom_components.nexus_mcp.llm_engine import LlmToolCall
+        tc = LlmToolCall(call_id="call_abc", name="ha_search_entities", arguments={})
+        messages = [
+            ChatMessage(role="user", content="Turn off lights"),
+            ChatMessage(role="assistant", content=None, tool_calls=[tc]),
+            ChatMessage(role="tool", content='{"result": "ok"}', tool_call_id="call_abc", tool_name="ha_search_entities"),
+        ]
+
+        await engine.generate_response(messages)
+
+        call_args = mock_session.post.call_args
+        payload = call_args[1]["json"]
+        api_messages = payload["messages"]
+
+        # Ensure message 1 (assistant with tool calls) has content as string
+        asst_msg = api_messages[1]
+        self.assertIn("content", asst_msg)
+        self.assertIsInstance(asst_msg["content"], str)
+        self.assertEqual(asst_msg["content"], "")
+
+    async def test_openai_compatible_image_handling(self) -> None:
+        """Test that text models (e.g. Groq 120b) receive string content for images, while vision models receive array."""
+        mock_session = MagicMock()
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(
+            return_value={
+                "choices": [{"message": {"role": "assistant", "content": "I see it"}}]
+            }
+        )
+        mock_session.post.return_value.__aenter__.return_value = mock_response
+
+        # 1. Text model on Groq: must convert to string
+        engine_text = OpenAiCompatibleEngine(
+            session=mock_session,
+            base_url="https://api.groq.com/openai/v1",
+            model="openai/gpt-oss-120b",
+        )
+        msg_with_img = ChatMessage(
+            role="user",
+            content="What is this?",
+            image_data="data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==",
+        )
+        await engine_text.generate_response([msg_with_img])
+
+        payload_text = mock_session.post.call_args[1]["json"]
+        user_msg_text = payload_text["messages"][0]
+        self.assertIsInstance(user_msg_text["content"], str)
+        self.assertIn("[Attached Image]", user_msg_text["content"])
+        self.assertIn("What is this?", user_msg_text["content"])
+
+        # 2. Vision model (e.g. gpt-4o): sends multimodal array
+        engine_vision = OpenAiCompatibleEngine(
+            session=mock_session,
+            base_url="https://api.openai.com/v1",
+            model="gpt-4o",
+        )
+        await engine_vision.generate_response([msg_with_img])
+
+        payload_vision = mock_session.post.call_args[1]["json"]
+        user_msg_vision = payload_vision["messages"][0]
+        self.assertIsInstance(user_msg_vision["content"], list)
+        self.assertEqual(user_msg_vision["content"][0]["type"], "text")
+        self.assertEqual(user_msg_vision["content"][1]["type"], "image_url")
+
     async def test_gemini_tool_call(self) -> None:
         """Test Gemini engine parsing functionCall."""
         mock_session = MagicMock()
