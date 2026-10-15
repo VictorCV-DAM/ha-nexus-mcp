@@ -3,8 +3,7 @@
 Allows the AI model to search entities, read states, execute services,
 and create automations directly in Home Assistant.
 """
-from __future__ import annotations
-
+import datetime
 import logging
 import os
 import time
@@ -16,6 +15,19 @@ from homeassistant.core import HomeAssistant
 from .mcp_client import McpTool
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def serialize_for_json(obj: Any) -> Any:
+    """Recursively convert datetime, set, and non-serializable objects into JSON-compatible types."""
+    if hasattr(obj, "isoformat"):
+        return obj.isoformat()
+    if isinstance(obj, (datetime.date, datetime.time)):
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {str(k): serialize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [serialize_for_json(x) for x in obj]
+    return obj
 
 
 def get_builtin_tools() -> list[McpTool]:
@@ -291,13 +303,13 @@ async def execute_builtin_tool(
         if not state:
             return {"error": f"Entity '{entity_id}' not found in Home Assistant."}
 
-        # Filter heavy attributes to keep token consumption low
+        # Filter heavy attributes to keep token consumption low and serialize datetimes
         attrs = dict(state.attributes)
         trimmed_attrs = {}
         for k, v in attrs.items():
             if isinstance(v, (list, dict)) and len(str(v)) > 200:
                 continue
-            trimmed_attrs[k] = v
+            trimmed_attrs[k] = serialize_for_json(v)
 
         return {
             "entity_id": entity_id,

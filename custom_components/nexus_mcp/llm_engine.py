@@ -212,7 +212,7 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                         "type": "function",
                         "function": {
                             "name": tc.name,
-                            "arguments": json.dumps(tc.arguments),
+                            "arguments": json.dumps(tc.arguments, default=str),
                         },
                     }
                     for tc in msg.tool_calls
@@ -243,8 +243,13 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                         delay = 2.0 * (attempt + 1)
                         if retry_after and retry_after.replace(".", "", 1).isdigit():
                             delay = max(1.0, min(float(retry_after), 5.0))
+                        elif "try again in" in error_body:
+                            import re
+                            m = re.search(r"try again in ([\d\.]+)s", error_body)
+                            if m:
+                                delay = min(float(m.group(1)) + 0.5, 6.0)
 
-                        # If on Groq and hit rate limit, attempt bidirectional fallback between 120b and qwen
+                        # If on Groq and hit rate limit, attempt fallback between 120b, 20b and qwen
                         if "groq.com" in self._base_url:
                             if self._model == "openai/gpt-oss-120b":
                                 _LOGGER.warning(
@@ -252,6 +257,14 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                                 )
                                 self._model = "qwen/qwen3.8-27b"
                                 payload["model"] = "qwen/qwen3.8-27b"
+                                await asyncio.sleep(1.0)
+                                continue
+                            if self._model == "openai/gpt-oss-20b":
+                                _LOGGER.warning(
+                                    "Groq rate limit on openai/gpt-oss-20b. Auto-falling back to openai/gpt-oss-120b...",
+                                )
+                                self._model = "openai/gpt-oss-120b"
+                                payload["model"] = "openai/gpt-oss-120b"
                                 await asyncio.sleep(1.0)
                                 continue
                             if self._model == "qwen/qwen3.8-27b":

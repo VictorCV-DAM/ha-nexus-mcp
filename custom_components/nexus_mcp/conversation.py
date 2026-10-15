@@ -504,7 +504,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                         history.append(
                             ChatMessage(
                                 role="tool",
-                                content=json.dumps(tool_result, ensure_ascii=False),
+                                content=json.dumps(tool_result, ensure_ascii=False, default=str),
                                 tool_call_id=tc.call_id,
                                 tool_name=tc.name,
                             )

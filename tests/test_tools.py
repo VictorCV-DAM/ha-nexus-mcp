@@ -91,6 +91,35 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
         self.assertIn("hint", res_none)
         self.assertIn("light", res_none["hint"])
 
+    async def test_ha_get_entity_state_datetime_serialization(self) -> None:
+        """Verify ha_get_entity_state serializes datetime and date objects safely."""
+        import datetime
+        import json
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        mock_hass = MagicMock()
+        state_sun = MagicMock()
+        state_sun.entity_id = "sun.sun"
+        state_sun.state = "above_horizon"
+        now_dt = datetime.datetime(2026, 10, 15, 20, 45, 0)
+        state_sun.attributes = {
+            "friendly_name": "Sun",
+            "next_rising": now_dt,
+            "next_setting": now_dt,
+            "supported_modes": {"day", "night"},
+        }
+        mock_hass.states.get.return_value = state_sun
+
+        res = await execute_builtin_tool(
+            mock_hass, "ha_get_entity_state", {"entity_id": "sun.sun"}
+        )
+        self.assertEqual(res["entity_id"], "sun.sun")
+        self.assertEqual(res["attributes"]["next_rising"], "2026-10-15T20:45:00")
+
+        # Must serialize cleanly with standard json.dumps
+        serialized = json.dumps(res)
+        self.assertIn("2026-10-15T20:45:00", serialized)
+
 
 if __name__ == "__main__":
     unittest.main()
