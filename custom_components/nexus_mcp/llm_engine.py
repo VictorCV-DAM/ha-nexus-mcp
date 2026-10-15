@@ -307,22 +307,7 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                                 payload["model"] = "qwen/qwen3.8-27b"
                                 await asyncio.sleep(1.0)
                                 continue
-                            if self._model == "openai/gpt-oss-20b":
-                                _LOGGER.warning(
-                                    "Groq rate limit on openai/gpt-oss-20b. Auto-falling back to openai/gpt-oss-120b...",
-                                )
-                                self._model = "openai/gpt-oss-120b"
-                                payload["model"] = "openai/gpt-oss-120b"
-                                await asyncio.sleep(1.0)
-                                continue
-                            if self._model == "qwen/qwen3.8-27b":
-                                _LOGGER.warning(
-                                    "Groq rate limit on qwen/qwen3.8-27b. Auto-falling back to openai/gpt-oss-120b...",
-                                )
-                                self._model = "openai/gpt-oss-120b"
-                                payload["model"] = "openai/gpt-oss-120b"
-                                await asyncio.sleep(1.0)
-                                continue
+
 
                         if attempt < max_retries:
                             _LOGGER.warning(
@@ -344,23 +329,17 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                     if resp.status == 413:
                         error_body = await resp.text()
                         _LOGGER.warning(
-                            "HTTP 413 Request too large for %s (attempt %d/%d): %s. Trimming messages...",
+                            "HTTP 413 Request too large for %s (attempt %d/%d): %s. Aggressively trimming history to latest message...",
                             self._model,
                             attempt + 1,
                             max_retries + 1,
                             error_body,
                         )
-                        # If on Groq with qwen3.8-27b (limit 7000 ITPM), fallback to gpt-oss-120b
-                        if "groq.com" in self._base_url and self._model == "qwen/qwen3.8-27b":
-                            _LOGGER.warning("Auto-falling back from qwen/qwen3.8-27b to openai/gpt-oss-120b...")
-                            self._model = "openai/gpt-oss-120b"
-                            payload["model"] = "openai/gpt-oss-120b"
-
                         if attempt < max_retries and len(payload.get("messages", [])) > 2:
                             sys_msgs = [m for m in payload["messages"] if m.get("role") == "system"]
                             other_msgs = [m for m in payload["messages"] if m.get("role") != "system"]
-                            # Aggressively keep only the latest 2 messages
-                            payload["messages"] = sys_msgs + other_msgs[-2:]
+                            # Keep only system prompt and the user's latest query so it easily fits within the model's limits
+                            payload["messages"] = sys_msgs + other_msgs[-1:]
                             await asyncio.sleep(0.5)
                             continue
 
