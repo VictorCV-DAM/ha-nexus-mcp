@@ -175,9 +175,12 @@ class NexusMcpConversationEntity(ConversationEntity):
                             chat_msgs = []
                             for m in msgs:
                                 if isinstance(m, dict) and "role" in m and "content" in m:
-                                    chat_msgs.append(
-                                        ChatMessage(role=m["role"], content=m["content"])
-                                    )
+                                    if m["role"] in ("user", "assistant"):
+                                        # Skip transient server communication errors from polluting long-term history
+                                        if not str(m["content"]).startswith("Error al comunicar con el servidor"):
+                                            chat_msgs.append(
+                                                ChatMessage(role=m["role"], content=m["content"])
+                                            )
                             if chat_msgs:
                                 self._history[conv_id] = chat_msgs[-MAX_HISTORY_MESSAGES:]
                     _LOGGER.debug(
@@ -221,6 +224,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                     conv_id: [
                         {"role": msg.role, "content": msg.content}
                         for msg in msgs[-MAX_HISTORY_MESSAGES:]
+                        if msg.role in ("user", "assistant") and msg.content
                     ]
                     for conv_id, msgs in self._history.items()
                 },

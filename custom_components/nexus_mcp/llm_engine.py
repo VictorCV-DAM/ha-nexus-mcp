@@ -151,6 +151,35 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
             api_messages.append({"role": "system", "content": system_prompt})
 
         for msg in messages:
+            if msg.role == "tool":
+                # OpenAI/Groq strict requirement: role 'tool' MUST have tool_call_id AND
+                # must match a tool_call in the preceding assistant message.
+                prev_has_tool_call = False
+                if msg.tool_call_id and api_messages:
+                    for prev_msg in reversed(api_messages):
+                        if prev_msg.get("role") == "assistant":
+                            prev_calls = prev_msg.get("tool_calls", [])
+                            if any(tc.get("id") == msg.tool_call_id for tc in prev_calls):
+                                prev_has_tool_call = True
+                            break
+                        elif prev_msg.get("role") != "tool":
+                            break
+
+                if not msg.tool_call_id or not prev_has_tool_call:
+                    # Convert orphaned or unlinked tool result to assistant text note to prevent HTTP 400
+                    api_messages.append({
+                        "role": "assistant",
+                        "content": f"[Tool: {msg.tool_name or 'info'}] {msg.content or ''}",
+                    })
+                    continue
+
+                api_messages.append({
+                    "role": "tool",
+                    "content": msg.content or "",
+                    "tool_call_id": msg.tool_call_id,
+                })
+                continue
+
             msg_dict: dict[str, Any] = {"role": msg.role}
             if msg.image_data and msg.role == "user":
                 msg_dict["content"] = [
@@ -159,8 +188,6 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                 ]
             elif msg.content is not None:
                 msg_dict["content"] = msg.content
-            if msg.role == "tool" and msg.tool_call_id:
-                msg_dict["tool_call_id"] = msg.tool_call_id
             if msg.tool_calls:
                 msg_dict["tool_calls"] = [
                     {
