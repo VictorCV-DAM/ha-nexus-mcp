@@ -57,10 +57,16 @@ class NexusMcpCard extends HTMLElement {
         }
       } catch (e) {}
     }
-    this._render();
+    if (!this.shadowRoot || !this.shadowRoot.innerHTML) {
+      this._render();
+    } else {
+      this._updateTranslations();
+      this._updateVisionBadge();
+    }
   }
 
   connectedCallback() {
+    this._updateTranslations();
     this._scrollToBottom(false);
   }
 
@@ -109,10 +115,11 @@ class NexusMcpCard extends HTMLElement {
       }
     }
 
-    if (!oldHass) {
+    if (!oldHass || oldHass.language !== hass.language || oldHass.locale?.language !== hass.locale?.language) {
+      this._updateTranslations();
       this._updateAgentDropdown();
       this._updateVisionBadge();
-      if (this._selectedAgent) {
+      if (!oldHass && this._selectedAgent) {
         this._loadHistoryForAgent(this._selectedAgent);
       }
       this._updateMessagesView();
@@ -206,6 +213,9 @@ class NexusMcpCard extends HTMLElement {
   }
 
   _isSpanish() {
+    if (this._config && this._config.language) {
+      return this._config.language === "es";
+    }
     const lang = String(
       this._hass?.locale?.language ||
       this._hass?.language ||
@@ -214,6 +224,57 @@ class NexusMcpCard extends HTMLElement {
       "es"
     ).toLowerCase();
     return lang.startsWith("es");
+  }
+
+  _updateTranslations() {
+    if (!this.shadowRoot) return;
+    const isEs = this._isSpanish();
+
+    const input = this.shadowRoot.getElementById("chat-input");
+    if (input) {
+      input.placeholder = isEs
+        ? "Escribe un mensaje o pega una imagen (Ctrl+V)..."
+        : "Type a message or paste an image (Ctrl+V)...";
+    }
+
+    const sendBtn = this.shadowRoot.getElementById("btn-send");
+    if (sendBtn) {
+      sendBtn.title = isEs ? "Enviar" : "Send";
+    }
+
+    const resetBtn = this.shadowRoot.getElementById("btn-reset");
+    if (resetBtn) {
+      resetBtn.title = isEs ? "Reiniciar Conversación" : "Reset Conversation";
+    }
+
+    const assistBtn = this.shadowRoot.getElementById("btn-assist");
+    if (assistBtn) {
+      assistBtn.title = isEs ? "Abrir Assist / Voz" : "Open Assist / Voice";
+    }
+
+    const attachBtn = this.shadowRoot.getElementById("btn-attach");
+    if (attachBtn) {
+      attachBtn.title = isEs
+        ? "Adjuntar imagen (o pega con Ctrl+V)"
+        : "Attach image (or paste with Ctrl+V)";
+    }
+
+    const removeImgBtn = this.shadowRoot.getElementById("btn-remove-image");
+    if (removeImgBtn) {
+      removeImgBtn.title = isEs ? "Eliminar imagen" : "Remove image";
+    }
+
+    const agentSelect = this.shadowRoot.getElementById("agent-select");
+    if (agentSelect) {
+      agentSelect.title = isEs ? "Seleccionar IA / Modelo" : "Select AI / Model";
+    }
+
+    const previewCaption = this.shadowRoot.querySelector(".preview-caption");
+    if (previewCaption) {
+      previewCaption.textContent = isEs
+        ? "Imagen adjunta (lista para enviar)"
+        : "Attached image (ready to send)";
+    }
   }
 
   _render() {
@@ -1374,7 +1435,10 @@ class NexusMcpCardEditor extends HTMLElement {
   }
 
   _isSpanish() {
-    const lang = this._hass?.locale?.language || this._hass?.language || navigator.language || "en";
+    if (this._config && this._config.language) {
+      return this._config.language === "es";
+    }
+    const lang = this._hass?.locale?.language || this._hass?.language || navigator.language || "es";
     return String(lang).toLowerCase().startsWith("es");
   }
 
@@ -1405,6 +1469,9 @@ class NexusMcpCardEditor extends HTMLElement {
 
     const titleLabel = isEs ? "Título de la tarjeta" : "Card Title";
     const agentLabel = isEs ? "IA / Agente predeterminado (Opcional)" : "Default AI / Agent (Optional)";
+    const langLabel = isEs ? "Idioma de la interfaz" : "Interface Language";
+    const autoLang = isEs ? "(Automático según Home Assistant)" : "(Automatic based on Home Assistant)";
+    const currentLang = this._config?.language || "";
     const tipLabel = isEs
       ? "La tarjeta incluye un selector en su cabecera para cambiar de modelo de IA al vuelo."
       : "The card includes a live selector in its header to switch AI models on the fly.";
@@ -1426,6 +1493,14 @@ class NexusMcpCardEditor extends HTMLElement {
             ${optionsHtml}
           </select>
         </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-weight: 500;">
+          ${langLabel}
+          <select id="cfg-lang" style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, inherit); color: var(--primary-text-color, inherit); cursor: pointer;">
+            <option value="" ${currentLang === "" ? "selected" : ""}>${autoLang}</option>
+            <option value="es" ${currentLang === "es" ? "selected" : ""}>Español</option>
+            <option value="en" ${currentLang === "en" ? "selected" : ""}>English</option>
+          </select>
+        </label>
         <small style="color: var(--secondary-text-color, #666);">
           ${tipLabel}
         </small>
@@ -1434,12 +1509,14 @@ class NexusMcpCardEditor extends HTMLElement {
 
     const titleInput = this.querySelector("#cfg-title");
     const agentSelect = this.querySelector("#cfg-agent");
+    const langSelect = this.querySelector("#cfg-lang");
 
     const handleChange = () => {
       const newConfig = {
         ...this._config,
         title: titleInput ? titleInput.value : (this._config.title || "Nexus MCP Intercom"),
         agent_id: agentSelect && agentSelect.value ? agentSelect.value : undefined,
+        language: langSelect && langSelect.value ? langSelect.value : undefined,
       };
       this._config = newConfig;
       const event = new CustomEvent("config-changed", {
@@ -1452,16 +1529,21 @@ class NexusMcpCardEditor extends HTMLElement {
 
     if (titleInput) titleInput.oninput = handleChange;
     if (agentSelect) agentSelect.onchange = handleChange;
+    if (langSelect) langSelect.onchange = handleChange;
   }
 
   _updateValues() {
     const titleInput = this.querySelector("#cfg-title");
     const agentSelect = this.querySelector("#cfg-agent");
+    const langSelect = this.querySelector("#cfg-lang");
     if (titleInput && document.activeElement !== titleInput) {
       titleInput.value = this._config?.title || "Nexus MCP Intercom";
     }
     if (agentSelect && document.activeElement !== agentSelect) {
       agentSelect.value = this._config?.agent_id || "";
+    }
+    if (langSelect && document.activeElement !== langSelect) {
+      langSelect.value = this._config?.language || "";
     }
   }
 
