@@ -263,7 +263,7 @@ python -m unittest discover -s tests
 
 ---
 
-## 🏷️ Release Notes: v1.3.5
+## 🏷️ Release Notes: v1.3.2
 
 * **📦 Syntax-Styled Code Blocks & 1-Click Code Copy**:
   * Added automatic parsing of fenced markdown code blocks (` ```yaml `, ` ```python `, ` ```json `, etc.) into high-contrast syntax code boxes.
