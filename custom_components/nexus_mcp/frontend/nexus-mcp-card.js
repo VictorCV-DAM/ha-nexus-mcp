@@ -554,7 +554,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.2.3 Loaded Successfully ",
+  "%c NEXUS MCP CARD %c v1.2.0 Loaded Successfully ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
