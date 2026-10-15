@@ -84,9 +84,9 @@ Seamlessly connect free cloud providers or local models with automatic discovery
 Toggle between autonomous execution or interactive confirmation anytime via Settings without restarting Home Assistant:
 
 <p align="center">
-  <img src="images/08_config_mcp_uncheck.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Unchecked" />
-  <img src="images/09_config_mcp_check.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Checked" />
-  <img src="images/10_options_reconfigure.png" width="31%" align="middle" style="vertical-align: middle;" alt="Options Flow Reconfigure" />
+  <img src="images/08_config_mcp_uncheck_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Unchecked" />
+  <img src="images/09_config_mcp_check_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Checked" />
+  <img src="images/10_options_reconfigure_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Options Flow Reconfigure" />
 </p>
 
 ---
