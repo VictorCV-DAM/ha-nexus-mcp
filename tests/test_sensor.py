@@ -45,6 +45,11 @@ from custom_components.nexus_mcp.const import DOMAIN
 from custom_components.nexus_mcp.llm_engine import ChatMessage
 from custom_components.nexus_mcp.sensor import (
     NexusMcpHistorySensor,
+    NexusMcpTokenSensor,
+    NexusMcpDailyQuotaSensor,
+    NexusMcpRateLimitResetSensor,
+    NexusMcpModelLimitSensor,
+    NexusMcpMaxWaitSensor,
     async_setup_entry as async_setup_sensor_entry,
 )
 from custom_components.nexus_mcp import async_setup
@@ -212,12 +217,13 @@ class TestSensorHistory(unittest.IsolatedAsyncioTestCase):
         await async_setup_sensor_entry(
             self.hass, cloud_entry, lambda entities: added_entities.extend(entities)
         )
-        self.assertEqual(len(added_entities), 5)
+        self.assertEqual(len(added_entities), 6)
         self.assertIsInstance(added_entities[0], NexusMcpHistorySensor)
         self.assertIsInstance(added_entities[1], NexusMcpTokenSensor)
-        self.assertIsInstance(added_entities[2], NexusMcpRateLimitResetSensor)
-        self.assertIsInstance(added_entities[3], NexusMcpModelLimitSensor)
-        self.assertIsInstance(added_entities[4], NexusMcpMaxWaitSensor)
+        self.assertIsInstance(added_entities[2], NexusMcpDailyQuotaSensor)
+        self.assertIsInstance(added_entities[3], NexusMcpRateLimitResetSensor)
+        self.assertIsInstance(added_entities[4], NexusMcpModelLimitSensor)
+        self.assertIsInstance(added_entities[5], NexusMcpMaxWaitSensor)
 
     async def test_sensor_setup_entry_local_ollama_skips_rate_limits(self) -> None:
         """Test async_setup_entry adds only history sensor for local models like Ollama."""
@@ -352,7 +358,36 @@ class TestSensorHistory(unittest.IsolatedAsyncioTestCase):
         self.assertIn("00:00 UTC", attrs["hora_reseteo_diario"])
         self.assertIn("h", attrs["espera_tope_diario"])
 
+    def test_daily_quota_sensor_remaining_and_percentage(self) -> None:
+        """Test NexusMcpDailyQuotaSensor calculates remaining daily requests and percentage."""
+        from custom_components.nexus_mcp.const import CONF_LLM_PROVIDER, CONF_MODEL, PROVIDER_GROQ_FREE
+        from custom_components.nexus_mcp.sensor import NexusMcpDailyQuotaSensor
+
+        self.entry.data = {CONF_LLM_PROVIDER: PROVIDER_GROQ_FREE, CONF_MODEL: "qwen/qwen3.8-27b"}
+        self.entry.options = {}
+
+        quota_sensor = NexusMcpDailyQuotaSensor(self.hass, self.entry)
+        # Default without requests made: full 14400
+        self.assertEqual(quota_sensor.native_value, 14400)
+
+        # Mock requests made today
+        mock_conv_entity = MagicMock()
+        mock_conv_entity.telemetry = {
+            "requests_today": 12,
+            "tokens_today": 6775,
+        }
+        self.hass.data[DOMAIN][self.entry.entry_id]["conversation_entity"] = mock_conv_entity
+
+        self.assertEqual(quota_sensor.native_value, 14388)
+        attrs = quota_sensor.extra_state_attributes
+        self.assertEqual(attrs["peticiones_restantes_hoy"], 14388)
+        self.assertEqual(attrs["peticiones_usadas_hoy"], 12)
+        self.assertEqual(attrs["limite_diario_peticiones"], 14400)
+        self.assertEqual(attrs["porcentaje_cuota_restante"], "99.92%")
+        self.assertEqual(attrs["tokens_consumidos_hoy"], 6775)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

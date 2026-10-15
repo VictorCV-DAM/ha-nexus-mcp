@@ -168,6 +168,7 @@ class NexusMcpConversationEntity(ConversationEntity):
         self._telemetry: dict[str, Any] = {
             "date": today_str,
             "tokens_today": 0,
+            "requests_today": 0,
             "prompt_tokens_today": 0,
             "completion_tokens_today": 0,
             "last_prompt_tokens": 0,
@@ -240,9 +241,11 @@ class NexusMcpConversationEntity(ConversationEntity):
         if self._telemetry.get("date") != today_str:
             self._telemetry["date"] = today_str
             self._telemetry["tokens_today"] = 0
+            self._telemetry["requests_today"] = 0
             self._telemetry["prompt_tokens_today"] = 0
             self._telemetry["completion_tokens_today"] = 0
 
+        self._telemetry["requests_today"] = int(self._telemetry.get("requests_today", 0)) + 1
         p_tokens = int(usage.get("prompt_tokens") or 0)
         c_tokens = int(usage.get("completion_tokens") or 0)
         t_tokens = int(usage.get("total_tokens") or (p_tokens + c_tokens))
@@ -331,6 +334,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                         else:
                             self._telemetry["date"] = today_str
                             self._telemetry["tokens_today"] = 0
+                            self._telemetry["requests_today"] = 0
                             self._telemetry["prompt_tokens_today"] = 0
                             self._telemetry["completion_tokens_today"] = 0
                             self._telemetry["last_total_tokens"] = stored_telemetry.get("last_total_tokens", 0)

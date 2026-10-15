@@ -162,6 +162,7 @@ async def async_setup_entry(
         PROVIDER_CUSTOM_OPENAI,
     ):
         entities.append(NexusMcpTokenSensor(hass, entry))
+        entities.append(NexusMcpDailyQuotaSensor(hass, entry))
         entities.append(NexusMcpRateLimitResetSensor(hass, entry))
         entities.append(NexusMcpModelLimitSensor(hass, entry))
         entities.append(NexusMcpMaxWaitSensor(hass, entry))
@@ -377,6 +378,7 @@ class NexusMcpTokenSensor(SensorEntity):
             "last_prompt_tokens": telem.get("last_prompt_tokens", 0),
             "last_completion_tokens": telem.get("last_completion_tokens", 0),
             "last_total_tokens": telem.get("last_total_tokens", 0),
+            "requests_today": telem.get("requests_today", 0),
             "model": telem.get("model", ""),
             "provider": telem.get("provider", ""),
             "remaining_tokens_minute": telem.get("remaining_tokens"),
@@ -385,6 +387,116 @@ class NexusMcpTokenSensor(SensorEntity):
             "limit_requests_minute": telem.get("limit_requests"),
             "date": telem.get("date"),
             "last_updated": telem.get("last_updated"),
+        }
+
+
+class NexusMcpDailyQuotaSensor(SensorEntity):
+    """Sensor exposing remaining daily requests quota and usage percentage."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_icon = "mdi:counter"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the daily quota sensor."""
+        self.hass = hass
+        self.entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_daily_quota_remaining"
+        self._attr_name = "Cuota Diaria Restante"
+        self._attr_native_unit_of_measurement = "peticiones"
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Link sensor to the Nexus MCP device."""
+        model_name = self.entry.options.get(
+            CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent")
+        )
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": f"Nexus MCP ({model_name})",
+            "manufacturer": "Nexus MCP",
+            "model": model_name,
+            "sw_version": "1.3.5",
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Register dispatcher when entity is added."""
+        if hasattr(super(), "async_added_to_hass"):
+            await super().async_added_to_hass()
+
+        if async_dispatcher_connect:
+            signal = f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
+            self.async_on_remove(
+                async_dispatcher_connect(self.hass, signal, self._handle_telemetry_updated)
+            )
+
+    @callback
+    def _handle_telemetry_updated(self) -> None:
+        """Handle telemetry update signal."""
+        self.async_write_ha_state()
+
+    @property
+    def _conversation_entity(self) -> Any:
+        """Retrieve the associated conversation entity from hass.data."""
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
+        return entry_data.get("conversation_entity")
+
+    @property
+    def native_value(self) -> int:
+        """Return remaining requests for today."""
+        model_name = self.entry.options.get(CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent"))
+        provider = self.entry.options.get(CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, ""))
+        specs = get_model_specs(model_name, provider)
+        max_rpd = int(specs.get("rpd", 14400))
+
+        conv_entity = self._conversation_entity
+        reqs_today = 0
+        if conv_entity:
+            telem = getattr(conv_entity, "telemetry", {})
+            reqs_today = int(telem.get("requests_today", 0))
+
+        return max(0, max_rpd - reqs_today)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return detailed daily quota attributes."""
+        model_name = self.entry.options.get(CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent"))
+        provider = self.entry.options.get(CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, ""))
+        specs = get_model_specs(model_name, provider)
+        max_rpd = int(specs.get("rpd", 14400))
+
+        conv_entity = self._conversation_entity
+        reqs_today = 0
+        tokens_today = 0
+        if conv_entity:
+            telem = getattr(conv_entity, "telemetry", {})
+            reqs_today = int(telem.get("requests_today", 0))
+            tokens_today = int(telem.get("tokens_today", 0))
+
+        remaining = max(0, max_rpd - reqs_today)
+        pct_remaining = round((remaining / max_rpd) * 100, 2) if max_rpd > 0 else 100.0
+
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        reset_hour = specs.get("daily_reset_hour_utc", 0)
+        target_dt = now_utc.replace(hour=reset_hour, minute=0, second=0, microsecond=0)
+        if target_dt <= now_utc:
+            target_dt += datetime.timedelta(days=1)
+        sec_to_daily_reset = int((target_dt - now_utc).total_seconds())
+        hours = sec_to_daily_reset // 3600
+        minutes = (sec_to_daily_reset % 3600) // 60
+
+        return {
+            "peticiones_restantes_hoy": remaining,
+            "peticiones_usadas_hoy": reqs_today,
+            "limite_diario_peticiones": max_rpd,
+            "porcentaje_cuota_restante": f"{pct_remaining}%",
+            "tokens_consumidos_hoy": tokens_today,
+            "tiempo_hasta_reseteo": f"{hours}h {minutes}m",
+            "hora_reseteo_diario": f"{reset_hour:02d}:00 UTC",
+            "tipo_limite": "Diario (RPD - Requests Per Day)",
+            "aclaracion": "En Groq, el límite diario mide peticiones al día (14.400 req/día). El límite de tokens (7.000 TPM) se renueva cada 60 segundos.",
+            "model": model_name,
+            "provider": provider,
         }
 
 
