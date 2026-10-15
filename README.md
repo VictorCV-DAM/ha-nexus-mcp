@@ -42,6 +42,26 @@ Click the badge above or use the direct link to open this repository directly in
 
 ---
 
+## 📋 Compatibility & Requirements
+
+Nexus MCP is engineered to be ultra-lightweight, with **zero external Python package dependencies** (`requirements: []`) and native compatibility across all Home Assistant installation types:
+
+| Component / Platform | Minimum Version | Tested & Verified | Status |
+| :--- | :--- | :--- | :--- |
+| **Home Assistant Core** | `2024.1.0` | `2024.1.0 — 2026.9.4+` | ✅ Fully Supported |
+| **Home Assistant OS (HAOS)** | Any supported | Latest Stable | ✅ Fully Supported |
+| **Home Assistant Supervised** | Any supported | Debian 12+ | ✅ Fully Supported |
+| **Home Assistant Container (Docker)** | `2024.1.0` | Latest Container | ✅ Fully Supported |
+| **Home Assistant Core (Python venv)** | `2024.1.0` | Python `3.11` / `3.12+` | ✅ Fully Supported |
+| **HACS (Community Store)** | `1.30.0+` | `v2.0+` | ✅ 1-Click Fast Install |
+| **Voice Assist Pipeline** | Core Assist | Web, Mobile App & ESPHome Satellites | ✅ Fully Supported |
+| **Model Context Protocol (`ha-mcp`)** | Standard SSE / HTTP | `homeassistant-ai/ha-mcp` | ✅ Local Auto-Discovery |
+
+> [!NOTE]
+> Nexus MCP runs entirely on Home Assistant's native event loop using the shared `aiohttp` client session. It does not load heavy local libraries into memory, ensuring zero impact on your Home Assistant startup time, memory footprint, or CPU usage.
+
+---
+
 ## 📸 Visual Showcase & Real-World Demo
 
 ### 💬 Interactive Chat & Automation Creator (with Safety Confirmation)
