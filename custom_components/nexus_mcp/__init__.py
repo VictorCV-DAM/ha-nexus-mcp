@@ -130,8 +130,6 @@ def _async_setup_services(hass: HomeAssistant) -> None:
 def _async_setup_websocket(hass: HomeAssistant) -> None:
     """Register Nexus MCP WebSocket command for multimodal chat."""
     domain_data = hass.data.setdefault(DOMAIN, {})
-    if domain_data.get("ws_registered"):
-        return
 
     try:
         from homeassistant.components import websocket_api
@@ -202,10 +200,79 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
             except Exception as err:
                 connection.send_error(msg["id"], "chat_error", str(err))
 
-        websocket_api.async_register_command(hass, ws_handle_chat)
+        @websocket_api.websocket_command(
+            {
+                vol.Required("type"): "nexus_mcp/get_history",
+                vol.Optional("agent_id"): str,
+            }
+        )
+        @websocket_api.async_response
+        async def ws_handle_get_history(
+            hass: HomeAssistant,
+            connection: websocket_api.ActiveConnection,
+            msg: dict[str, Any],
+        ) -> None:
+            """Handle retrieving persistent conversation history."""
+            agent_id = msg.get("agent_id")
+            domain_entries = hass.data.get(DOMAIN, {})
+            conv_entity = None
+            if agent_id:
+                for eid, data in domain_entries.items():
+                    if isinstance(data, dict):
+                        ce = data.get("conversation_entity")
+                        if ce and (eid in agent_id or getattr(ce, "entity_id", "") == agent_id):
+                            conv_entity = ce
+                            break
+            if not conv_entity:
+                for data in domain_entries.values():
+                    if isinstance(data, dict):
+                        ce = data.get("conversation_entity")
+                        if ce:
+                            conv_entity = ce
+                            break
+
+            if not conv_entity:
+                connection.send_result(msg["id"], {"messages": [], "conversation_id": None})
+                return
+
+            if not getattr(conv_entity, "_history_loaded", False):
+                await conv_entity._async_load_history()
+
+            last_conv_id = getattr(conv_entity, "_last_conversation_id", None)
+            history_dict = getattr(conv_entity, "_history", {})
+            msgs = history_dict.get(last_conv_id, []) if last_conv_id else []
+            if not msgs and history_dict:
+                last_conv_id = next(reversed(history_dict))
+                msgs = history_dict[last_conv_id]
+
+            raw_msgs = [
+                {
+                    "role": getattr(m, "role", "user"),
+                    "content": getattr(m, "content", ""),
+                }
+                for m in msgs
+                if getattr(m, "role", "") in ("user", "assistant") and getattr(m, "content", "")
+            ]
+
+            connection.send_result(
+                msg["id"],
+                {
+                    "messages": raw_msgs,
+                    "conversation_id": last_conv_id,
+                },
+            )
+
+        try:
+            websocket_api.async_register_command(hass, ws_handle_chat)
+        except Exception as err:
+            _LOGGER.debug("Could not register nexus_mcp/chat websocket command: %s", err)
+        try:
+            websocket_api.async_register_command(hass, ws_handle_get_history)
+        except Exception as err:
+            _LOGGER.debug("Could not register nexus_mcp/get_history websocket command: %s", err)
         domain_data["ws_registered"] = True
     except Exception as err:
-        _LOGGER.debug("Could not register nexus_mcp websocket command: %s", err)
+        _LOGGER.debug("Could not register nexus_mcp websocket commands: %s", err)
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:

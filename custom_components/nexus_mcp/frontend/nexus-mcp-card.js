@@ -72,6 +72,9 @@ class NexusMcpCard extends HTMLElement {
 
     if (!oldHass) {
       this._updateAgentDropdown();
+      if (this._selectedAgent) {
+        this._loadHistoryForAgent(this._selectedAgent);
+      }
       this._updateMessagesView();
     }
   }
@@ -99,18 +102,51 @@ class NexusMcpCard extends HTMLElement {
       });
   }
 
-  _loadHistoryForAgent(agentId) {
+  async _loadHistoryForAgent(agentId) {
     if (!agentId) return;
+
+    // 1. Instant local render from localStorage if available
     try {
       const saved = localStorage.getItem(`nexus_mcp_history_${agentId}`);
       if (saved) {
         this._messages = JSON.parse(saved);
+        this._updateMessagesView();
       } else {
         this._messages = [];
       }
     } catch (e) {
       this._messages = [];
     }
+
+    // 2. Sync with Home Assistant backend history via WebSocket so all browsers/devices share conversations
+    if (this._hass && this._hass.callWS) {
+      try {
+        const res = await this._hass.callWS({
+          type: "nexus_mcp/get_history",
+          agent_id: agentId,
+        });
+        if (res && Array.isArray(res.messages) && res.messages.length > 0) {
+          const agents = this._getAvailableAgents();
+          const currentAgent = agents.find((a) => a.id === agentId);
+          const agentName = currentAgent ? currentAgent.name : "Nexus MCP";
+          if (res.conversation_id) {
+            this._conversationId = res.conversation_id;
+          }
+          this._messages = res.messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+            agent_name: m.role === "assistant" ? agentName : undefined,
+            timestamp: Date.now(),
+          }));
+          this._saveHistoryForAgent(agentId);
+          this._updateMessagesView();
+          return;
+        }
+      } catch (err) {
+        console.debug("Could not fetch backend history:", err);
+      }
+    }
+
     this._updateMessagesView();
   }
 
@@ -368,6 +404,7 @@ class NexusMcpCard extends HTMLElement {
           border: 1px solid rgba(255, 255, 255, 0.12);
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
           text-align: left;
+          white-space: normal;
         }
         .code-header {
           display: flex;
@@ -746,25 +783,33 @@ class NexusMcpCard extends HTMLElement {
   _formatContent(rawContent) {
     if (!rawContent) return "";
 
-    // 1. Extract triple-backtick code blocks and protect them with placeholders
+    let text = rawContent;
+
+    // 1. If message ends with unclosed code block, auto-close it
+    const backtickCount = (text.match(/```/g) || []).length;
+    if (backtickCount % 2 !== 0) {
+      text += "\n```";
+    }
+
+    // 2. Extract triple-backtick code blocks and protect them with placeholders
     const codeBlocks = [];
-    const codeBlockRegex = /```([a-zA-Z0-9_\-\.\+]*)\r?\n?([\s\S]*?)```/g;
-    let text = rawContent.replace(codeBlockRegex, (match, lang, code) => {
+    const codeBlockRegex = /```([a-zA-Z0-9_\-\.\+]*)[^\S\r\n]*\r?\n?([\s\S]*?)```/g;
+    text = text.replace(codeBlockRegex, (match, lang, code) => {
       const id = `__NEXUS_CODE_BLOCK_${codeBlocks.length}__`;
       codeBlocks.push({ lang: (lang || "yaml").trim(), code: code });
       return id;
     });
 
-    // 2. Escape HTML on surrounding text
+    // 3. Escape HTML on surrounding text
     text = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    // 3. Convert markdown bold **text** to <strong>text</strong>
+    // 4. Convert markdown bold **text** to <strong>text</strong>
     text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 
-    // 4. Convert markdown inline code `code` to <code class="inline-code">
+    // 5. Convert markdown inline code `code` to <code class="inline-code">
     text = text.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
 
-    // 5. Reinsert formatted code boxes
+    // 6. Reinsert formatted code boxes (using split/join to safely preserve all code content without $ escaping issues)
     codeBlocks.forEach((block, i) => {
       const placeholder = `__NEXUS_CODE_BLOCK_${i}__`;
       const cleanCode = block.code.trim();
@@ -789,7 +834,7 @@ class NexusMcpCard extends HTMLElement {
           <pre class="code-content"><code>${escapedCode}</code></pre>
         </div>
       `;
-      text = text.replace(placeholder, boxHtml);
+      text = text.split(placeholder).join(boxHtml);
     });
 
     return text;
@@ -1169,7 +1214,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.3.2 Code Blocks & Copy Ready ",
+  "%c NEXUS MCP CARD %c v1.3.4 Synced History & Code Boxes Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
