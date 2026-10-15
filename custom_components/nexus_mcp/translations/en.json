@@ -22,15 +22,15 @@
       },
       "groq": {
         "title": "Groq Cloud (Free Tier - Europe & Worldwide)",
-        "description": "To use Groq Cloud, get a free API key from Groq Console. 1-click login with Google or GitHub, no credit card or phone verification needed.\n\n👉 **[Get your free Groq API Key here]({groq_api_url})** *(URL: https://console.groq.com/keys)*\n\n**Included Models & Limits:**\n• `llama-3.3-70b-versatile` (Default & Recommended): 70B frontier intelligence with double rate limit capacity (12,000 TPM) and excellent tool-calling precision.\n• `qwen/qwen3.8-27b`: Multilingual Qwen model on Groq LPUs.\n\nEnter your API key and model below:",
+        "description": "To use Groq Cloud, get a free API key from Groq Console. 1-click login with Google or GitHub, no credit card or phone verification needed.\n\n👉 **[Get your free Groq API Key here]({groq_api_url})** *(URL: https://console.groq.com/keys)*\n\n**Included Models & Limits:**\n• `qwen/qwen3.8-27b` (Default): High-speed multilingual Qwen on Groq LPUs.\n• `openai/gpt-oss-120b`: 120-Billion open-weights model with reasoning and tool calling.\n• `openai/gpt-oss-20b`: Lightweight and ultra-fast 20B open model.\n\nEnter your API key and model below:",
         "data": {
           "api_key": "API Key (gsk_...)",
-          "model": "Model Name (default: llama-3.3-70b-versatile)",
+          "model": "Model Name (default: qwen/qwen3.8-27b)",
           "base_url": "Groq API Base URL"
         },
         "data_description": {
           "api_key": "Generate your free API key at https://console.groq.com/keys",
-          "model": "Use 'llama-3.3-70b-versatile' (recommended, 12,000 TPM) or 'qwen/qwen3.8-27b'.",
+          "model": "Use 'qwen/qwen3.8-27b' (default) or 'openai/gpt-oss-120b'.",
           "base_url": "Groq OpenAI-compatible base URL (default: https://api.groq.com/openai/v1)."
         }
       },

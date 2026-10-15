@@ -165,14 +165,14 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
 
         await options_flow.async_step_init(
             {
-                CONF_MODEL: "llama-3.3-70b-versatile",
+                CONF_MODEL: "openai/gpt-oss-120b",
                 CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
                 CONF_AUTONOMOUS_MODE: True,
             }
         )
         options_flow.hass.config_entries.async_update_entry.assert_called_once()
         call_kwargs = options_flow.hass.config_entries.async_update_entry.call_args[1]
-        self.assertEqual(call_kwargs["title"], "Nexus MCP (llama-3.3-70b-versatile)")
+        self.assertEqual(call_kwargs["title"], "Nexus MCP (openai/gpt-oss-120b)")
 
 
 if __name__ == "__main__":

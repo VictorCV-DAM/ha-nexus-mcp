@@ -137,11 +137,21 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            raw_model = user_input.get(CONF_MODEL, DEFAULT_GROQ_MODEL).strip()
+            if raw_model in ("qwen3.8-27b", "qwen-27b", "qwen3.8", "qwen-3.8-27b"):
+                raw_model = "qwen/qwen3.8-27b"
+            elif raw_model in ("gpt-oss-120b", "120b", "openai-120b"):
+                raw_model = "openai/gpt-oss-120b"
+            elif raw_model in ("gpt-oss-20b", "20b", "openai-20b"):
+                raw_model = "openai/gpt-oss-20b"
+            elif "llama" in raw_model.lower():
+                raw_model = "qwen/qwen3.8-27b"
+
             self._llm_data = {
                 CONF_LLM_PROVIDER: PROVIDER_GROQ_FREE,
                 CONF_BASE_URL: user_input.get(CONF_BASE_URL, DEFAULT_GROQ_URL).strip(),
                 CONF_API_KEY: user_input[CONF_API_KEY].strip(),
-                CONF_MODEL: user_input.get(CONF_MODEL, DEFAULT_GROQ_MODEL).strip(),
+                CONF_MODEL: raw_model,
             }
             return await self.async_step_mcp_server()
 
@@ -344,6 +354,17 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
                 if k in user_input and user_input[k] is not None:
                     val = user_input[k]
                     updated_data[k] = val.strip() if isinstance(val, str) else val
+
+            if updated_data.get(CONF_LLM_PROVIDER) == PROVIDER_GROQ_FREE or "groq.com" in updated_data.get(CONF_BASE_URL, ""):
+                m = updated_data.get(CONF_MODEL, "")
+                if m in ("qwen3.8-27b", "qwen-27b", "qwen3.8", "qwen-3.8-27b"):
+                    updated_data[CONF_MODEL] = "qwen/qwen3.8-27b"
+                elif m in ("gpt-oss-120b", "120b", "openai-120b"):
+                    updated_data[CONF_MODEL] = "openai/gpt-oss-120b"
+                elif m in ("gpt-oss-20b", "20b", "openai-20b"):
+                    updated_data[CONF_MODEL] = "openai/gpt-oss-20b"
+                elif "llama" in m.lower():
+                    updated_data[CONF_MODEL] = "qwen/qwen3.8-27b"
 
             model_name = updated_data.get(CONF_MODEL) or updated_data.get(CONF_LLM_PROVIDER)
             new_title = f"Nexus MCP ({model_name})" if model_name else self.config_entry.title

@@ -109,7 +109,22 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
     ) -> None:
         super().__init__(session)
         self._base_url = base_url.rstrip("/")
-        self._model = model
+        # Auto-normalize Groq models (missing prefix or EU-restricted Llama)
+        clean_model = (model or "").strip()
+        if "groq.com" in self._base_url:
+            if clean_model in ("qwen3.8-27b", "qwen-27b", "qwen3.8", "qwen-3.8-27b"):
+                clean_model = "qwen/qwen3.8-27b"
+            elif clean_model in ("gpt-oss-120b", "120b", "openai-120b"):
+                clean_model = "openai/gpt-oss-120b"
+            elif clean_model in ("gpt-oss-20b", "20b", "openai-20b"):
+                clean_model = "openai/gpt-oss-20b"
+            elif "llama" in clean_model.lower():
+                _LOGGER.warning(
+                    "Llama model '%s' is not served by Groq in Europe. Auto-redirecting to 'qwen/qwen3.8-27b'.",
+                    clean_model,
+                )
+                clean_model = "qwen/qwen3.8-27b"
+        self._model = clean_model
         self._api_key = api_key or "sk-no-key-required"
 
     async def generate_response(
@@ -126,6 +141,7 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._api_key}",
+            "User-Agent": "HomeAssistant-NexusMCP/1.0",
         }
 
         # Convert standardized messages to OpenAI format
@@ -176,14 +192,14 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                         if retry_after and retry_after.replace(".", "", 1).isdigit():
                             delay = max(1.0, min(float(retry_after), 5.0))
 
-                        # If on Groq and hit rate limit, attempt fallback to llama-3.3-70b-versatile
-                        if "groq.com" in self._base_url and self._model != "llama-3.3-70b-versatile":
+                        # If on Groq and hit rate limit on Qwen, attempt fallback to openai/gpt-oss-120b
+                        if "groq.com" in self._base_url and self._model == "qwen/qwen3.8-27b":
                             _LOGGER.warning(
-                                "Groq rate limit on %s. Auto-falling back to llama-3.3-70b-versatile...",
+                                "Groq rate limit on %s. Auto-falling back to openai/gpt-oss-120b...",
                                 self._model,
                             )
-                            self._model = "llama-3.3-70b-versatile"
-                            payload["model"] = "llama-3.3-70b-versatile"
+                            self._model = "openai/gpt-oss-120b"
+                            payload["model"] = "openai/gpt-oss-120b"
                             await asyncio.sleep(1.0)
                             continue
 
