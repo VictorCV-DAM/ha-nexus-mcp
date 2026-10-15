@@ -67,7 +67,7 @@ Select Nexus MCP directly as your active Conversation Agent in any Assist pipeli
 </p>
 
 ### 🧩 1-Click Click & Install Setup Across 5 AI Brains
-Seamlessly connect free cloud providers or local models with automatic discovery:
+Seamlessly connect free cloud providers or local models with automatic discovery *(Groq, Gemini, and Qwen are 100% verified in production; Ollama Local and Custom OpenAI are implemented under standard specs but marked as experimental pending community testing due to local hardware/resource constraints)*:
 
 <p align="center">
   <img src="images/01_select_brand.png" width="31%" align="middle" style="vertical-align: middle;" alt="Select Nexus MCP" />
@@ -114,10 +114,12 @@ Toggle between autonomous execution or interactive confirmation anytime via Sett
     * `gemini-flash-latest`: Always points to the newest Flash release.
   * **Qwen Cloud (Alibaba Model Studio / DashScope)**:
     * Access to flagship Qwen models (`qwen-plus-latest`, `qwen-turbo-latest`, `qwen2.5-coder-32b-instruct`) with millions of free tokens.
-  * **Ollama Local**:
+  * **Ollama Local (Experimental / Untested)**:
     * 100% offline, private, and free inference on your local network (`qwen2.5-coder:7b`).
-  * **Custom OpenAI / BYOK**:
+    * ⚠️ *Note: Implemented following standard Ollama OpenAI-compatible schemas, but currently pending extensive real-world testing due to lack of local hardware/GPU resources. Community feedback and PRs are warmly welcome!*
+  * **Custom OpenAI / BYOK (Experimental / Untested)**:
     * Connect to [OpenRouter](https://openrouter.ai/keys) (including `:free` models), OpenAI Platform, DeepSeek, or any OpenAI-compatible API.
+    * ⚠️ *Note: Implemented via standard OpenAI chat completion endpoints, but pending full testing due to lack of funded accounts/resources. Community testing is appreciated!*
 * **🛡️ Resilient & Self-Healing Architecture**:
   * **Automatic Exponential Backoff**: Gracefully retries HTTP 429 (rate limits) and HTTP 503 (server load) honoring `Retry-After` headers.
   * **In-Flight Model Fallback**: Automatically switches to capable backup models (`openai/gpt-oss-120b`) if a specific model trips rate limits.
