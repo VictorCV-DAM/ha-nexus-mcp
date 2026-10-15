@@ -18,6 +18,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers import intent
+try:
+    from homeassistant.helpers.storage import Store
+except (ImportError, AttributeError):
+    Store = None
 
 from .const import (
     CONF_AUTONOMOUS_MODE,
@@ -35,6 +39,16 @@ from .tools import execute_builtin_tool, get_builtin_tools
 _LOGGER = logging.getLogger(__name__)
 
 MAX_HISTORY_MESSAGES = 25
+MAX_STORED_CONVERSATIONS = 20
+STORAGE_KEY = f"{DOMAIN}_history"
+STORAGE_VERSION = 1
+
+RESET_COMMANDS = {
+    "nueva conversación", "nueva conversacion", "nuevo chat", "reiniciar",
+    "reinicia", "reiniciar conversación", "reiniciar conversacion", "olvida todo",
+    "olvida lo anterior", "borrar historial", "reset", "new conversation",
+    "clear history", "start over",
+}
 
 
 async def async_setup_entry(
@@ -98,6 +112,13 @@ class NexusMcpConversationEntity(ConversationEntity):
 
         # Conversation history buffer: conversation_id -> list[ChatMessage]
         self._history: dict[str, list[ChatMessage]] = {}
+        self._history_loaded = False
+        self._last_conversation_id: str | None = None
+
+        if Store is not None:
+            self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{entry.entry_id}")
+        else:
+            self._store = None
 
         # Built-in Home Assistant tools
         self._tools = get_builtin_tools()
@@ -118,6 +139,67 @@ class NexusMcpConversationEntity(ConversationEntity):
             session=session,
         )
 
+    async def async_added_to_hass(self) -> None:
+        """Load persistent conversation history from storage when entity is added."""
+        if hasattr(super(), "async_added_to_hass"):
+            await super().async_added_to_hass()
+        await self._async_load_history()
+
+    async def _async_load_history(self) -> None:
+        """Load persistent conversation histories from Home Assistant storage."""
+        if self._history_loaded:
+            return
+        if self._store is not None:
+            try:
+                data = await self._store.async_load()
+                if data and isinstance(data, dict):
+                    raw_history = data.get("history", {})
+                    self._last_conversation_id = data.get("last_conversation_id")
+                    for conv_id, msgs in raw_history.items():
+                        if isinstance(msgs, list):
+                            chat_msgs = []
+                            for m in msgs:
+                                if isinstance(m, dict) and "role" in m and "content" in m:
+                                    chat_msgs.append(
+                                        ChatMessage(role=m["role"], content=m["content"])
+                                    )
+                            if chat_msgs:
+                                self._history[conv_id] = chat_msgs[-MAX_HISTORY_MESSAGES:]
+                    _LOGGER.debug(
+                        "Nexus MCP loaded %d persistent conversations from storage (last: %s)",
+                        len(self._history),
+                        self._last_conversation_id,
+                    )
+            except Exception as err:
+                _LOGGER.warning("Could not load persistent conversation history: %s", err)
+        self._history_loaded = True
+
+    async def _async_save_history(self) -> None:
+        """Save persistent conversation histories to Home Assistant storage."""
+        if self._store is None:
+            return
+        try:
+            # Prune older conversations to keep storage light (max MAX_STORED_CONVERSATIONS)
+            if len(self._history) > MAX_STORED_CONVERSATIONS:
+                keys_to_remove = list(self._history.keys())[:-MAX_STORED_CONVERSATIONS]
+                for k in keys_to_remove:
+                    if k != self._last_conversation_id:
+                        self._history.pop(k, None)
+
+            serializable = {
+                "last_conversation_id": self._last_conversation_id,
+                "history": {
+                    conv_id: [
+                        {"role": msg.role, "content": msg.content}
+                        for msg in msgs[-MAX_HISTORY_MESSAGES:]
+                    ]
+                    for conv_id, msgs in self._history.items()
+                },
+            }
+            await self._store.async_save(serializable)
+        except Exception as err:
+            _LOGGER.warning("Could not persist conversation history: %s", err)
+
     @property
     def supported_features(self) -> ConversationEntityFeature:
         """Return supported features."""
@@ -132,6 +214,9 @@ class NexusMcpConversationEntity(ConversationEntity):
         self, user_input: ConversationInput
     ) -> ConversationResult:
         """Process a conversational utterance and forward to the external server with tool support."""
+        if not self._history_loaded:
+            await self._async_load_history()
+
         conversation_id = user_input.conversation_id or "default"
         text = user_input.text.strip()
 
@@ -140,6 +225,41 @@ class NexusMcpConversationEntity(ConversationEntity):
             conversation_id,
             text,
         )
+
+        # Check for explicit conversation reset commands
+        if text.lower().strip() in RESET_COMMANDS:
+            self._history.pop(conversation_id, None)
+            if self._last_conversation_id:
+                self._history.pop(self._last_conversation_id, None)
+                self._last_conversation_id = None
+            await self._async_save_history()
+            intent_response = intent.IntentResponse(language=user_input.language)
+            reply = (
+                "Conversación reiniciada. ¿En qué puedo ayudarte?"
+                if user_input.language.startswith("es")
+                else "Conversation reset. How can I help you?"
+            )
+            intent_response.async_set_speech(reply)
+            return ConversationResult(
+                response=intent_response,
+                conversation_id=conversation_id,
+            )
+
+        # Automatic continuity: If starting a new session (unknown conversation_id),
+        # inherit the recent context from the previous conversation so the user can
+        # seamlessly resume where they left off!
+        if conversation_id not in self._history:
+            if self._last_conversation_id and self._last_conversation_id in self._history:
+                prev_history = self._history[self._last_conversation_id]
+                if prev_history:
+                    # Seed with up to last 10 messages from previous conversation
+                    self._history[conversation_id] = list(prev_history[-10:])
+                    _LOGGER.debug(
+                        "Nexus MCP resumed context from previous conversation [%s] (%d messages) into [%s]",
+                        self._last_conversation_id,
+                        len(self._history[conversation_id]),
+                        conversation_id,
+                    )
 
         history = self._history.setdefault(conversation_id, [])
         history.append(ChatMessage(role="user", content=text))
@@ -277,6 +397,13 @@ class NexusMcpConversationEntity(ConversationEntity):
                 f"Error al comunicar con el servidor de IA ({err}). "
                 "Verifica la conexión y configuración en Ajustes > Dispositivos y Servicios."
             )
+
+        # Ensure assistant reply is stored in history if an exception occurred
+        if not history or history[-1].role != "assistant":
+            history.append(ChatMessage(role="assistant", content=assistant_reply))
+
+        self._last_conversation_id = conversation_id
+        await self._async_save_history()
 
         # Build Home Assistant intent response
         intent_response = intent.IntentResponse(language=user_input.language)

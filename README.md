@@ -9,7 +9,7 @@
   [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
   [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1.0%20%E2%80%94%202026.9.4%2B-41BDF5.svg?logo=home-assistant)](https://www.home-assistant.io/)
   [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
-  [![Tests](https://img.shields.io/badge/Tests-26%2F26%20Passing-brightgreen.svg)](tests/)
+  [![Tests](https://img.shields.io/badge/Tests-29%2F29%20Passing-brightgreen.svg)](tests/)
   [![Downloads](https://img.shields.io/github/downloads/VictorCV-DAM/ha-nexus-mcp/total.svg?color=brightgreen)](https://github.com/VictorCV-DAM/ha-nexus-mcp/releases)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   
@@ -103,6 +103,7 @@ Toggle between autonomous execution or interactive confirmation anytime via Sett
   * `ha_call_service`: Real-time execution of any Home Assistant service (`light.turn_on`, `switch.toggle`, `climate.set_temperature`, etc.).
   * `ha_create_automation`: Dynamic generation and hot-reload of Home Assistant automations (`automations.yaml`), with automatic schema sanitization for time patterns and service actions.
   * **🛡️ Autonomous Mode & Interactive Confirmation**: When Autonomous Mode is disabled (default), Nexus MCP will tell you what it understood, describe the exact planned automation (triggers, conditions, actions, entity IDs), and ask for your confirmation before creating it. If Autonomous Mode is enabled, it creates automations immediately without asking.
+  * **🔄 Persistent Memory & Seamless Conversation Continuity**: Conversations are stored on disk via Home Assistant's native storage (`.storage`), ensuring chat history survives restarts and integration reloads. When starting a new session or reopening Assist, Nexus MCP automatically inherits the recent context from your previous conversation so you can seamlessly continue where you left off. Saying *"Nueva conversación"*, *"Reset"*, or *"Clear history"* instantly resets memory on demand.
 * **🌐 100% Free & Fast Cloud Providers**:
   * **Groq Cloud (Recommended in Europe & Worldwide)**:
     * 1-click Google/GitHub login, zero credit card, zero phone verification required.
@@ -208,7 +209,21 @@ Nexus MCP maintains a rigorous test suite covering config flows, options flows, 
 python -m unittest discover -s tests
 ```
 
-*Result:* **26/26 unit tests passing (100% success rate)**.
+*Result:* **29/29 unit tests passing (100% success rate)**.
+
+---
+
+## 🏷️ Release Notes: v1.2.1
+
+* **🔄 Persistent Memory & Session Continuity**:
+  * Conversations are persisted directly to Home Assistant storage (`.storage/nexus_mcp_history_*`), ensuring memory is never lost across Home Assistant restarts or options reloads.
+  * When opening a new Assist session or dialog, Nexus MCP automatically inherits the context of the previous conversation so users can smoothly resume their dialogue without repeating entity names.
+  * Explicit reset commands (*"Nueva conversación"*, *"Reset"*, *"Clear history"*) instantly wipe memory on demand.
+  * Interactive Confirmation survives window closing: previous automation proposals remain in context when reopening Assist.
+* **📦 Release Asset Automation & HACS Download Tracking**:
+  * Releases now automatically build and package `nexus_mcp.zip` for fast HACS downloads and live download tracking via Shields.io badge.
+* **🧪 29/29 Unit Tests Passing**:
+  * Full coverage of session continuity, memory inheritance, storage loading/saving, and reset commands.
 
 ---
 

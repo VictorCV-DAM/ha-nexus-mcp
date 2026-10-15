@@ -306,6 +306,122 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIn("Automatización creada directamente", result.response.speech_text)
 
+    async def test_conversation_continuity_resumes_context(self) -> None:
+        """Test that a new conversation session automatically inherits recent context from the previous session."""
+        mock_hass = MagicMock()
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "test_entry_continuity"
+        mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
+
+        with patch("custom_components.nexus_mcp.conversation.create_llm_engine") as mock_factory, \
+             patch("custom_components.nexus_mcp.conversation.intent.IntentResponse", side_effect=FakeIntentResponse), \
+             patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
+
+            mock_engine = AsyncMock()
+            mock_engine.generate_response.return_value = LlmResponse(content="Entendido, temperatura guardada.")
+            mock_factory.return_value = mock_engine
+
+            entity = NexusMcpConversationEntity(mock_hass, mock_entry)
+
+            # Turn 1 in session_A
+            input_1 = MagicMock()
+            input_1.text = "La temperatura deseada es 21 grados"
+            input_1.conversation_id = "session_A"
+            input_1.language = "es"
+            await entity.async_process(input_1)
+
+            self.assertEqual(entity._last_conversation_id, "session_A")
+
+            # Turn 2 starts in a brand new session_B (e.g. user closed dialog and reopened Assist)
+            input_2 = MagicMock()
+            input_2.text = "¿Cuál era la temperatura?"
+            input_2.conversation_id = "session_B"
+            input_2.language = "es"
+            await entity.async_process(input_2)
+
+            # Verify session_B contains the inherited messages from session_A + the new user message
+            history_b = entity._history["session_B"]
+            # session_A had 1 user + 1 assistant = 2 messages. session_B now has 2 inherited + 1 user + 1 assistant = 4 messages
+            self.assertEqual(len(history_b), 4)
+            self.assertEqual(history_b[0].content, "La temperatura deseada es 21 grados")
+            self.assertEqual(history_b[1].content, "Entendido, temperatura guardada.")
+            self.assertEqual(history_b[2].content, "¿Cuál era la temperatura?")
+
+    async def test_conversation_reset_command(self) -> None:
+        """Test explicit conversation reset clears memory."""
+        mock_hass = MagicMock()
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "test_entry_reset"
+        mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
+
+        with patch("custom_components.nexus_mcp.conversation.create_llm_engine") as mock_factory, \
+             patch("custom_components.nexus_mcp.conversation.intent.IntentResponse", side_effect=FakeIntentResponse), \
+             patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
+
+            mock_engine = AsyncMock()
+            mock_engine.generate_response.return_value = LlmResponse(content="Respuesta normal.")
+            mock_factory.return_value = mock_engine
+
+            entity = NexusMcpConversationEntity(mock_hass, mock_entry)
+
+            # Pre-populate history
+            input_1 = MagicMock()
+            input_1.text = "Hola, recuérdame comprar pan"
+            input_1.conversation_id = "session_reset_test"
+            input_1.language = "es"
+            await entity.async_process(input_1)
+
+            self.assertIn("session_reset_test", entity._history)
+
+            # User commands to start a new conversation
+            input_reset = MagicMock()
+            input_reset.text = "nueva conversación"
+            input_reset.conversation_id = "session_reset_test"
+            input_reset.language = "es"
+
+            result = await entity.async_process(input_reset)
+
+            self.assertIn("Conversación reiniciada", result.response.speech_text)
+            self.assertNotIn("session_reset_test", entity._history)
+            self.assertIsNone(entity._last_conversation_id)
+
+    async def test_storage_persistence_load_and_save(self) -> None:
+        """Test persistent storage loading and saving of conversation histories."""
+        mock_hass = MagicMock()
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "test_entry_store"
+        mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
+
+        mock_store = AsyncMock()
+        mock_store.async_load.return_value = {
+            "last_conversation_id": "loaded_session",
+            "history": {
+                "loaded_session": [
+                    {"role": "user", "content": "Hola anterior"},
+                    {"role": "assistant", "content": "Hola, te recuerdo"},
+                ]
+            },
+        }
+
+        with patch("custom_components.nexus_mcp.conversation.create_llm_engine"), \
+             patch("custom_components.nexus_mcp.conversation.intent.IntentResponse", side_effect=FakeIntentResponse), \
+             patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
+
+            entity = NexusMcpConversationEntity(mock_hass, mock_entry)
+            entity._store = mock_store
+
+            # Load history
+            await entity.async_added_to_hass()
+
+            self.assertEqual(entity._last_conversation_id, "loaded_session")
+            self.assertIn("loaded_session", entity._history)
+            self.assertEqual(len(entity._history["loaded_session"]), 2)
+            self.assertEqual(entity._history["loaded_session"][0].content, "Hola anterior")
+
+            # Save history is called when saving
+            await entity._async_save_history()
+            mock_store.async_save.assert_awaited()
+
 
 if __name__ == "__main__":
     unittest.main()
