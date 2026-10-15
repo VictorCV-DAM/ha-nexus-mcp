@@ -9,7 +9,7 @@
   [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
   [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1.0%20%E2%80%94%202026.9.4%2B-41BDF5.svg?logo=home-assistant)](https://www.home-assistant.io/)
   [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
-  [![Tests](https://img.shields.io/badge/Tests-36%2F36%20Passing-brightgreen.svg)](tests/)
+  [![Tests](https://img.shields.io/badge/Tests-38%2F38%20Passing-brightgreen.svg)](tests/)
   [![Downloads](https://img.shields.io/github/downloads/VictorCV-DAM/ha-nexus-mcp/total.svg?color=brightgreen)](https://github.com/VictorCV-DAM/ha-nexus-mcp/releases)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   
@@ -113,7 +113,7 @@ Toggle between autonomous execution or interactive confirmation anytime via Sett
 ### 💬 Plug & Play Lovelace Card (Visual Card Picker)
 Nexus MCP includes a **100% plug & play custom Lovelace card** that registers automatically in Home Assistant. No manual resource URLs or configuration needed!
 
-1. Open any Dashboard, click **Edit dashboard** (Editar panel) ➔ **Add Card** (Añadir tarjeta).
+1. Open any Dashboard, click **Edit dashboard** ➔ **Add Card**.
 2. Look for **«Nexus MCP Chat & Historial»** right in the visual card picker list (with live visual preview and configuration editor).
 3. Chat in real-time, view message bubbles, send queries directly from the card input bar, or tap the microphone to open Assist!
 
@@ -136,6 +136,9 @@ Interact visually with your smart home using vision-capable AI models (e.g. `qwe
 * **🖼️ Instant Clipboard Paste (`Ctrl + V`) & File Attach (`📎`)**: Take a screenshot with `Win + Shift + S` or copy an image anywhere on the web, and paste it directly into the chat. You can also click the paperclip icon (`📎`) to upload an image from disk. Includes instant thumbnail preview with a removal button (`✕`).
 * **🧠 Real-Time Multimodal Diagnostics**: Upload camera snapshots, device photos, or Home Assistant error screenshots directly to the AI for instant automated diagnosis and actionable recommendations.
 * **📋 1-Click Message Copy & Native Text Selection**: Every message bubble features a 1-click copy icon button (`mdi:content-copy`) with instant visual checkmark feedback (`mdi:check`). Full cursor text selection is enabled on all message bubbles for seamless copying of code blocks, YAML configurations, or entity IDs.
+* **📦 Syntax-Styled Code Blocks & 1-Click Code Copy**: Any code or YAML automation returned by the model is automatically parsed into a high-contrast code box with language badge and a dedicated **"Copy code"** button.
+* **🔄 Cross-Browser & Multi-Device History Sync**: Powered by a dedicated Home Assistant backend WebSocket (`nexus_mcp/get_history`), conversations synchronize seamlessly across all your browsers, laptops, and mobile devices without depending on isolated browser storage.
+* **⚡ Guaranteed Auto-Scroll on Reload**: Multi-phase auto-scrolling guarantees that upon page reload or image load, the chat is immediately anchored to the latest sent or received message.
 
 ---
 
@@ -188,33 +191,33 @@ Interact visually with your smart home using vision-capable AI models (e.g. `qwe
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        FUERA DE HOME ASSISTANT                         │
+│                      OUTSIDE OF HOME ASSISTANT                         │
 │  (Groq Cloud / Google AI Studio / Alibaba Cloud / Ollama Local)        │
 │                                                                        │
 │   ┌──────────────────────────────────────────────────────────────┐     │
-│   │ MOTOR DE INFERENCIA / MODELO DE LENGUAJE                     │     │
+│   │ INFERENCE ENGINE / LLM PROVIDERS                             │     │
 │   │                                                              │     │
-│   │  • Groq Cloud (14.400 req/día, Qwen 3.8 27B / GPT-OSS 120B)  │     │
+│   │  • Groq Cloud (14,400 req/day, Qwen 3.8 27B / GPT-OSS 120B)  │     │
 │   │  • Google Gemini Free Tier (250k TPM, Gemini 3.1 Flash Lite) │     │
 │   │  • Alibaba Model Studio (Qwen Plus / Coder)                  │     │
-│   │  • Ollama + Qwen 2.5 Coder (Local Offline 0€)                │     │
-│   │  • Servidor OpenAI / OpenRouter / DeepSeek BYOK              │     │
+│   │  • Ollama + Qwen 2.5 Coder (Local Offline 100% Free)         │     │
+│   │  • OpenAI Server / OpenRouter / DeepSeek BYOK                │     │
 │   └──────────────────────────────▲───────────────────────────────┘     │
 └──────────────────────────────────┼─────────────────────────────────────┘
                                    │
-                                   │ (Llamadas asíncronas REST / HTTP con Tool Calling)
+                                   │ (Asynchronous REST / HTTP Calls with Native Tool Calling)
                                    │
 ┌──────────────────────────────────▼─────────────────────────────────────┐
-│                    DENTRO DE HOME ASSISTANT (HACS)                     │
+│                    INSIDE HOME ASSISTANT (HACS)                        │
 │                                                                        │
 │   ┌──────────────────────────────────────────────────────────────┐     │
 │   │ NEXUS MCP INTERCOM (Custom Component)                        │     │
 │   │                                                              │     │
-│   │  • Entidad oficial de conversación (Assist / Voice / Web).   │     │
-│   │  • Herramientas nativas: Búsqueda, Estados, Servicios, Auto. │     │
-│   │  • Sanitizador automático de YAML de automatizaciones.       │     │
-│   │  • Auto-reintentos con backoff exponencial en HTTP 429/503.  │     │
-│   │  • Conexión auto-descubierta con servidor HA-MCP.            │     │
+│   │  • Official Conversation Entity (Assist / Voice / Web).      │     │
+│   │  • Built-in Tools: Entity Search, States, Services, Auto.    │     │
+│   │  • Automatic Schema Sanitizer for Automations YAML.          │     │
+│   │  • Exponential Backoff & Auto-Retries on HTTP 429/503.       │     │
+│   │  • Auto-Discovered SSE/HTTP Connection to HA-MCP Server.     │     │
 │   └──────────────────────────────────────────────────────────────┘     │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -257,6 +260,24 @@ python -m unittest discover -s tests
 ```
 
 *Result:* **38/38 unit tests passing (100% success rate)**.
+
+---
+
+## 🏷️ Release Notes: v1.3.5
+
+* **📦 Syntax-Styled Code Blocks & 1-Click Code Copy**:
+  * Added automatic parsing of fenced markdown code blocks (` ```yaml `, ` ```python `, ` ```json `, etc.) into high-contrast syntax code boxes.
+  * Dedicated **"Copy code"** / **"Copiar código"** button with instantaneous clipboard integration and visual checkmark animation.
+  * Resilient parsing heuristics: handles unclosed backticks and trailing whitespace in language identifiers automatically.
+* **🔄 Cross-Browser & Multi-Device Persistent History Sync**:
+  * Implemented backend WebSocket command `nexus_mcp/get_history` to query server-side persistent conversation storage (`.storage/nexus_mcp_history_*`).
+  * Enables instant conversation loading across all desktop browsers, mobile apps, and tablets without being bound to isolated client storage.
+* **⚡ Guaranteed Auto-Scroll on Reload & Asynchronous Media**:
+  * Multi-phase auto-scroll execution (`_scrollToBottom`) covering initial load, element reconnection (`connectedCallback`), and post-render frame intervals (40ms, 120ms, 300ms, 600ms).
+  * Automatically re-anchors to the bottom when attached images finish decoding.
+  * Smooth animated scrolling on new outgoing and incoming messages.
+* **🧪 38/38 Unit Tests Passing (100% Success Rate)**:
+  * Full test suite passing across all modules.
 
 ---
 
