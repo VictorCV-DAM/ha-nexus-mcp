@@ -74,17 +74,19 @@ def _is_user_confirmation(history: list[ChatMessage], current_text: str) -> bool
         "si", "sí", "adelante", "confirmo", "confirmado", "confirmar",
         "créala", "creala", "procede", "proceder", "hazlo", "dale",
         "ok", "vale", "de acuerdo", "perfecto", "correcto", "yes",
-        "confirm", "proceed", "sure", "yep", "yeah", "claro",
+        "confirm", "confirmed", "proceed", "sure", "yep", "yeah", "claro",
+        "do it", "create it", "go ahead", "approved", "looks good",
     }
-    words = re.findall(r"[\wáéíóúÁÉÍÓÚñÑ]+", current_text.lower())
+    cleaned_lower = current_text.lower().strip()
+    words = re.findall(r"[\wáéíóúÁÉÍÓÚñÑ]+", cleaned_lower)
     if not words:
         return False
 
     # If the user explicitly says "no" without affirmative words, it's not a confirmation
-    if "no" in words and "si" not in words and "sí" not in words:
+    if "no" in words and "si" not in words and "sí" not in words and "yes" not in words:
         return False
 
-    is_affirmative = any(w in affirmative_tokens for w in words)
+    is_affirmative = any(w in affirmative_tokens for w in words) or cleaned_lower in affirmative_tokens
     if not is_affirmative:
         return False
 
@@ -93,6 +95,7 @@ def _is_user_confirmation(history: list[ChatMessage], current_text: str) -> bool
         "confirm", "automatización", "automatizacion", "automation",
         "¿deseas", "deseas que", "quieres que", "¿procedo", "proceda",
         "¿creo", "crear", "procede", "¿te parece", "ha_create_automation",
+        "would you like", "should i", "do you want me to", "proceed",
     )
     for msg in reversed(history):
         if msg.role == "assistant" and msg.content:
@@ -242,6 +245,58 @@ class NexusMcpConversationEntity(ConversationEntity):
     def supported_languages(self) -> list[str] | Literal["*"]:
         """Return supported languages."""
         return "*"
+
+    async def async_chat_process(
+        self,
+        text: str,
+        image_data: str | None = None,
+        conversation_id: str = "default",
+    ) -> str:
+        """Process chat message with optional multimodal image data."""
+        if not self._history_loaded:
+            await self._async_load_history()
+
+        history = self._history.setdefault(conversation_id, [])
+        history.append(ChatMessage(role="user", content=text, image_data=image_data))
+        if len(history) > MAX_HISTORY_MESSAGES:
+            history = history[-MAX_HISTORY_MESSAGES:]
+            self._history[conversation_id] = history
+
+        system_prompt = (
+            "You are Nexus MCP, an autonomous AI assistant embedded directly inside Home Assistant. "
+            "You can analyze images, inspect entities, and assist the user in their smart home."
+        )
+
+        try:
+            resp = await self._engine.generate_response(
+                messages=history,
+                tools=self._tools,
+                system_prompt=system_prompt,
+            )
+            reply = resp.content or "No response from AI."
+        except Exception as err:
+            err_str = str(err)
+            if image_data and any(w in err_str.lower() for w in ("image", "vision", "multimodal", "support", "400")):
+                is_spanish = any(
+                    w in text.lower()
+                    for w in ("hola", "¿", "qué", "que", "cómo", "como", "cuál", "enciende", "apaga", "luz", "imagen", "foto")
+                )
+                reply = (
+                    "El modelo actual no admite análisis de imágenes. "
+                    "Por favor, selecciona un modelo con visión como Google Gemini en el selector superior."
+                    if is_spanish
+                    else (
+                        "The current model does not support image analysis. "
+                        "Please select a vision-capable model like Google Gemini in the model selector above."
+                    )
+                )
+            else:
+                raise err
+
+        history.append(ChatMessage(role="assistant", content=reply))
+        self._last_conversation_id = conversation_id
+        await self._async_save_history()
+        return reply
 
     async def async_process(
         self, user_input: ConversationInput

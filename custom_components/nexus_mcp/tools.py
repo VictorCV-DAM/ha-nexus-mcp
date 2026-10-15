@@ -23,13 +23,13 @@ def get_builtin_tools() -> list[McpTool]:
     return [
         McpTool(
             name="ha_search_entities",
-            description="Search for entities and devices in Home Assistant by friendly name, domain (e.g. light, switch, sensor), or entity ID.",
+            description="Search for entities and devices in Home Assistant by friendly name, domain (e.g. light, switch, sensor, climate), or entity ID. Pass empty query or 'all' to list available entities.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Keywords to search for (e.g. 'bombilla izquierda', 'salon', 'temperatura').",
+                        "description": "Keywords to search for (e.g. 'living room light', 'kitchen', 'temperature', 'all').",
                     },
                     "domain": {
                         "type": "string",
@@ -47,7 +47,7 @@ def get_builtin_tools() -> list[McpTool]:
                 "properties": {
                     "entity_id": {
                         "type": "string",
-                        "description": "The exact entity_id (e.g. 'light.bombilla_izquierda').",
+                        "description": "The exact entity_id (e.g. 'light.living_room').",
                     }
                 },
                 "required": ["entity_id"],
@@ -69,7 +69,7 @@ def get_builtin_tools() -> list[McpTool]:
                     },
                     "target": {
                         "type": "object",
-                        "description": "Target entity or device (e.g. {'entity_id': 'light.bombilla_izquierda'}).",
+                        "description": "Target entity or device (e.g. {'entity_id': 'light.living_room'}).",
                     },
                     "data": {
                         "type": "object",
@@ -213,11 +213,32 @@ async def execute_builtin_tool(
     _LOGGER.info("Executing built-in HA tool '%s' with arguments: %s", name, arguments)
 
     if name == "ha_search_entities":
-        query = arguments.get("query", "").lower()
-        domain_filter = arguments.get("domain", "").lower()
+        query = (arguments.get("query") or "").lower().strip()
+        domain_filter = (arguments.get("domain") or "").lower().strip()
+
+        all_states = list(hass.states.async_all())
+        total_count = len(all_states)
+
+        # Count domains to provide helpful feedback to the LLM
+        domain_counts: dict[str, int] = {}
+        for state in all_states:
+            d = state.entity_id.split(".")[0]
+            domain_counts[d] = domain_counts.get(d, 0) + 1
+
+        is_broad_query = not query or query in (
+            "*", "all", "everything", "entities", "devices",
+            "todos", "todas", "dispositivos", "entidades", "listar",
+        )
+
+        # Normalize plurals (e.g. 'lights' -> 'light', 'switches' -> 'switch')
+        query_variants = [query] if query else []
+        if query.endswith("es"):
+            query_variants.append(query[:-2])
+        elif query.endswith("s"):
+            query_variants.append(query[:-1])
 
         results = []
-        for state in hass.states.async_all():
+        for state in all_states:
             entity_id = state.entity_id
             domain = entity_id.split(".")[0]
             friendly_name = state.attributes.get("friendly_name", "").lower()
@@ -225,19 +246,44 @@ async def execute_builtin_tool(
             if domain_filter and domain != domain_filter:
                 continue
 
-            # Check match against entity_id or friendly_name
-            if query in entity_id.lower() or query in friendly_name:
+            matches = False
+            if is_broad_query:
+                # Include useful primary domains in broad queries
+                if domain in ("light", "switch", "sensor", "climate", "cover", "media_player", "automation"):
+                    matches = True
+            else:
+                for q in query_variants:
+                    if q in entity_id.lower() or q in friendly_name or q == domain:
+                        matches = True
+                        break
+
+            if matches:
                 results.append(
                     {
                         "entity_id": entity_id,
                         "name": state.attributes.get("friendly_name", entity_id),
                         "state": state.state,
+                        "domain": domain,
                     }
                 )
-                if len(results) >= 10:
+                if len(results) >= 20:
                     break
 
-        return {"results": results, "count": len(results)}
+        resp: dict[str, Any] = {
+            "results": results,
+            "count": len(results),
+            "total_entities_in_ha": total_count,
+        }
+        if not results:
+            primary_domains = {
+                k: v for k, v in domain_counts.items()
+                if k in ("light", "switch", "sensor", "binary_sensor", "climate", "cover", "automation")
+            }
+            resp["hint"] = (
+                f"No entities matched query '{query}'. However, Home Assistant has {total_count} total entities "
+                f"configured across domains: {primary_domains}. Try searching by domain or broader keywords."
+            )
+        return resp
 
     if name == "ha_get_entity_state":
         entity_id = arguments.get("entity_id", "")
@@ -282,7 +328,7 @@ async def execute_builtin_tool(
             return {"status": "error", "message": str(err)}
 
     if name == "ha_create_automation":
-        alias = arguments.get("alias", "Nueva Automatización")
+        alias = arguments.get("alias", "New Automation")
         description = arguments.get("description", "")
         trigger = arguments.get("trigger", [])
         condition = arguments.get("condition", [])
@@ -336,13 +382,13 @@ async def execute_builtin_tool(
                 "status": "success",
                 "automation_id": auto_id,
                 "alias": alias,
-                "message": f"Automatización '{alias}' creada y activada correctamente en Home Assistant.",
+                "message": f"Automation '{alias}' created and activated successfully in Home Assistant.",
             }
         except Exception as err:
             _LOGGER.error("Failed to reload automations after save: %s", err)
             return {
                 "status": "warning",
-                "message": f"Automatización guardada pero falló la recarga: {err}",
+                "message": f"Automation saved but failed to reload: {err}",
             }
 
     return {"error": f"Unknown tool '{name}'."}

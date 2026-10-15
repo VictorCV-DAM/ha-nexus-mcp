@@ -24,6 +24,7 @@ class NexusMcpCard extends HTMLElement {
     this._conversationId = null;
     this._messages = [];
     this._isSending = false;
+    this._attachedImage = null;
   }
 
   static getStubConfig() {
@@ -116,8 +117,16 @@ class NexusMcpCard extends HTMLElement {
   _saveHistoryForAgent(agentId) {
     if (!agentId) return;
     try {
-      localStorage.setItem(`nexus_mcp_history_${agentId}`, JSON.stringify(this._messages.slice(-30)));
-    } catch (e) {}
+      const historyToSave = this._messages.slice(-30).map((m) => {
+        if (m.image && m.image.length > 50000) {
+          return { ...m, image: null, has_image: true };
+        }
+        return m;
+      });
+      localStorage.setItem(`nexus_mcp_history_${agentId}`, JSON.stringify(historyToSave));
+    } catch (e) {
+      console.warn("Could not save history to localStorage:", e);
+    }
   }
 
   _render() {
@@ -263,17 +272,56 @@ class NexusMcpCard extends HTMLElement {
         .message-bubble.assistant {
           align-self: flex-start;
         }
+        .bubble-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 4px;
+        }
+        .message-bubble.user .bubble-header {
+          flex-direction: row-reverse;
+        }
         .bubble-label {
           font-size: 0.72rem;
-          margin-bottom: 3px;
           font-weight: 500;
           color: var(--secondary-text-color, #888);
           display: flex;
           align-items: center;
           gap: 4px;
         }
-        .message-bubble.user .bubble-label {
-          justify-content: flex-end;
+        .bubble-copy-btn {
+          background: transparent;
+          border: none;
+          padding: 2px 4px;
+          cursor: pointer;
+          opacity: 0.5;
+          transition: opacity 0.2s, color 0.2s, transform 0.15s;
+          color: var(--secondary-text-color, #9e9e9e);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4px;
+        }
+        .bubble-copy-btn:hover {
+          opacity: 1;
+          color: var(--primary-text-color, #fff);
+          transform: scale(1.1);
+        }
+        .bubble-copy-btn.copied {
+          color: #4caf50 !important;
+          opacity: 1 !important;
+        }
+        .bubble-copy-btn ha-icon {
+          --mdc-icon-size: 15px;
+        }
+        .bubble-image {
+          max-width: 100%;
+          max-height: 220px;
+          border-radius: 8px;
+          margin-bottom: 8px;
+          display: block;
+          object-fit: contain;
+          background: rgba(0, 0, 0, 0.2);
         }
         .bubble-content {
           padding: 10px 14px;
@@ -282,6 +330,8 @@ class NexusMcpCard extends HTMLElement {
           line-height: 1.45;
           white-space: pre-wrap;
           word-break: break-word;
+          user-select: text;
+          -webkit-user-select: text;
         }
         .message-bubble.user .bubble-content {
           background: var(--primary-color, #0288d1);
@@ -294,6 +344,57 @@ class NexusMcpCard extends HTMLElement {
           border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
           border-bottom-left-radius: 4px;
         }
+        .image-preview-bar {
+          display: none;
+          align-items: center;
+          padding: 8px 14px;
+          background: var(--secondary-background-color, #232323);
+          border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+          gap: 12px;
+        }
+        .image-preview-bar.active {
+          display: flex;
+        }
+        .preview-box {
+          position: relative;
+          display: inline-block;
+        }
+        .preview-box img {
+          max-height: 56px;
+          max-width: 90px;
+          border-radius: 6px;
+          border: 1px solid var(--primary-color, #03a9f4);
+          display: block;
+          object-fit: cover;
+        }
+        .preview-remove-btn {
+          position: absolute;
+          top: -6px;
+          right: -6px;
+          background: rgba(30, 30, 30, 0.9);
+          color: #ff5252;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 50%;
+          width: 18px;
+          height: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          padding: 0;
+          transition: transform 0.15s;
+        }
+        .preview-remove-btn:hover {
+          transform: scale(1.15);
+        }
+        .preview-remove-btn ha-icon {
+          --mdc-icon-size: 14px;
+        }
+        .preview-caption {
+          font-size: 0.78rem;
+          color: var(--secondary-text-color, #aaa);
+          font-style: italic;
+        }
         .input-bar {
           display: flex;
           align-items: center;
@@ -301,6 +402,27 @@ class NexusMcpCard extends HTMLElement {
           padding: 10px 14px;
           border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
           background: var(--card-background-color, #1e1e1e);
+        }
+        .action-btn-attach {
+          background: transparent;
+          color: var(--secondary-text-color, #9e9e9e);
+          border: none;
+          border-radius: 50%;
+          width: 36px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: color 0.2s, background 0.2s;
+          flex-shrink: 0;
+        }
+        .action-btn-attach:hover {
+          color: var(--primary-text-color, #fff);
+          background: var(--secondary-background-color, rgba(255, 255, 255, 0.08));
+        }
+        .action-btn-attach ha-icon {
+          --mdc-icon-size: 22px;
         }
         .chat-input {
           flex: 1;
@@ -361,12 +483,26 @@ class NexusMcpCard extends HTMLElement {
 
         <div class="messages-container" id="messages-container"></div>
 
+        <div class="image-preview-bar" id="image-preview-bar">
+          <div class="preview-box">
+            <img id="preview-img" src="" alt="Vista previa" />
+            <button class="preview-remove-btn" id="btn-remove-image" title="Eliminar imagen">
+              <ha-icon icon="mdi:close"></ha-icon>
+            </button>
+          </div>
+          <span class="preview-caption">Imagen adjunta (lista para enviar)</span>
+        </div>
+
         <div class="input-bar">
+          <input type="file" id="file-input" accept="image/*" style="display: none;" />
+          <button class="action-btn-attach" id="btn-attach" title="Adjuntar imagen (o pega con Ctrl+V)">
+            <ha-icon icon="mdi:paperclip"></ha-icon>
+          </button>
           <input
             type="text"
             class="chat-input"
             id="chat-input"
-            placeholder="Escribe un mensaje a la IA..."
+            placeholder="Escribe un mensaje o pega una imagen (Ctrl+V)..."
             autocomplete="off"
           />
           <button class="action-btn" id="btn-send" title="Enviar">
@@ -387,11 +523,14 @@ class NexusMcpCard extends HTMLElement {
     const resetBtn = this.shadowRoot.getElementById("btn-reset");
     const assistBtn = this.shadowRoot.getElementById("btn-assist");
     const agentSelect = this.shadowRoot.getElementById("agent-select");
+    const attachBtn = this.shadowRoot.getElementById("btn-attach");
+    const fileInput = this.shadowRoot.getElementById("file-input");
+    const removeImgBtn = this.shadowRoot.getElementById("btn-remove-image");
 
     if (input && sendBtn) {
       const handleSend = () => {
         const text = input.value.trim();
-        if (text && !this._isSending) {
+        if ((text || this._attachedImage) && !this._isSending) {
           this._sendMessage(text);
           input.value = "";
         }
@@ -404,6 +543,57 @@ class NexusMcpCard extends HTMLElement {
           handleSend();
         }
       };
+    }
+
+    // Attachment file input
+    if (attachBtn && fileInput) {
+      attachBtn.onclick = () => fileInput.click();
+      fileInput.onchange = (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            this._setAttachedImage(ev.target.result);
+          };
+          reader.readAsDataURL(file);
+        }
+        fileInput.value = "";
+      };
+    }
+
+    // Remove attached image
+    if (removeImgBtn) {
+      removeImgBtn.onclick = () => {
+        this._setAttachedImage(null);
+      };
+    }
+
+    // Paste image from clipboard (Ctrl+V) anywhere on input or card
+    const handlePaste = (e) => {
+      const items = (e.clipboardData || window.clipboardData)?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.startsWith("image/")) {
+          e.preventDefault();
+          const file = items[i].getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              this._setAttachedImage(ev.target.result);
+            };
+            reader.readAsDataURL(file);
+          }
+          break;
+        }
+      }
+    };
+
+    if (input) {
+      input.addEventListener("paste", handlePaste);
+    }
+    const cardEl = this.shadowRoot.querySelector("ha-card");
+    if (cardEl) {
+      cardEl.addEventListener("paste", handlePaste);
     }
 
     if (agentSelect) {
@@ -431,6 +621,22 @@ class NexusMcpCard extends HTMLElement {
       configBtn.onclick = () => {
         this._openConfiguration();
       };
+    }
+  }
+
+  _setAttachedImage(dataUrl) {
+    this._attachedImage = dataUrl;
+    if (!this.shadowRoot) return;
+    const previewBar = this.shadowRoot.getElementById("image-preview-bar");
+    const previewImg = this.shadowRoot.getElementById("preview-img");
+    if (previewBar && previewImg) {
+      if (dataUrl) {
+        previewImg.src = dataUrl;
+        previewBar.classList.add("active");
+      } else {
+        previewImg.src = "";
+        previewBar.classList.remove("active");
+      }
     }
   }
 
@@ -463,32 +669,74 @@ class NexusMcpCard extends HTMLElement {
         <div class="empty-state">
           <ha-icon icon="mdi:chat-outline"></ha-icon>
           <div>Sin mensajes con esta IA.</div>
-          <small>Escribe abajo o pulsa el micrófono para hablar.</small>
+          <small>Escribe abajo, pega una imagen (Ctrl+V) o pulsa el micrófono.</small>
         </div>
       `;
       return;
     }
 
     let html = "";
-    for (const msg of this._messages) {
+    this._messages.forEach((msg, idx) => {
       const isUser = msg.role === "user";
       const label = isUser ? "🧑 Tú" : "🤖 " + (msg.agent_name || "IA");
       const content = (msg.content || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const imageHtml = msg.image
+        ? `<img class="bubble-image" src="${msg.image}" alt="Imagen adjunta" />`
+        : "";
 
       html += `
         <div class="message-bubble ${isUser ? "user" : "assistant"}">
-          <div class="bubble-label">${label}</div>
-          <div class="bubble-content">${content}</div>
+          <div class="bubble-header">
+            <div class="bubble-label">${label}</div>
+            <button class="bubble-copy-btn" data-index="${idx}" title="Copiar texto al portapapeles">
+              <ha-icon icon="mdi:content-copy"></ha-icon>
+            </button>
+          </div>
+          <div class="bubble-content">${imageHtml}${content}</div>
         </div>
       `;
-    }
+    });
 
     container.innerHTML = html;
     container.scrollTop = container.scrollHeight;
+
+    // Attach copy button click events
+    const copyButtons = container.querySelectorAll(".bubble-copy-btn");
+    copyButtons.forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.getAttribute("data-index"), 10);
+        const msg = this._messages[idx];
+        if (!msg) return;
+        const textToCopy = msg.content || "";
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(textToCopy);
+          } else {
+            const textarea = document.createElement("textarea");
+            textarea.value = textToCopy;
+            textarea.style.position = "fixed";
+            textarea.style.opacity = "0";
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
+          }
+          btn.classList.add("copied");
+          btn.innerHTML = `<ha-icon icon="mdi:check"></ha-icon>`;
+          setTimeout(() => {
+            btn.classList.remove("copied");
+            btn.innerHTML = `<ha-icon icon="mdi:content-copy"></ha-icon>`;
+          }, 1800);
+        } catch (err) {
+          console.error("Nexus MCP Card: Failed to copy text:", err);
+        }
+      };
+    });
   }
 
   async _sendMessage(text) {
-    if (!this._hass || !text || this._isSending) return;
+    if (!this._hass || (!text && !this._attachedImage) || this._isSending) return;
     this._isSending = true;
 
     const agentId = this._selectedAgent;
@@ -496,10 +744,16 @@ class NexusMcpCard extends HTMLElement {
     const currentAgent = agents.find((a) => a.id === agentId);
     const agentName = currentAgent ? currentAgent.name : "Nexus MCP";
 
+    const imageToSend = this._attachedImage;
+    this._setAttachedImage(null);
+
+    const messageText = text || (imageToSend ? "Analiza esta imagen adjunta." : "");
+
     // 1. Add user message
     this._messages.push({
       role: "user",
-      content: text,
+      content: messageText,
+      image: imageToSend,
       timestamp: Date.now(),
     });
     this._saveHistoryForAgent(agentId);
@@ -511,8 +765,10 @@ class NexusMcpCard extends HTMLElement {
       const waitingBubble = document.createElement("div");
       waitingBubble.className = "message-bubble assistant waiting-bubble";
       waitingBubble.innerHTML = `
-        <div class="bubble-label">🤖 ${agentName}</div>
-        <div class="bubble-content" style="font-style: italic; opacity: 0.7;">Pensando...</div>
+        <div class="bubble-header">
+          <div class="bubble-label">🤖 ${agentName}</div>
+        </div>
+        <div class="bubble-content" style="font-style: italic; opacity: 0.7;">${imageToSend ? "Analizando imagen y pensando..." : "Pensando..."}</div>
       `;
       container.appendChild(waitingBubble);
       container.scrollTop = container.scrollHeight;
@@ -522,27 +778,46 @@ class NexusMcpCard extends HTMLElement {
     if (sendBtn) sendBtn.disabled = true;
 
     try {
-      // Direct call via Home Assistant WebSocket conversation/process
-      const payload = {
-        type: "conversation/process",
-        text: text,
-      };
-      if (agentId) {
-        payload.agent_id = agentId;
-      }
-      if (this._conversationId) {
-        payload.conversation_id = this._conversationId;
-      }
+      let reply = "";
+      if (imageToSend) {
+        // Direct call via custom multimodal WebSocket nexus_mcp/chat
+        const payload = {
+          type: "nexus_mcp/chat",
+          text: messageText,
+          image: imageToSend,
+          agent_id: agentId,
+          conversation_id: this._conversationId || undefined,
+        };
+        const res = await this._hass.callWS(payload);
+        reply =
+          res?.response?.speech?.plain?.speech ||
+          res?.response?.card?.text ||
+          "Imagen procesada correctamente.";
+        if (res?.conversation_id) {
+          this._conversationId = res.conversation_id;
+        }
+      } else {
+        // Direct call via standard Home Assistant WebSocket conversation/process
+        const payload = {
+          type: "conversation/process",
+          text: messageText,
+        };
+        if (agentId) {
+          payload.agent_id = agentId;
+        }
+        if (this._conversationId) {
+          payload.conversation_id = this._conversationId;
+        }
 
-      const res = await this._hass.callWS(payload);
-      
-      const reply =
-        res?.response?.speech?.plain?.speech ||
-        res?.response?.card?.text ||
-        "Comando procesado correctamente.";
+        const res = await this._hass.callWS(payload);
+        reply =
+          res?.response?.speech?.plain?.speech ||
+          res?.response?.card?.text ||
+          "Comando procesado correctamente.";
 
-      if (res?.conversation_id) {
-        this._conversationId = res.conversation_id;
+        if (res?.conversation_id) {
+          this._conversationId = res.conversation_id;
+        }
       }
 
       // Add assistant response to history
@@ -722,7 +997,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.3.0 Multi-Agent Ready ",
+  "%c NEXUS MCP CARD %c v1.3.1 Vision & Copy Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );

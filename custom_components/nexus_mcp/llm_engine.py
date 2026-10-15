@@ -69,6 +69,7 @@ class ChatMessage:
     tool_calls: list[LlmToolCall] = field(default_factory=list)
     tool_call_id: str | None = None  # Used when role is "tool" (call ID for OpenAI)
     tool_name: str | None = None  # Function name for Gemini functionResponse
+    image_data: str | None = None  # Base64 Data URL for multimodal image analysis
 
 
 @dataclass
@@ -151,7 +152,12 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
 
         for msg in messages:
             msg_dict: dict[str, Any] = {"role": msg.role}
-            if msg.content is not None:
+            if msg.image_data and msg.role == "user":
+                msg_dict["content"] = [
+                    {"type": "text", "text": msg.content or ""},
+                    {"type": "image_url", "image_url": {"url": msg.image_data}},
+                ]
+            elif msg.content is not None:
                 msg_dict["content"] = msg.content
             if msg.role == "tool" and msg.tool_call_id:
                 msg_dict["tool_call_id"] = msg.tool_call_id
@@ -313,6 +319,16 @@ class GeminiEngine(BaseLlmEngine):
             parts: list[dict[str, Any]] = []
             if msg.content and msg.role != "tool":
                 parts.append({"text": msg.content})
+
+            if msg.image_data and msg.role == "user":
+                img_str = msg.image_data
+                mime_type = "image/jpeg"
+                if "," in img_str and ";base64" in img_str:
+                    header, b64_data = img_str.split(",", 1)
+                    mime_type = header.split(";")[0].replace("data:", "")
+                else:
+                    b64_data = img_str
+                parts.append({"inlineData": {"mimeType": mime_type, "data": b64_data}})
 
             if msg.tool_calls:
                 for tc in msg.tool_calls:

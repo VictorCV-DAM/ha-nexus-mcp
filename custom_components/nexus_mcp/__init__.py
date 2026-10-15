@@ -123,6 +123,90 @@ def _async_setup_services(hass: HomeAssistant) -> None:
     if not hass.services.has_service(DOMAIN, "clear_history"):
         hass.services.async_register(DOMAIN, "clear_history", handle_clear_history)
 
+    # Register multimodal WebSocket handler
+    _async_setup_websocket(hass)
+
+
+def _async_setup_websocket(hass: HomeAssistant) -> None:
+    """Register Nexus MCP WebSocket command for multimodal chat."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if domain_data.get("ws_registered"):
+        return
+
+    try:
+        from homeassistant.components import websocket_api
+        import voluptuous as vol
+
+        @websocket_api.websocket_command(
+            {
+                vol.Required("type"): "nexus_mcp/chat",
+                vol.Required("text"): str,
+                vol.Optional("image"): str,
+                vol.Optional("agent_id"): str,
+                vol.Optional("conversation_id"): str,
+            }
+        )
+        @websocket_api.async_response
+        async def ws_handle_chat(
+            hass: HomeAssistant,
+            connection: websocket_api.ActiveConnection,
+            msg: dict[str, Any],
+        ) -> None:
+            """Handle chat with optional image."""
+            text = msg["text"]
+            image = msg.get("image")
+            agent_id = msg.get("agent_id")
+            conversation_id = msg.get("conversation_id") or "nexus_chat"
+
+            # Find matching conversation entity
+            domain_entries = hass.data.get(DOMAIN, {})
+            conv_entity = None
+            if agent_id:
+                for eid, data in domain_entries.items():
+                    if isinstance(data, dict):
+                        ce = data.get("conversation_entity")
+                        if ce and (eid in agent_id or getattr(ce, "entity_id", "") == agent_id):
+                            conv_entity = ce
+                            break
+            if not conv_entity:
+                for data in domain_entries.values():
+                    if isinstance(data, dict):
+                        ce = data.get("conversation_entity")
+                        if ce:
+                            conv_entity = ce
+                            break
+
+            if not conv_entity:
+                connection.send_error(msg["id"], "not_found", "No Nexus MCP agent found")
+                return
+
+            try:
+                reply = await conv_entity.async_chat_process(
+                    text=text,
+                    image_data=image,
+                    conversation_id=conversation_id,
+                )
+                connection.send_result(
+                    msg["id"],
+                    {
+                        "response": {
+                            "speech": {
+                                "plain": {
+                                    "speech": reply,
+                                }
+                            }
+                        },
+                        "conversation_id": conversation_id,
+                    },
+                )
+            except Exception as err:
+                connection.send_error(msg["id"], "chat_error", str(err))
+
+        websocket_api.async_register_command(hass, ws_handle_chat)
+        domain_data["ws_registered"] = True
+    except Exception as err:
+        _LOGGER.debug("Could not register nexus_mcp websocket command: %s", err)
+
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up the Nexus MCP integration and global services."""
