@@ -1347,8 +1347,14 @@ class NexusMcpCard extends HTMLElement {
 }
 
 class NexusMcpCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this._config = {};
+    this._hass = null;
+  }
+
   setConfig(config) {
-    this._config = config;
+    this._config = config || {};
     this._render();
   }
 
@@ -1357,9 +1363,15 @@ class NexusMcpCardEditor extends HTMLElement {
     this._render();
   }
 
-  _render() {
-    if (!this._hass) return;
+  _isSpanish() {
+    const lang = this._hass?.locale?.language || this._hass?.language || navigator.language || "en";
+    return String(lang).toLowerCase().startsWith("es");
+  }
 
+  _render() {
+    if (!this._hass || !this._config) return;
+
+    const isEs = this._isSpanish();
     const agents = Object.keys(this._hass.states)
       .filter((e) => e.startsWith("conversation."))
       .map((id) => ({
@@ -1367,31 +1379,38 @@ class NexusMcpCardEditor extends HTMLElement {
         name: this._hass.states[id].attributes?.friendly_name || id,
       }));
 
-    let optionsHtml = `<option value="">(Automático / Selector en vivo)</option>`;
+    const autoLabel = isEs ? "(Automático / Selector en vivo)" : "(Automatic / Live Selector)";
+    let optionsHtml = `<option value="">${autoLabel}</option>`;
     for (const ag of agents) {
       const isSel = this._config?.agent_id === ag.id ? "selected" : "";
       optionsHtml += `<option value="${ag.id}" ${isSel}>${ag.name}</option>`;
     }
 
+    const titleLabel = isEs ? "Título de la tarjeta" : "Card Title";
+    const agentLabel = isEs ? "IA / Agente predeterminado (Opcional)" : "Default AI / Agent (Optional)";
+    const tipLabel = isEs
+      ? "La tarjeta incluye un selector en su cabecera para cambiar de modelo de IA al vuelo."
+      : "The card includes a live selector in its header to switch AI models on the fly.";
+
     this.innerHTML = `
       <div style="padding: 16px; display: flex; flex-direction: column; gap: 14px;">
         <label style="display: flex; flex-direction: column; gap: 4px; font-weight: 500;">
-          Título de la tarjeta
+          ${titleLabel}
           <input
             type="text"
             id="cfg-title"
-            value="${this._config.title || "Nexus MCP Intercom"}"
+            value="${(this._config && this._config.title) || "Nexus MCP Intercom"}"
             style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc);"
           />
         </label>
         <label style="display: flex; flex-direction: column; gap: 4px; font-weight: 500;">
-          IA / Agente predeterminado (Opcional)
+          ${agentLabel}
           <select id="cfg-agent" style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc);">
             ${optionsHtml}
           </select>
         </label>
         <small style="color: var(--secondary-text-color, #666);">
-          La tarjeta incluye un selector en su cabecera para cambiar de modelo de IA al vuelo.
+          ${tipLabel}
         </small>
       </div>
     `;
@@ -1402,8 +1421,8 @@ class NexusMcpCardEditor extends HTMLElement {
     const handleChange = () => {
       const newConfig = {
         ...this._config,
-        title: titleInput.value,
-        agent_id: agentSelect.value || undefined,
+        title: titleInput ? titleInput.value : (this._config.title || "Nexus MCP Intercom"),
+        agent_id: agentSelect && agentSelect.value ? agentSelect.value : undefined,
       };
       const event = new CustomEvent("config-changed", {
         detail: { config: newConfig },
