@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.3.6)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.4.0)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
