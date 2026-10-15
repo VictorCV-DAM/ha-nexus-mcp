@@ -192,6 +192,117 @@ class TestSensorHistory(unittest.IsolatedAsyncioTestCase):
             await _async_register_frontend(mock_hass)
             mock_add_js.assert_called_once()
 
+    async def test_sensor_setup_entry_cloud_provider(self) -> None:
+        """Test async_setup_entry adds 3 entities for cloud providers (Gemini, Groq, etc.)."""
+        from custom_components.nexus_mcp.const import CONF_LLM_PROVIDER, PROVIDER_GROQ_FREE
+        from custom_components.nexus_mcp.sensor import (
+            NexusMcpHistorySensor,
+            NexusMcpRateLimitResetSensor,
+            NexusMcpTokenSensor,
+        )
+
+        cloud_entry = MagicMock()
+        cloud_entry.entry_id = "cloud_entry_123"
+        cloud_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GROQ_FREE}
+        cloud_entry.options = {}
+
+        added_entities = []
+        await async_setup_sensor_entry(
+            self.hass, cloud_entry, lambda entities: added_entities.extend(entities)
+        )
+        self.assertEqual(len(added_entities), 3)
+        self.assertIsInstance(added_entities[0], NexusMcpHistorySensor)
+        self.assertIsInstance(added_entities[1], NexusMcpTokenSensor)
+        self.assertIsInstance(added_entities[2], NexusMcpRateLimitResetSensor)
+
+    async def test_sensor_setup_entry_local_ollama_skips_rate_limits(self) -> None:
+        """Test async_setup_entry adds only history sensor for local models like Ollama."""
+        from custom_components.nexus_mcp.const import CONF_LLM_PROVIDER, PROVIDER_OLLAMA_LOCAL
+        from custom_components.nexus_mcp.sensor import NexusMcpHistorySensor
+
+        local_entry = MagicMock()
+        local_entry.entry_id = "ollama_entry_456"
+        local_entry.data = {CONF_LLM_PROVIDER: PROVIDER_OLLAMA_LOCAL}
+        local_entry.options = {}
+
+        added_entities = []
+        await async_setup_sensor_entry(
+            self.hass, local_entry, lambda entities: added_entities.extend(entities)
+        )
+        # For local models, rate limit and token quota sensors must NOT be created
+        self.assertEqual(len(added_entities), 1)
+        self.assertIsInstance(added_entities[0], NexusMcpHistorySensor)
+
+    def test_token_sensor_metrics_and_attributes(self) -> None:
+        """Test NexusMcpTokenSensor extracts daily metrics and rate limits from conversation entity."""
+        from custom_components.nexus_mcp.sensor import NexusMcpTokenSensor
+
+        token_sensor = NexusMcpTokenSensor(self.hass, self.entry)
+        self.assertEqual(token_sensor.native_value, 0)
+
+        # Mock conversation entity with telemetry
+        mock_conv_entity = MagicMock()
+        mock_conv_entity.telemetry = {
+            "tokens_today": 8420,
+            "prompt_tokens_today": 6000,
+            "completion_tokens_today": 2420,
+            "last_prompt_tokens": 1200,
+            "last_completion_tokens": 450,
+            "last_total_tokens": 1650,
+            "model": "openai/gpt-oss-120b",
+            "provider": "groq_free",
+            "remaining_tokens": 7180,
+            "limit_tokens": 8000,
+            "remaining_requests": 29,
+            "limit_requests": 30,
+            "date": "2026-10-15",
+            "last_updated": "2026-10-15T20:00:00+00:00",
+        }
+        self.hass.data[DOMAIN][self.entry.entry_id]["conversation_entity"] = mock_conv_entity
+
+        self.assertEqual(token_sensor.native_value, 8420)
+        attrs = token_sensor.extra_state_attributes
+        self.assertEqual(attrs["prompt_tokens_today"], 6000)
+        self.assertEqual(attrs["completion_tokens_today"], 2420)
+        self.assertEqual(attrs["last_total_tokens"], 1650)
+        self.assertEqual(attrs["remaining_tokens_minute"], 7180)
+        self.assertEqual(attrs["limit_tokens_minute"], 8000)
+        self.assertEqual(attrs["model"], "openai/gpt-oss-120b")
+
+    def test_rate_limit_reset_sensor_idle_and_throttled(self) -> None:
+        """Test NexusMcpRateLimitResetSensor returns 0 when idle and countdown when throttled."""
+        import datetime
+        from custom_components.nexus_mcp.sensor import NexusMcpRateLimitResetSensor
+
+        reset_sensor = NexusMcpRateLimitResetSensor(self.hass, self.entry)
+        self.assertEqual(reset_sensor.native_value, 0.0)
+        self.assertEqual(reset_sensor.extra_state_attributes["status"], "ready")
+
+        # Mock throttled state in conversation entity
+        mock_conv_entity = MagicMock()
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        reset_time = now_utc + datetime.timedelta(seconds=4.5)
+        mock_conv_entity.telemetry = {
+            "rate_limit_status": "throttled",
+            "rate_limit_reset_seconds": 4.5,
+            "rate_limit_reset_at": reset_time.isoformat(),
+            "model": "openai/gpt-oss-20b",
+            "provider": "groq_free",
+            "remaining_tokens": 0,
+            "limit_tokens": 8000,
+        }
+        self.hass.data[DOMAIN][self.entry.entry_id]["conversation_entity"] = mock_conv_entity
+
+        val = reset_sensor.native_value
+        self.assertGreater(val, 0.0)
+        self.assertLessEqual(val, 5.0)
+
+        attrs = reset_sensor.extra_state_attributes
+        self.assertEqual(attrs["status"], "throttled")
+        self.assertEqual(attrs["last_reset_duration"], 4.5)
+        self.assertEqual(attrs["model"], "openai/gpt-oss-20b")
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -1,10 +1,15 @@
-"""Sensor platform for Nexus MCP conversation history and dashboard visualization."""
+"""Sensor platform for Nexus MCP conversation history, daily token usage, and rate limit telemetry."""
 from __future__ import annotations
 
+import datetime
 import logging
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
+try:
+    from homeassistant.components.sensor import SensorStateClass
+except (ImportError, AttributeError):
+    SensorStateClass = None
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 try:
@@ -13,7 +18,15 @@ except (ImportError, AttributeError):
     async_dispatcher_connect = None
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import (
+    CONF_LLM_PROVIDER,
+    CONF_MODEL,
+    DOMAIN,
+    PROVIDER_CUSTOM_OPENAI,
+    PROVIDER_GEMINI_FREE,
+    PROVIDER_GROQ_FREE,
+    PROVIDER_QWEN_FREE,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,8 +36,36 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Nexus MCP history sensor."""
-    async_add_entities([NexusMcpHistorySensor(hass, entry)])
+    """Set up the Nexus MCP sensors based on model capabilities."""
+    provider = entry.options.get(
+        CONF_LLM_PROVIDER, entry.data.get(CONF_LLM_PROVIDER, "")
+    )
+
+    entities: list[SensorEntity] = [NexusMcpHistorySensor(hass, entry)]
+
+    # Token usage sensor: Only for providers that track and report token usage
+    # (Cloud providers with tokens: Groq, Gemini, Qwen, Custom OpenAI).
+    # Local models (Ollama) have no remote quotas or token limits.
+    if provider in (
+        PROVIDER_GEMINI_FREE,
+        PROVIDER_GROQ_FREE,
+        PROVIDER_QWEN_FREE,
+        PROVIDER_CUSTOM_OPENAI,
+    ):
+        entities.append(NexusMcpTokenSensor(hass, entry))
+
+    # Real-time rate limit / renewal countdown sensor:
+    # Only for cloud providers that have tokens-per-minute (TPM) or request quotas.
+    # Excluded for local models like Ollama where rate limits do not exist.
+    if provider in (
+        PROVIDER_GROQ_FREE,
+        PROVIDER_GEMINI_FREE,
+        PROVIDER_QWEN_FREE,
+        PROVIDER_CUSTOM_OPENAI,
+    ):
+        entities.append(NexusMcpRateLimitResetSensor(hass, entry))
+
+    async_add_entities(entities)
 
 
 class NexusMcpHistorySensor(SensorEntity):
@@ -40,6 +81,20 @@ class NexusMcpHistorySensor(SensorEntity):
         self.entry = entry
         self._attr_unique_id = f"{entry.entry_id}_conversation_history"
         self._attr_name = "Historial de Conversaciones"
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Link sensor to the Nexus MCP device."""
+        model_name = self.entry.options.get(
+            CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent")
+        )
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": f"Nexus MCP ({model_name})",
+            "manufacturer": "Nexus MCP",
+            "model": model_name,
+            "sw_version": "1.3.4",
+        }
 
     async def async_added_to_hass(self) -> None:
         """Register dispatcher when entity is added."""
@@ -140,4 +195,186 @@ class NexusMcpHistorySensor(SensorEntity):
             "last_assistant_response": last_assistant_response,
             "history": raw_list,
             "formatted_markdown": formatted_md,
+        }
+
+
+class NexusMcpTokenSensor(SensorEntity):
+    """Sensor exposing daily token consumption and telemetry for the LLM model."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_icon = "mdi:chart-timeline-variant-shimmer"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the token sensor."""
+        self.hass = hass
+        self.entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_daily_tokens"
+        self._attr_name = "Consumo de Tokens Diario"
+        self._attr_native_unit_of_measurement = "tokens"
+        self._attr_state_class = getattr(SensorStateClass, "TOTAL_INCREASING", "total_increasing")
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Link sensor to the Nexus MCP device."""
+        model_name = self.entry.options.get(
+            CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent")
+        )
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": f"Nexus MCP ({model_name})",
+            "manufacturer": "Nexus MCP",
+            "model": model_name,
+            "sw_version": "1.3.4",
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Register dispatcher when entity is added."""
+        if hasattr(super(), "async_added_to_hass"):
+            await super().async_added_to_hass()
+
+        if async_dispatcher_connect:
+            signal = f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
+            self.async_on_remove(
+                async_dispatcher_connect(self.hass, signal, self._handle_telemetry_updated)
+            )
+
+    @callback
+    def _handle_telemetry_updated(self) -> None:
+        """Handle telemetry update signal."""
+        self.async_write_ha_state()
+
+    @property
+    def _conversation_entity(self) -> Any:
+        """Retrieve the associated conversation entity from hass.data."""
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
+        return entry_data.get("conversation_entity")
+
+    @property
+    def native_value(self) -> int:
+        """Return the total tokens used today."""
+        conv_entity = self._conversation_entity
+        if not conv_entity:
+            return 0
+        telem = getattr(conv_entity, "telemetry", {})
+        return int(telem.get("tokens_today", 0))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return detailed token telemetry attributes."""
+        conv_entity = self._conversation_entity
+        if not conv_entity:
+            return {
+                "prompt_tokens_today": 0,
+                "completion_tokens_today": 0,
+                "last_total_tokens": 0,
+            }
+        telem = getattr(conv_entity, "telemetry", {})
+        return {
+            "prompt_tokens_today": telem.get("prompt_tokens_today", 0),
+            "completion_tokens_today": telem.get("completion_tokens_today", 0),
+            "last_prompt_tokens": telem.get("last_prompt_tokens", 0),
+            "last_completion_tokens": telem.get("last_completion_tokens", 0),
+            "last_total_tokens": telem.get("last_total_tokens", 0),
+            "model": telem.get("model", ""),
+            "provider": telem.get("provider", ""),
+            "remaining_tokens_minute": telem.get("remaining_tokens"),
+            "limit_tokens_minute": telem.get("limit_tokens"),
+            "remaining_requests_minute": telem.get("remaining_requests"),
+            "limit_requests_minute": telem.get("limit_requests"),
+            "date": telem.get("date"),
+            "last_updated": telem.get("last_updated"),
+        }
+
+
+class NexusMcpRateLimitResetSensor(SensorEntity):
+    """Sensor exposing real-time countdown / seconds until next rate limit renewal."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_icon = "mdi:timer-sand"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the rate limit reset sensor."""
+        self.hass = hass
+        self.entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_rate_limit_reset"
+        self._attr_name = "Tiempo Desbloqueo Rate Limit"
+        self._attr_native_unit_of_measurement = "s"
+        self._attr_suggested_display_precision = 1
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Link sensor to the Nexus MCP device."""
+        model_name = self.entry.options.get(
+            CONF_MODEL, self.entry.data.get(CONF_MODEL, "Agent")
+        )
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": f"Nexus MCP ({model_name})",
+            "manufacturer": "Nexus MCP",
+            "model": model_name,
+            "sw_version": "1.3.4",
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Register dispatcher when entity is added."""
+        if hasattr(super(), "async_added_to_hass"):
+            await super().async_added_to_hass()
+
+        if async_dispatcher_connect:
+            signal = f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
+            self.async_on_remove(
+                async_dispatcher_connect(self.hass, signal, self._handle_telemetry_updated)
+            )
+
+    @callback
+    def _handle_telemetry_updated(self) -> None:
+        """Handle telemetry update signal."""
+        self.async_write_ha_state()
+
+    @property
+    def _conversation_entity(self) -> Any:
+        """Retrieve the associated conversation entity from hass.data."""
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
+        return entry_data.get("conversation_entity")
+
+    @property
+    def native_value(self) -> float:
+        """Return remaining seconds until rate limit unblock/reset (0 if ready)."""
+        conv_entity = self._conversation_entity
+        if not conv_entity:
+            return 0.0
+        telem = getattr(conv_entity, "telemetry", {})
+        reset_at_iso = telem.get("rate_limit_reset_at")
+        if not reset_at_iso:
+            return 0.0
+        try:
+            reset_dt = datetime.datetime.fromisoformat(reset_at_iso)
+            now_dt = datetime.datetime.now(datetime.timezone.utc)
+            diff = (reset_dt - now_dt).total_seconds()
+            if diff > 0:
+                return round(diff, 1)
+        except Exception:
+            pass
+        return 0.0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return rate limit details."""
+        conv_entity = self._conversation_entity
+        if not conv_entity:
+            return {"status": "ready"}
+        telem = getattr(conv_entity, "telemetry", {})
+        rem_sec = self.native_value
+        return {
+            "status": "throttled" if rem_sec > 0 else "ready",
+            "reset_at": telem.get("rate_limit_reset_at"),
+            "last_reset_duration": telem.get("rate_limit_reset_seconds", 0.0),
+            "model": telem.get("model", ""),
+            "provider": telem.get("provider", ""),
+            "remaining_tokens_minute": telem.get("remaining_tokens"),
+            "limit_tokens_minute": telem.get("limit_tokens"),
+            "remaining_requests_minute": telem.get("remaining_requests"),
+            "limit_requests_minute": telem.get("limit_requests"),
         }

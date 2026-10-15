@@ -72,7 +72,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     # Register extra JS URL so Home Assistant frontend loads the card automatically
     if add_extra_js_url:
         try:
-            add_extra_js_url(hass, f"{url_path}?v=1.3.3.1")
+            add_extra_js_url(hass, f"{url_path}?v=1.3.4")
         except Exception as err:
             _LOGGER.debug("Could not add extra JS URL: %s", err)
 
@@ -95,12 +95,12 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
                 if getattr(resources, "async_create_item", None):
                     await resources.async_create_item({
                         "res_type": "module",
-                        "url": f"{url_path}?v=1.3.3.1",
+                        "url": f"{url_path}?v=1.3.4",
                     })
                 elif getattr(resources, "data", None) and getattr(resources.data, "append", None):
                     resources.data.append({
                         "type": "module",
-                        "url": f"{url_path}?v=1.3.3.1",
+                        "url": f"{url_path}?v=1.3.4",
                     })
     except Exception as err:
         _LOGGER.debug("Could not auto-register Lovelace resource: %s", err)

@@ -120,7 +120,32 @@ class NexusMcpConversationEntity(ConversationEntity):
         self._attr_unique_id = f"{entry.entry_id}_conversation"
         merged_config = {**entry.data, **entry.options}
         model_name = merged_config.get(CONF_MODEL) or merged_config.get(CONF_LLM_PROVIDER, "agent")
+        self._model_name = model_name
+        self._provider = merged_config.get(CONF_LLM_PROVIDER, "")
         self._attr_name = f"Nexus MCP Intercom ({model_name})"
+
+        # Daily telemetry and rate limit tracking
+        import datetime
+        today_str = datetime.date.today().isoformat()
+        self._telemetry: dict[str, Any] = {
+            "date": today_str,
+            "tokens_today": 0,
+            "prompt_tokens_today": 0,
+            "completion_tokens_today": 0,
+            "last_prompt_tokens": 0,
+            "last_completion_tokens": 0,
+            "last_total_tokens": 0,
+            "rate_limit_reset_seconds": 0.0,
+            "rate_limit_reset_at": None,
+            "rate_limit_status": "ok",
+            "model": self._model_name,
+            "provider": self._provider,
+            "remaining_tokens": None,
+            "limit_tokens": None,
+            "remaining_requests": None,
+            "limit_requests": None,
+            "last_updated": None,
+        }
 
         # Conversation history buffer: conversation_id -> list[ChatMessage]
         self._history: dict[str, list[ChatMessage]] = {}
@@ -154,6 +179,95 @@ class NexusMcpConversationEntity(ConversationEntity):
         hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
         hass.data[DOMAIN][entry.entry_id]["conversation_entity"] = self
 
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Link conversation entity to device in Home Assistant device registry."""
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": f"Nexus MCP ({self._model_name})",
+            "manufacturer": "Nexus MCP",
+            "model": self._model_name,
+            "sw_version": "1.3.4",
+        }
+
+    @property
+    def telemetry(self) -> dict[str, Any]:
+        """Return live telemetry metrics."""
+        return self._telemetry
+
+    def record_usage(self, usage: dict[str, Any], rate_limits: dict[str, Any] | None = None) -> None:
+        """Record token usage and rate limits from engine response."""
+        import datetime
+        today_str = datetime.date.today().isoformat()
+        if self._telemetry.get("date") != today_str:
+            self._telemetry["date"] = today_str
+            self._telemetry["tokens_today"] = 0
+            self._telemetry["prompt_tokens_today"] = 0
+            self._telemetry["completion_tokens_today"] = 0
+
+        p_tokens = int(usage.get("prompt_tokens") or 0)
+        c_tokens = int(usage.get("completion_tokens") or 0)
+        t_tokens = int(usage.get("total_tokens") or (p_tokens + c_tokens))
+
+        self._telemetry["tokens_today"] += t_tokens
+        self._telemetry["prompt_tokens_today"] += p_tokens
+        self._telemetry["completion_tokens_today"] += c_tokens
+        self._telemetry["last_prompt_tokens"] = p_tokens
+        self._telemetry["last_completion_tokens"] = c_tokens
+        self._telemetry["last_total_tokens"] = t_tokens
+        self._telemetry["rate_limit_status"] = "ok"
+        self._telemetry["rate_limit_reset_seconds"] = 0.0
+        self._telemetry["rate_limit_reset_at"] = None
+        self._telemetry["last_updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        if rate_limits:
+            if "x-ratelimit-remaining-tokens" in rate_limits:
+                try:
+                    self._telemetry["remaining_tokens"] = int(rate_limits["x-ratelimit-remaining-tokens"])
+                except (ValueError, TypeError):
+                    self._telemetry["remaining_tokens"] = rate_limits["x-ratelimit-remaining-tokens"]
+            if "x-ratelimit-limit-tokens" in rate_limits:
+                try:
+                    self._telemetry["limit_tokens"] = int(rate_limits["x-ratelimit-limit-tokens"])
+                except (ValueError, TypeError):
+                    self._telemetry["limit_tokens"] = rate_limits["x-ratelimit-limit-tokens"]
+            if "x-ratelimit-remaining-requests" in rate_limits:
+                try:
+                    self._telemetry["remaining_requests"] = int(rate_limits["x-ratelimit-remaining-requests"])
+                except (ValueError, TypeError):
+                    self._telemetry["remaining_requests"] = rate_limits["x-ratelimit-remaining-requests"]
+            if "x-ratelimit-limit-requests" in rate_limits:
+                try:
+                    self._telemetry["limit_requests"] = int(rate_limits["x-ratelimit-limit-requests"])
+                except (ValueError, TypeError):
+                    self._telemetry["limit_requests"] = rate_limits["x-ratelimit-limit-requests"]
+
+        if async_dispatcher_send:
+            try:
+                async_dispatcher_send(
+                    self.hass, f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
+                )
+            except Exception:
+                pass
+
+    def record_rate_limit(self, reset_seconds: float = 5.0) -> None:
+        """Record rate limit hit with countdown unblock timestamp."""
+        import datetime
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        reset_at = now_utc + datetime.timedelta(seconds=reset_seconds)
+        self._telemetry["rate_limit_status"] = "throttled"
+        self._telemetry["rate_limit_reset_seconds"] = round(reset_seconds, 2)
+        self._telemetry["rate_limit_reset_at"] = reset_at.isoformat()
+        self._telemetry["last_updated"] = now_utc.isoformat()
+
+        if async_dispatcher_send:
+            try:
+                async_dispatcher_send(
+                    self.hass, f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
+                )
+            except Exception:
+                pass
+
     async def async_added_to_hass(self) -> None:
         """Load persistent conversation history from storage when entity is added."""
         if hasattr(super(), "async_added_to_hass"):
@@ -170,6 +284,19 @@ class NexusMcpConversationEntity(ConversationEntity):
                 if data and isinstance(data, dict):
                     raw_history = data.get("history", {})
                     self._last_conversation_id = data.get("last_conversation_id")
+                    stored_telemetry = data.get("telemetry")
+                    if isinstance(stored_telemetry, dict):
+                        import datetime
+                        today_str = datetime.date.today().isoformat()
+                        if stored_telemetry.get("date") == today_str:
+                            self._telemetry.update(stored_telemetry)
+                        else:
+                            self._telemetry["date"] = today_str
+                            self._telemetry["tokens_today"] = 0
+                            self._telemetry["prompt_tokens_today"] = 0
+                            self._telemetry["completion_tokens_today"] = 0
+                            self._telemetry["last_total_tokens"] = stored_telemetry.get("last_total_tokens", 0)
+
                     for conv_id, msgs in raw_history.items():
                         if isinstance(msgs, list):
                             chat_msgs = []
@@ -196,6 +323,9 @@ class NexusMcpConversationEntity(ConversationEntity):
                 async_dispatcher_send(
                     self.hass, f"{DOMAIN}_{self.entry.entry_id}_history_updated"
                 )
+                async_dispatcher_send(
+                    self.hass, f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
+                )
             except Exception:
                 pass
 
@@ -206,6 +336,9 @@ class NexusMcpConversationEntity(ConversationEntity):
                 try:
                     async_dispatcher_send(
                         self.hass, f"{DOMAIN}_{self.entry.entry_id}_history_updated"
+                    )
+                    async_dispatcher_send(
+                        self.hass, f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
                     )
                 except Exception:
                     pass
@@ -228,6 +361,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                     ]
                     for conv_id, msgs in self._history.items()
                 },
+                "telemetry": self._telemetry,
             }
             await self._store.async_save(serializable)
         except Exception as err:
@@ -237,6 +371,9 @@ class NexusMcpConversationEntity(ConversationEntity):
                 try:
                     async_dispatcher_send(
                         self.hass, f"{DOMAIN}_{self.entry.entry_id}_history_updated"
+                    )
+                    async_dispatcher_send(
+                        self.hass, f"{DOMAIN}_{self.entry.entry_id}_telemetry_updated"
                     )
                 except Exception:
                     pass
@@ -298,7 +435,13 @@ class NexusMcpConversationEntity(ConversationEntity):
                 tools=self._tools,
                 system_prompt=system_prompt,
             )
+            if hasattr(resp, "usage") and resp.usage:
+                self.record_usage(resp.usage, getattr(resp, "rate_limits", None))
             reply = resp.content or "No response from AI."
+        except LlmRateLimitError as err:
+            reset_sec = getattr(err, "reset_seconds", 5.0) or 5.0
+            self.record_rate_limit(reset_sec)
+            raise err
         except Exception as err:
             err_str = str(err)
             if image_data and any(w in err_str.lower() for w in ("image", "vision", "multimodal", "support", "400")):
@@ -458,6 +601,8 @@ class NexusMcpConversationEntity(ConversationEntity):
                     tools=self._tools,
                     system_prompt=system_prompt,
                 )
+                if hasattr(response, "usage") and response.usage:
+                    self.record_usage(response.usage, getattr(response, "rate_limits", None))
 
                 if response.tool_calls:
                     # Record model's tool calls in history
@@ -519,16 +664,16 @@ class NexusMcpConversationEntity(ConversationEntity):
 
         except LlmRateLimitError as err:
             _LOGGER.warning("Nexus MCP rate limit/high demand: %s", err)
+            reset_sec = getattr(err, "reset_seconds", 5.0) or 5.0
+            self.record_rate_limit(reset_sec)
             assistant_reply = (
                 f"Límite de peticiones alcanzado ({err}). "
-                "Los servidores gratuitos tienen un límite temporal de tokens por minuto (TPM). "
-                "Por favor, espera unos segundos antes de volver a intentarlo. "
+                f"Espera aproximadamente {round(reset_sec, 1)}s para la renovación de tokens por minuto (TPM). "
                 "Consejo: En Groq puedes usar 'openai/gpt-oss-120b' o en Google 'gemini-3.1-flash-lite' para límites mucho más amplios."
                 if is_spanish
                 else (
                     f"Rate limit reached ({err}). "
-                    "Free tier servers have temporary tokens-per-minute (TPM) limits. "
-                    "Please wait a few seconds before trying again. "
+                    f"Please wait approximately {round(reset_sec, 1)}s for tokens-per-minute (TPM) renewal. "
                     "Tip: On Groq you can use 'openai/gpt-oss-120b' or on Google 'gemini-3.1-flash-lite' for generous limits."
                 )
             )

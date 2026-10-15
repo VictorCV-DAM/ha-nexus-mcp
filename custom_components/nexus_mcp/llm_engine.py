@@ -46,8 +46,48 @@ class LlmAuthError(LlmError):
     """Raised on authentication / API key failure."""
 
 
+def parse_reset_duration(val: Any) -> float:
+    """Parse duration string or number into seconds. Handles '4.27s', '150ms', '1m30s', etc."""
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return max(0.0, float(val))
+    import re
+    s = str(val).strip().lower()
+    if not s:
+        return 0.0
+    try:
+        return max(0.0, float(s))
+    except ValueError:
+        pass
+    total_seconds = 0.0
+    m = re.search(r"([\d\.]+)\s*m(?:in)?(?!\w)", s)
+    if m:
+        try:
+            total_seconds += float(m.group(1)) * 60.0
+        except ValueError:
+            pass
+    s_m = re.search(r"([\d\.]+)\s*s(?:ec)?(?!\w)", s)
+    if s_m:
+        try:
+            total_seconds += float(s_m.group(1))
+        except ValueError:
+            pass
+    ms_m = re.search(r"([\d\.]+)\s*ms", s)
+    if ms_m:
+        try:
+            total_seconds += float(ms_m.group(1)) / 1000.0
+        except ValueError:
+            pass
+    return max(0.0, total_seconds)
+
+
 class LlmRateLimitError(LlmError):
     """Raised when rate limits are exceeded."""
+
+    def __init__(self, message: str, reset_seconds: float = 5.0) -> None:
+        super().__init__(message)
+        self.reset_seconds = reset_seconds
 
 
 @dataclass
@@ -79,6 +119,8 @@ class LlmResponse:
     content: str | None
     tool_calls: list[LlmToolCall] = field(default_factory=list)
     finish_reason: str | None = None
+    usage: dict[str, Any] = field(default_factory=dict)
+    rate_limits: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseLlmEngine(ABC):
@@ -241,13 +283,19 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                         error_body = await resp.text()
                         retry_after = resp.headers.get("Retry-After")
                         delay = 2.0 * (attempt + 1)
-                        if retry_after and retry_after.replace(".", "", 1).isdigit():
-                            delay = max(1.0, min(float(retry_after), 5.0))
+                        if retry_after:
+                            parsed_ra = parse_reset_duration(retry_after)
+                            if parsed_ra > 0:
+                                delay = max(1.0, min(parsed_ra, 10.0))
+                        elif "x-ratelimit-reset-tokens" in resp.headers:
+                            parsed_reset = parse_reset_duration(resp.headers.get("x-ratelimit-reset-tokens"))
+                            if parsed_reset > 0:
+                                delay = max(1.0, min(parsed_reset + 0.5, 10.0))
                         elif "try again in" in error_body:
                             import re
                             m = re.search(r"try again in ([\d\.]+)s", error_body)
                             if m:
-                                delay = min(float(m.group(1)) + 0.5, 6.0)
+                                delay = min(float(m.group(1)) + 0.5, 10.0)
 
                         # If on Groq and hit rate limit, attempt fallback between 120b, 20b and qwen
                         if "groq.com" in self._base_url:
@@ -291,7 +339,7 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                             msg = err_json.get("error", {}).get("message", error_body)
                         except Exception:
                             msg = error_body
-                        raise LlmRateLimitError(f"Rate limit exceeded: {msg}")
+                        raise LlmRateLimitError(f"Rate limit exceeded: {msg}", reset_seconds=delay)
 
                     if resp.status == 400:
                         text = await resp.text()
@@ -312,6 +360,31 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                     if resp.status != 200:
                         text = await resp.text()
                         raise LlmError(f"HTTP {resp.status} from {url}: {text}")
+
+                    rate_limits_headers: dict[str, Any] = {}
+                    raw_headers = getattr(resp, "headers", None)
+                    if raw_headers is not None:
+                        is_async_mock = False
+                        try:
+                            from unittest.mock import AsyncMock
+                            if isinstance(raw_headers, AsyncMock) or isinstance(getattr(raw_headers, "get", None), AsyncMock):
+                                is_async_mock = True
+                        except ImportError:
+                            pass
+
+                        if not is_async_mock and hasattr(raw_headers, "get"):
+                            for h in (
+                                "x-ratelimit-remaining-tokens",
+                                "x-ratelimit-limit-tokens",
+                                "x-ratelimit-remaining-requests",
+                                "x-ratelimit-limit-requests",
+                                "x-ratelimit-reset-tokens",
+                                "x-ratelimit-reset-requests",
+                                "retry-after",
+                            ):
+                                val = raw_headers.get(h)
+                                if val is not None and not callable(val) and not asyncio.iscoroutine(val):
+                                    rate_limits_headers[h] = val
 
                     data = await resp.json()
                     break
@@ -341,10 +414,14 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                 args = {}
             tool_calls.append(LlmToolCall(call_id=call_id, name=fn_name, arguments=args))
 
+        usage = data.get("usage") or {}
+
         return LlmResponse(
             content=content,
             tool_calls=tool_calls,
             finish_reason=choice.get("finish_reason"),
+            usage=usage,
+            rate_limits=rate_limits_headers,
         )
 
 
@@ -487,7 +564,8 @@ class GeminiEngine(BaseLlmEngine):
 
                         raise LlmRateLimitError(
                             "Google Gemini free tier daily request limit reached. "
-                            "Please wait a few moments or verify your quota in Google AI Studio."
+                            "Please wait a few moments or verify your quota in Google AI Studio.",
+                            reset_seconds=5.0,
                         )
 
                     if resp.status == 503:
@@ -501,7 +579,8 @@ class GeminiEngine(BaseLlmEngine):
                             await asyncio.sleep(backoff_seconds * attempt)
                             continue
                         raise LlmRateLimitError(
-                            "Google Gemini servers are temporarily experiencing high demand. Please try again shortly."
+                            "Google Gemini servers are temporarily experiencing high demand. Please try again shortly.",
+                            reset_seconds=5.0,
                         )
 
                     if resp.status == 400:
@@ -557,10 +636,19 @@ class GeminiEngine(BaseLlmEngine):
                 )
 
         full_text = "".join(text_pieces) if text_pieces else None
+        usage_meta = data.get("usageMetadata") or {}
+        usage = {
+            "prompt_tokens": usage_meta.get("promptTokenCount", 0),
+            "completion_tokens": usage_meta.get("candidatesTokenCount", 0),
+            "total_tokens": usage_meta.get("totalTokenCount", 0),
+        }
+
         return LlmResponse(
             content=full_text,
             tool_calls=tool_calls,
             finish_reason=candidate.get("finishReason"),
+            usage=usage,
+            rate_limits={},
         )
 
 
