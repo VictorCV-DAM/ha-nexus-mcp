@@ -1,5 +1,7 @@
 {
   "name": "Nexus MCP",
+  "zip_release": true,
+  "filename": "nexus_mcp.zip",
   "content_in_root": false,
   "render_readme": true,
   "homeassistant": "2024.1.0"
