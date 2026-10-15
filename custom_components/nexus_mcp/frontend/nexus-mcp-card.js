@@ -1351,16 +1351,26 @@ class NexusMcpCardEditor extends HTMLElement {
     super();
     this._config = {};
     this._hass = null;
+    this._rendered = false;
+    this._lastAgentIds = "";
   }
 
   setConfig(config) {
     this._config = config || {};
-    this._render();
+    if (!this._rendered) {
+      this._render();
+    } else {
+      this._updateValues();
+    }
   }
 
   set hass(hass) {
     this._hass = hass;
-    this._render();
+    if (!this._rendered) {
+      this._render();
+    } else {
+      this._updateOptionsIfNeeded();
+    }
   }
 
   _isSpanish() {
@@ -1368,16 +1378,23 @@ class NexusMcpCardEditor extends HTMLElement {
     return String(lang).toLowerCase().startsWith("es");
   }
 
-  _render() {
-    if (!this._hass || !this._config) return;
-
-    const isEs = this._isSpanish();
-    const agents = Object.keys(this._hass.states)
+  _getAgents() {
+    if (!this._hass) return [];
+    return Object.keys(this._hass.states)
       .filter((e) => e.startsWith("conversation."))
       .map((id) => ({
         id,
         name: this._hass.states[id].attributes?.friendly_name || id,
       }));
+  }
+
+  _render() {
+    if (!this._hass || !this._config) return;
+    this._rendered = true;
+
+    const isEs = this._isSpanish();
+    const agents = this._getAgents();
+    this._lastAgentIds = agents.map((a) => a.id).sort().join(",");
 
     const autoLabel = isEs ? "(Automático / Selector en vivo)" : "(Automatic / Live Selector)";
     let optionsHtml = `<option value="">${autoLabel}</option>`;
@@ -1400,12 +1417,12 @@ class NexusMcpCardEditor extends HTMLElement {
             type="text"
             id="cfg-title"
             value="${(this._config && this._config.title) || "Nexus MCP Intercom"}"
-            style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc);"
+            style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, inherit); color: var(--primary-text-color, inherit);"
           />
         </label>
         <label style="display: flex; flex-direction: column; gap: 4px; font-weight: 500;">
           ${agentLabel}
-          <select id="cfg-agent" style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc);">
+          <select id="cfg-agent" style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, inherit); color: var(--primary-text-color, inherit); cursor: pointer;">
             ${optionsHtml}
           </select>
         </label>
@@ -1424,6 +1441,7 @@ class NexusMcpCardEditor extends HTMLElement {
         title: titleInput ? titleInput.value : (this._config.title || "Nexus MCP Intercom"),
         agent_id: agentSelect && agentSelect.value ? agentSelect.value : undefined,
       };
+      this._config = newConfig;
       const event = new CustomEvent("config-changed", {
         detail: { config: newConfig },
         bubbles: true,
@@ -1435,12 +1453,45 @@ class NexusMcpCardEditor extends HTMLElement {
     if (titleInput) titleInput.oninput = handleChange;
     if (agentSelect) agentSelect.onchange = handleChange;
   }
+
+  _updateValues() {
+    const titleInput = this.querySelector("#cfg-title");
+    const agentSelect = this.querySelector("#cfg-agent");
+    if (titleInput && document.activeElement !== titleInput) {
+      titleInput.value = this._config?.title || "Nexus MCP Intercom";
+    }
+    if (agentSelect && document.activeElement !== agentSelect) {
+      agentSelect.value = this._config?.agent_id || "";
+    }
+  }
+
+  _updateOptionsIfNeeded() {
+    const agentSelect = this.querySelector("#cfg-agent");
+    if (!agentSelect || document.activeElement === agentSelect) return;
+
+    const agents = this._getAgents();
+    const currentAgentIds = agents.map((a) => a.id).sort().join(",");
+    if (currentAgentIds === this._lastAgentIds) return;
+
+    this._lastAgentIds = currentAgentIds;
+    const isEs = this._isSpanish();
+    const autoLabel = isEs ? "(Automático / Selector en vivo)" : "(Automatic / Live Selector)";
+    const currentVal = this._config?.agent_id || agentSelect.value || "";
+
+    let optionsHtml = `<option value="">${autoLabel}</option>`;
+    for (const ag of agents) {
+      const isSel = currentVal === ag.id ? "selected" : "";
+      optionsHtml += `<option value="${ag.id}" ${isSel}>${ag.name}</option>`;
+    }
+    agentSelect.innerHTML = optionsHtml;
+    agentSelect.value = currentVal;
+  }
 }
 
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.3.2 Auto-Scroll & Synced History Ready ",
+  "%c NEXUS MCP CARD %c v1.3.3 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
