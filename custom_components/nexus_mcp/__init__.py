@@ -21,8 +21,64 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["conversation", "sensor"]
 
 
+from pathlib import Path
+
+try:
+    from homeassistant.components.frontend import add_extra_js_url
+except (ImportError, AttributeError):
+    add_extra_js_url = None
+
+try:
+    from homeassistant.components.http import StaticPathConfig
+except (ImportError, AttributeError):
+    StaticPathConfig = None
+
+
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    """Register custom Lovelace card for plug-and-play UI."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if domain_data.get("frontend_registered"):
+        return
+
+    frontend_dir = Path(__file__).parent / "frontend"
+    card_path = frontend_dir / "nexus-mcp-card.js"
+
+    if not card_path.is_file():
+        return
+
+    url_path = "/nexus_mcp_static/nexus-mcp-card.js"
+
+    # Register static path with Home Assistant HTTP server
+    if hasattr(hass, "http"):
+        if StaticPathConfig and hasattr(hass.http, "async_register_static_paths"):
+            try:
+                await hass.http.async_register_static_paths([
+                    StaticPathConfig("/nexus_mcp_static", str(frontend_dir), cache_headers=False)
+                ])
+            except Exception as err:
+                _LOGGER.debug("Could not register static path via async_register_static_paths: %s", err)
+        elif hasattr(hass.http, "register_static_path"):
+            try:
+                hass.http.register_static_path(
+                    "/nexus_mcp_static", str(frontend_dir), cache_headers=False
+                )
+            except Exception as err:
+                _LOGGER.debug("Could not register static path via register_static_path: %s", err)
+
+    # Register extra JS URL so Home Assistant frontend loads the card automatically
+    if add_extra_js_url:
+        try:
+            add_extra_js_url(hass, f"{url_path}?v=1.2.3")
+        except Exception as err:
+            _LOGGER.debug("Could not add extra JS URL: %s", err)
+
+    domain_data["frontend_registered"] = True
+
+
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up the Nexus MCP integration and global services."""
+    await _async_register_frontend(hass)
+
     async def handle_clear_history(call) -> None:
         """Handle clearing conversation history."""
         entry_id = call.data.get("entry_id")
@@ -43,6 +99,8 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Nexus MCP from a config entry."""
+    await _async_register_frontend(hass)
+
     merged_config = {**entry.data, **entry.options}
     provider = merged_config.get(CONF_LLM_PROVIDER)
     base_url = merged_config.get(CONF_BASE_URL, "")

@@ -170,6 +170,28 @@ class TestSensorHistory(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(mock_conv_entity._last_conversation_id)
         mock_conv_entity._async_save_history.assert_awaited_once()
 
+    async def test_frontend_card_registration(self) -> None:
+        """Test _async_register_frontend registers static path and JS URL."""
+        from custom_components.nexus_mcp import _async_register_frontend
+
+        mock_hass = MagicMock()
+        mock_hass.data = {}
+        mock_hass.http = MagicMock()
+        mock_hass.http.async_register_static_paths = AsyncMock()
+
+        with patch("custom_components.nexus_mcp.add_extra_js_url") as mock_add_js, \
+             patch("custom_components.nexus_mcp.StaticPathConfig") as mock_static_cfg:
+
+            await _async_register_frontend(mock_hass)
+
+            self.assertTrue(mock_hass.data[DOMAIN]["frontend_registered"])
+            mock_add_js.assert_called_once()
+            mock_hass.http.async_register_static_paths.assert_awaited_once()
+
+            # Second call should be no-op (idempotent)
+            await _async_register_frontend(mock_hass)
+            mock_add_js.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

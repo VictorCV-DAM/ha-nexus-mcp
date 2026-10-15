@@ -9,7 +9,7 @@
   [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
   [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1.0%20%E2%80%94%202026.9.4%2B-41BDF5.svg?logo=home-assistant)](https://www.home-assistant.io/)
   [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
-  [![Tests](https://img.shields.io/badge/Tests-35%2F35%20Passing-brightgreen.svg)](tests/)
+  [![Tests](https://img.shields.io/badge/Tests-36%2F36%20Passing-brightgreen.svg)](tests/)
   [![Downloads](https://img.shields.io/github/downloads/VictorCV-DAM/ha-nexus-mcp/total.svg?color=brightgreen)](https://github.com/VictorCV-DAM/ha-nexus-mcp/releases)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   
@@ -90,31 +90,19 @@ Toggle between autonomous execution or interactive confirmation anytime via Sett
   <img src="images/10_options_reconfigure_v4.png" width="31%" align="middle" style="vertical-align: middle;" alt="Options Flow Reconfigure" />
 </p>
 
-### 💬 Lovelace Dashboard Card (Conversation History & Quick Resume)
-Display your conversation history and resume chats directly on your Home Assistant Dashboard without installing any third-party cards. Uses the native history sensor and Assist action:
+### 💬 Plug & Play Lovelace Card (Visual Card Picker)
+Nexus MCP includes a **100% plug & play custom Lovelace card** that registers automatically in Home Assistant. No manual resource URLs or configuration needed!
+
+1. Open any Dashboard, click **Edit dashboard** (Editar panel) ➔ **Add Card** (Añadir tarjeta).
+2. Look for **«Nexus MCP Chat & Historial»** right in the visual card picker list (with live visual preview and configuration editor).
+3. Chat in real-time, view message bubbles, send queries directly from the card input bar, or tap the microphone to open Assist!
 
 ```yaml
-type: vertical-stack
-cards:
-  - type: markdown
-    title: 💬 Conversación con Nexus MCP
-    content: >-
-      {{ state_attr('sensor.nexus_mcp_historial_de_conversaciones', 'formatted_markdown') or '*No hay conversaciones recientes. Abre Assist para empezar.*' }}
-
-  - type: horizontal-stack
-    cards:
-      - type: button
-        name: Continuar / Abrir Assist
-        icon: mdi:microphone-message
-        tap_action:
-          action: assist
-      - type: button
-        name: Nueva Conversación
-        icon: mdi:refresh
-        tap_action:
-          action: call-service
-          service: nexus_mcp.clear_history
+type: custom:nexus-mcp-card
+title: Nexus MCP Intercom
+entity: sensor.nexus_mcp_historial_de_conversaciones
 ```
+*(Tip: If you prefer standard Markdown cards, you can also use `{{ state_attr('sensor.nexus_mcp_historial_de_conversaciones', 'formatted_markdown') }}`)*
 
 ---
 
