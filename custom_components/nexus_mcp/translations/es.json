@@ -10,7 +10,7 @@
       },
       "gemini": {
         "title": "Google Gemini (Capa Gratuita)",
-        "description": "Para usar Google Gemini necesitas una clave de API de Google AI Studio.\n\n👉 **[Consigue tu clave API gratuita de Gemini aquí]({api_key_url})** *(URL: https://aistudio.google.com/app/apikey)*\n*(La capa gratuita no requiere tarjeta de crédito ni facturación).*\n\n**Modelos disponibles:**\n• `gemini-3.1-flash-lite` (Recomendado): **500 peticiones al día** gratuitas.\n• `gemini-flash-latest`: Apunta siempre a la versión más reciente (Gemini 3.8 Flash), pero con un límite de **20 peticiones al día** en la capa gratuita de Google.\n\nIntroduce tu clave API y el modelo a continuación:",
+        "description": "Para usar Google Gemini necesitas una clave de API de Google AI Studio.\n\n👉 **[Consigue tu clave API gratuita de Gemini aquí]({api_key_url})**\n*(La capa gratuita no requiere tarjeta de crédito ni facturación).*\n\n**Modelos disponibles:**\n• `gemini-3.1-flash-lite` (Recomendado): **500 peticiones al día** gratuitas.\n• `gemini-flash-latest`: Apunta siempre a la versión más reciente (Gemini 3.8 Flash), pero con un límite de **20 peticiones al día** en la capa gratuita de Google.\n\nIntroduce tu clave API y el modelo a continuación:",
         "data": {
           "api_key": "Clave API (API Key)",
           "model": "Nombre del Modelo (ej. gemini-3.1-flash-lite o gemini-flash-latest)"
@@ -22,7 +22,7 @@
       },
       "groq": {
         "title": "Groq Cloud (Capa Gratuita - Europa y Global)",
-        "description": "Para usar Groq Cloud necesitas una clave de API gratuita de Groq Console. Inicio de sesión en 1 clic con Google o GitHub, sin tarjeta de crédito ni verificación de teléfono.\n\n👉 **[Consigue tu clave API gratuita de Groq aquí]({groq_api_url})** *(URL: https://console.groq.com/keys)*\n👉 **[Consulta la lista oficial de modelos Groq aquí]({groq_models_url})** *(URL: https://console.groq.com/docs/models)*\n\n**Modelos y Límites incluidos:**\n• `openai/gpt-oss-120b` (Predeterminado): Modelo abierto de OpenAI de 120B parámetros con razonamiento profundo y Tool Calling.\n• `qwen/qwen3.8-27b`: Modelo multilingüe de ultra-alta velocidad Qwen 3.8 en chips LPU de Groq (~0.08s).\n• `openai/gpt-oss-20b`: Modelo abierto ultra-rápido de 20B.\n\nIntroduce tu clave API y el modelo a continuación:",
+        "description": "Para usar Groq Cloud necesitas una clave de API gratuita de Groq Console. Inicio de sesión en 1 clic con Google o GitHub, sin tarjeta de crédito ni verificación de teléfono.\n\n👉 **[Consigue tu clave API gratuita de Groq aquí]({groq_api_url})**\n👉 **[Consulta la lista oficial de modelos Groq aquí]({groq_models_url})**\n\n**Modelos y Límites incluidos:**\n• `openai/gpt-oss-120b` (Predeterminado): Modelo abierto de OpenAI de 120B parámetros con razonamiento profundo y Tool Calling.\n• `qwen/qwen3.8-27b`: Modelo multilingüe de ultra-alta velocidad Qwen 3.8 en chips LPU de Groq (~0.08s).\n• `openai/gpt-oss-20b`: Modelo abierto ultra-rápido de 20B.\n\nIntroduce tu clave API y el modelo a continuación:",
         "data": {
           "api_key": "Clave API (gsk_...)",
           "model": "Nombre del Modelo (por defecto: openai/gpt-oss-120b)",
@@ -36,7 +36,7 @@
       },
       "qwen": {
         "title": "Qwen Cloud (Alibaba Model Studio / DashScope)",
-        "description": "Para usar Qwen en la nube necesitas una clave de API de Alibaba Cloud Model Studio (DashScope), que incluye millones de tokens gratuitos sin las restricciones diarias de Google.\n\n👉 **[Consigue tu clave API gratuita de Qwen aquí]({qwen_api_url})** *(URL: https://modelstudio.console.alibabacloud.com/)*\n*(Disponible internacionalmente con registro gratuito).* \n\n**Modelo configurado:**\n• `qwen-plus-latest`: Apunta siempre a la última versión disponible de Qwen Plus.\n• También compatible con `qwen-turbo-latest` o `qwen2.5-coder-32b-instruct`.\n\nIntroduce tu clave API y el modelo a continuación:",
+        "description": "Para usar Qwen en la nube necesitas una clave de API de Alibaba Cloud Model Studio (DashScope), que incluye millones de tokens gratuitos sin las restricciones diarias de Google.\n\n👉 **[Consigue tu clave API gratuita de Qwen aquí]({qwen_api_url})**\n*(Disponible internacionalmente con registro gratuito).* \n\n**Modelo configurado:**\n• `qwen-plus-latest`: Apunta siempre a la última versión disponible de Qwen Plus.\n• También compatible con `qwen-turbo-latest` o `qwen2.5-coder-32b-instruct`.\n\nIntroduce tu clave API y el modelo a continuación:",
         "data": {
           "api_key": "Clave API (sk-...)",
           "model": "Nombre del Modelo (por defecto: qwen-plus-latest)",
@@ -62,9 +62,9 @@
       },
       "custom_openai": {
         "title": "OpenAI / OpenRouter / Custom BYOK",
-        "description": "Conéctate a cualquier proveedor compatible con OpenAI o servicios multimodelo:\n\n• 👉 **[Consigue tu clave gratuita en OpenRouter]({openrouter_api_url})** *(URL: https://openrouter.ai/keys - Modelos Qwen gratuitos disponibles)*\n• 👉 **[Consigue tu clave en OpenAI Platform]({openai_api_url})** *(URL: https://platform.openai.com/api-keys)*\n• 👉 **[Consigue tu clave en DeepSeek Platform]({deepseek_api_url})** *(URL: https://platform.deepseek.com/api_keys)*\n\nIntroduce los datos de conexión y tu clave API:",
+        "description": "Conéctate a cualquier proveedor compatible con OpenAI o servicios multimodelo:\n\n• 👉 **[Consigue tu clave gratuita en OpenRouter]({openrouter_api_url})**\n• 👉 **[Consigue tu clave en OpenAI Platform]({openai_api_url})**\n• 👉 **[Consigue tu clave en DeepSeek Platform]({deepseek_api_url})**\n\nIntroduce los datos de conexión y tu clave API:",
         "data": {
-          "base_url": "URL Base (ej. https://openrouter.ai/api/v1 o https://api.openai.com/v1)",
+          "base_url": "URL Base (ej. o )",
           "api_key": "Clave API (API Key)",
           "model": "Nombre del Modelo (ej. qwen/qwen-2.5-coder-32b-instruct:free o gpt-4o-mini)"
         },
@@ -76,7 +76,7 @@
       },
       "mcp_server": {
         "title": "Conexión con el Servidor HA-MCP",
-        "description": "Nexus MCP se conecta a un servidor MCP para disponer de herramientas avanzadas y gestión de automatizaciones.\n\n• Si ya tienes instalado **ha-mcp**, la URL del endpoint se ha detectado automáticamente abajo.\n• Si aún no lo tienes instalado, consíguelo en el 👉 **[Repositorio oficial de HA-MCP en GitHub]({ha_mcp_repo_url})** *(URL: https://github.com/homeassistant-ai/ha-mcp)* mediante HACS.\n\nConfigura los datos de conexión:",
+        "description": "Nexus MCP se conecta a un servidor MCP para disponer de herramientas avanzadas y gestión de automatizaciones.\n\n• Si ya tienes instalado **ha-mcp**, la URL del endpoint se ha detectado automáticamente abajo.\n• Si aún no lo tienes instalado, consíguelo en el 👉 **[Repositorio oficial de HA-MCP en GitHub]({ha_mcp_repo_url})** mediante HACS.\n\nConfigura los datos de conexión:",
         "data": {
           "mcp_server_url": "URL SSE / Endpoint del Servidor MCP",
           "autonomous_mode": "Modo Autónomo (Ejecutar acciones sin solicitar confirmación interactiva)"
@@ -92,7 +92,7 @@
     "step": {
       "init": {
         "title": "Nexus MCP: Configuración y Credenciales",
-        "description": "Modifica los parámetros de tu agente Nexus MCP, credenciales y endpoints. Para obtener o renovar tu clave API / token:\n\n• **Google Gemini**: 👉 [Obtener clave en Google AI Studio]({gemini_api_url}) *(https://aistudio.google.com/app/apikey)*\n• **Groq Cloud (Recomendado en Europa)**: 👉 [Obtener clave en Groq Console]({groq_api_url}) *(https://console.groq.com/keys)* | [Catálogo de Modelos]({groq_models_url}) *(https://console.groq.com/docs/models)*\n• **Qwen Cloud**: 👉 [Obtener clave en Alibaba Model Studio]({qwen_api_url}) *(https://modelstudio.console.alibabacloud.com/)*\n• **OpenRouter**: 👉 [Obtener clave en OpenRouter]({openrouter_api_url}) *(https://openrouter.ai/keys)*\n• **HA-MCP Tools**: 👉 [Repositorio GitHub]({ha_mcp_repo_url}) *(https://github.com/homeassistant-ai/ha-mcp)*",
+        "description": "Modifica los parámetros de tu agente Nexus MCP, credenciales y endpoints. Para obtener o renovar tu clave API / token:\n\n• **Google Gemini**: 👉 [Obtener clave en Google AI Studio]({gemini_api_url})\n• **Groq Cloud (Recomendado en Europa)**: 👉 [Obtener clave en Groq Console]({groq_api_url}) | [Catálogo de Modelos]({groq_models_url})\n• **Qwen Cloud**: 👉 [Obtener clave en Alibaba Model Studio]({qwen_api_url})\n• **OpenRouter**: 👉 [Obtener clave en OpenRouter]({openrouter_api_url})\n• **HA-MCP Tools**: 👉 [Repositorio GitHub]({ha_mcp_repo_url})",
         "data": {
           "api_key": "Clave API / Token",
           "model": "Nombre del Modelo",

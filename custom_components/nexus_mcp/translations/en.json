@@ -10,7 +10,7 @@
       },
       "gemini": {
         "title": "Google Gemini (Free Tier)",
-        "description": "To use Google Gemini, you need a free API key from Google AI Studio.\n\n👉 **[Get your free Gemini API Key here]({api_key_url})** *(URL: https://aistudio.google.com/app/apikey)*\n*(Free tier requires no credit card or billing).*\n\n**Available Models:**\n• `gemini-3.1-flash-lite` (Recommended): 500 free requests per day.\n• `gemini-flash-latest`: Always Google's newest Flash (Gemini 3.8 Flash), but limited to 20 requests per day on free tier.\n\nPaste your API key and chosen model below:",
+        "description": "To use Google Gemini, you need a free API key from Google AI Studio.\n\n👉 **[Get your free Gemini API Key here]({api_key_url})**\n*(Free tier requires no credit card or billing).*\n\n**Available Models:**\n• `gemini-3.1-flash-lite` (Recommended): 500 free requests per day.\n• `gemini-flash-latest`: Always Google's newest Flash (Gemini 3.8 Flash), but limited to 20 requests per day on free tier.\n\nPaste your API key and chosen model below:",
         "data": {
           "api_key": "API Key",
           "model": "Model Name (e.g. gemini-3.1-flash-lite or gemini-flash-latest)"
@@ -22,7 +22,7 @@
       },
       "groq": {
         "title": "Groq Cloud (Free Tier - Europe & Worldwide)",
-        "description": "To use Groq Cloud, get a free API key from Groq Console. 1-click login with Google or GitHub, no credit card or phone verification needed.\n\n👉 **[Get your free Groq API Key here]({groq_api_url})** *(URL: https://console.groq.com/keys)*\n👉 **[Check official Groq models list here]({groq_models_url})** *(URL: https://console.groq.com/docs/models)*\n\n**Included Models & Limits:**\n• `openai/gpt-oss-120b` (Default): 120-Billion open-weights reasoning model with deep tool calling.\n• `qwen/qwen3.8-27b`: High-speed multilingual Qwen on Groq LPUs (~0.08s latency).\n• `openai/gpt-oss-20b`: Lightweight and ultra-fast 20B open model.\n\nEnter your API key and model below:",
+        "description": "To use Groq Cloud, get a free API key from Groq Console. 1-click login with Google or GitHub, no credit card or phone verification needed.\n\n👉 **[Get your free Groq API Key here]({groq_api_url})**\n👉 **[Check official Groq models list here]({groq_models_url})**\n\n**Included Models & Limits:**\n• `openai/gpt-oss-120b` (Default): 120-Billion open-weights reasoning model with deep tool calling.\n• `qwen/qwen3.8-27b`: High-speed multilingual Qwen on Groq LPUs (~0.08s latency).\n• `openai/gpt-oss-20b`: Lightweight and ultra-fast 20B open model.\n\nEnter your API key and model below:",
         "data": {
           "api_key": "API Key (gsk_...)",
           "model": "Model Name (default: openai/gpt-oss-120b)",
@@ -36,7 +36,7 @@
       },
       "qwen": {
         "title": "Qwen Cloud (Alibaba Model Studio / DashScope)",
-        "description": "To use Qwen Cloud, you need a free API key from Alibaba Cloud Model Studio (DashScope), which includes millions of free tokens without Google's tight daily request limits.\n\n👉 **[Get your free Qwen/DashScope API Key here]({qwen_api_url})** *(URL: https://modelstudio.console.alibabacloud.com/)*\n*(Available internationally with free registration).* \n\n**Configured Model:**\n• `qwen-plus-latest`: Always points to the newest released version of Qwen Plus.\n• Also supports `qwen-turbo-latest` or `qwen2.5-coder-32b-instruct`.\n\nEnter your API key and model below:",
+        "description": "To use Qwen Cloud, you need a free API key from Alibaba Cloud Model Studio (DashScope), which includes millions of free tokens without Google's tight daily request limits.\n\n👉 **[Get your free Qwen/DashScope API Key here]({qwen_api_url})**\n*(Available internationally with free registration).* \n\n**Configured Model:**\n• `qwen-plus-latest`: Always points to the newest released version of Qwen Plus.\n• Also supports `qwen-turbo-latest` or `qwen2.5-coder-32b-instruct`.\n\nEnter your API key and model below:",
         "data": {
           "api_key": "API Key (sk-...)",
           "model": "Model Name (default: qwen-plus-latest)",
@@ -62,9 +62,9 @@
       },
       "custom_openai": {
         "title": "OpenAI / OpenRouter / Custom BYOK",
-        "description": "Connect to any OpenAI-compatible provider or multi-model proxy:\n\n• 👉 **[Get free API key at OpenRouter]({openrouter_api_url})** *(URL: https://openrouter.ai/keys - Free Qwen models available)*\n• 👉 **[Get API key at OpenAI Platform]({openai_api_url})** *(URL: https://platform.openai.com/api-keys)*\n• 👉 **[Get API key at DeepSeek Platform]({deepseek_api_url})** *(URL: https://platform.deepseek.com/api_keys)*\n\nEnter your provider details and API key below:",
+        "description": "Connect to any OpenAI-compatible provider or multi-model proxy:\n\n• 👉 **[Get free API key at OpenRouter]({openrouter_api_url})**\n• 👉 **[Get API key at OpenAI Platform]({openai_api_url})**\n• 👉 **[Get API key at DeepSeek Platform]({deepseek_api_url})**\n\nEnter your provider details and API key below:",
         "data": {
-          "base_url": "Base URL (e.g. https://openrouter.ai/api/v1 or https://api.openai.com/v1)",
+          "base_url": "Base URL (e.g. or )",
           "api_key": "API Key",
           "model": "Model Name (e.g. qwen/qwen-2.5-coder-32b-instruct:free or gpt-4o-mini)"
         },
@@ -76,7 +76,7 @@
       },
       "mcp_server": {
         "title": "HA-MCP Server Connection",
-        "description": "Nexus MCP connects to an MCP server to provide advanced actions and automation capabilities.\n\n• If you already have **ha-mcp** installed, the endpoint URL was auto-detected below.\n• If you don't have it installed yet, you can get it at the official 👉 **[HA-MCP GitHub Repository]({ha_mcp_repo_url})** *(URL: https://github.com/homeassistant-ai/ha-mcp)* via HACS.\n\nConfigure the connection details:",
+        "description": "Nexus MCP connects to an MCP server to provide advanced actions and automation capabilities.\n\n• If you already have **ha-mcp** installed, the endpoint URL was auto-detected below.\n• If you don't have it installed yet, you can get it at the official 👉 **[HA-MCP GitHub Repository]({ha_mcp_repo_url})** via HACS.\n\nConfigure the connection details:",
         "data": {
           "mcp_server_url": "MCP Server SSE / Endpoint URL",
           "autonomous_mode": "Autonomous Mode (Execute actions without asking confirmation)"
@@ -92,7 +92,7 @@
     "step": {
       "init": {
         "title": "Nexus MCP Settings & Credentials",
-        "description": "Configure your Nexus MCP agent settings, credentials, and endpoints. To get or renew your API keys / tokens:\n\n• **Google Gemini**: 👉 [Get key at Google AI Studio]({gemini_api_url}) *(https://aistudio.google.com/app/apikey)*\n• **Groq Cloud (Recommended in Europe)**: 👉 [Get key at Groq Console]({groq_api_url}) *(https://console.groq.com/keys)* | [Model Catalog]({groq_models_url}) *(https://console.groq.com/docs/models)*\n• **Qwen Cloud**: 👉 [Get key at Alibaba Model Studio]({qwen_api_url}) *(https://modelstudio.console.alibabacloud.com/)*\n• **OpenRouter**: 👉 [Get key at OpenRouter]({openrouter_api_url}) *(https://openrouter.ai/keys)*\n• **HA-MCP Tools**: 👉 [GitHub Repository]({ha_mcp_repo_url}) *(https://github.com/homeassistant-ai/ha-mcp)*",
+        "description": "Configure your Nexus MCP agent settings, credentials, and endpoints. To get or renew your API keys / tokens:\n\n• **Google Gemini**: 👉 [Get key at Google AI Studio]({gemini_api_url})\n• **Groq Cloud (Recommended in Europe)**: 👉 [Get key at Groq Console]({groq_api_url}) | [Model Catalog]({groq_models_url})\n• **Qwen Cloud**: 👉 [Get key at Alibaba Model Studio]({qwen_api_url})\n• **OpenRouter**: 👉 [Get key at OpenRouter]({openrouter_api_url})\n• **HA-MCP Tools**: 👉 [GitHub Repository]({ha_mcp_repo_url})",
         "data": {
           "api_key": "API Key / Token",
           "model": "Model Name",
