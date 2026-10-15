@@ -233,7 +233,8 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
         max_retries = 2
         for attempt in range(max_retries + 1):
             try:
-                async with self._session.post(url, json=payload, headers=headers) as resp:
+                timeout = aiohttp.ClientTimeout(total=45)
+                async with self._session.post(url, json=payload, headers=headers, timeout=timeout) as resp:
                     if resp.status == 401:
                         raise LlmAuthError("Invalid API key or unauthorized access.")
                     if resp.status == 429:
@@ -301,11 +302,11 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
 
                     data = await resp.json()
                     break
-            except aiohttp.ClientError as err:
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
                 if attempt < max_retries:
                     await asyncio.sleep(1.0)
                     continue
-                raise LlmError(f"Network error connecting to {url}: {err}") from err
+                raise LlmError(f"Network error or timeout connecting to {url}: {err}") from err
 
         if not data:
             raise LlmError(f"No response received from {url}.")
@@ -452,7 +453,8 @@ class GeminiEngine(BaseLlmEngine):
 
         for attempt in range(1, max_attempts + 1):
             try:
-                async with self._session.post(url, json=payload, headers=headers) as resp:
+                timeout = aiohttp.ClientTimeout(total=40)
+                async with self._session.post(url, json=payload, headers=headers, timeout=timeout) as resp:
                     if resp.status == 429:
                         # If the model hit quota limit and it's gemini-3.8-flash or gemini-flash-latest (only 20 req/day),
                         # automatically fallback to high-quota gemini-3.1-flash-lite (500 req/day!)
@@ -500,11 +502,11 @@ class GeminiEngine(BaseLlmEngine):
 
                     data = await resp.json()
                     break
-            except aiohttp.ClientError as err:
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
                 if attempt < max_attempts:
                     await asyncio.sleep(backoff_seconds * attempt)
                     continue
-                raise LlmError(f"Network error connecting to Gemini: {err}") from err
+                raise LlmError(f"Network error or timeout connecting to Gemini: {err}") from err
 
         if data is None:
             raise LlmError("No valid response received from Google Gemini server.")

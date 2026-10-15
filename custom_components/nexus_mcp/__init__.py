@@ -72,7 +72,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     # Register extra JS URL so Home Assistant frontend loads the card automatically
     if add_extra_js_url:
         try:
-            add_extra_js_url(hass, f"{url_path}?v=1.3.5")
+            add_extra_js_url(hass, f"{url_path}?v=1.3.6")
         except Exception as err:
             _LOGGER.debug("Could not add extra JS URL: %s", err)
 

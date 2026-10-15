@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.3.5)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.3.6)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -1186,6 +1186,22 @@ class NexusMcpCard extends HTMLElement {
     if (sendBtn) sendBtn.disabled = true;
 
     try {
+      const callWithTimeout = (promise, ms = 45000) =>
+        Promise.race([
+          promise,
+          new Promise((_, reject) =>
+            setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    "Tiempo de espera agotado. El modelo o servidor tardó demasiado en responder."
+                  )
+                ),
+              ms
+            )
+          ),
+        ]);
+
       let reply = "";
       if (imageToSend) {
         // Direct call via custom multimodal WebSocket nexus_mcp/chat
@@ -1196,7 +1212,7 @@ class NexusMcpCard extends HTMLElement {
           agent_id: agentId,
           conversation_id: this._conversationId || undefined,
         };
-        const res = await this._hass.callWS(payload);
+        const res = await callWithTimeout(this._hass.callWS(payload), 50000);
         reply =
           res?.response?.speech?.plain?.speech ||
           res?.response?.card?.text ||
@@ -1217,7 +1233,7 @@ class NexusMcpCard extends HTMLElement {
           payload.conversation_id = this._conversationId;
         }
 
-        const res = await this._hass.callWS(payload);
+        const res = await callWithTimeout(this._hass.callWS(payload), 45000);
         reply =
           res?.response?.speech?.plain?.speech ||
           res?.response?.card?.text ||
