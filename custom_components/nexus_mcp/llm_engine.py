@@ -131,10 +131,9 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
     def _is_vision_model(self) -> bool:
         """Check if the configured model supports vision/multimodal input."""
         m = self._model.lower()
-        if "groq.com" in self._base_url:
-            # Groq currently only supports vision on specific models like llama-3.2-*-vision
-            return "vision" in m
-        vision_indicators = ("vision", "-vl", "gemini", "gpt-4o", "omni", "claude-3")
+        if "gpt-oss" in m:
+            return False
+        vision_indicators = ("vision", "-vl", "gemini", "gpt-4o", "omni", "claude-3", "qwen", "llava", "pixtral")
         return any(ind in m for ind in vision_indicators)
 
     async def generate_response(

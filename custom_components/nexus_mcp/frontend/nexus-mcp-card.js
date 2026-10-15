@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.3.4)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.3.5)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -206,8 +206,14 @@ class NexusMcpCard extends HTMLElement {
   }
 
   _isSpanish() {
-    const lang = this._hass?.locale?.language || this._hass?.language || navigator.language || "en";
-    return String(lang).toLowerCase().startsWith("es");
+    const lang = String(
+      this._hass?.locale?.language ||
+      this._hass?.language ||
+      this._hass?.selectedLanguage ||
+      navigator.language ||
+      "es"
+    ).toLowerCase();
+    return lang.startsWith("es");
   }
 
   _render() {
@@ -244,17 +250,19 @@ class NexusMcpCard extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 12px 16px;
+          padding: 10px 14px;
           border-bottom: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
           background: var(--app-header-background-color, transparent);
-          gap: 12px;
+          gap: 8px;
+          min-width: 0;
         }
         .header-title-group {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
           flex: 1;
           min-width: 0;
+          overflow: hidden;
         }
         .header-icon-btn {
           background: transparent;
@@ -267,6 +275,7 @@ class NexusMcpCard extends HTMLElement {
           justify-content: center;
           border-radius: 50%;
           transition: transform 0.15s, opacity 0.2s;
+          flex-shrink: 0;
         }
         .header-icon-btn:hover {
           transform: scale(1.1);
@@ -277,7 +286,7 @@ class NexusMcpCard extends HTMLElement {
         }
         .header-icon-btn ha-icon {
           color: var(--primary-color, #03a9f4);
-          --mdc-icon-size: 26px;
+          --mdc-icon-size: 24px;
           flex-shrink: 0;
         }
         .agent-select {
@@ -285,12 +294,14 @@ class NexusMcpCard extends HTMLElement {
           color: var(--primary-text-color, #e1e1e1);
           border: 1px solid var(--divider-color, rgba(255,255,255,0.15));
           border-radius: 8px;
-          padding: 6px 10px;
-          font-size: 0.88rem;
+          padding: 5px 8px;
+          font-size: 0.85rem;
           font-weight: 500;
           outline: none;
           cursor: pointer;
-          max-width: 220px;
+          width: 100%;
+          min-width: 0;
+          flex: 1;
           text-overflow: ellipsis;
           overflow: hidden;
           white-space: nowrap;
@@ -309,34 +320,35 @@ class NexusMcpCard extends HTMLElement {
           display: inline-flex;
           align-items: center;
           gap: 4px;
-          padding: 3px 8px;
+          padding: 3px 7px;
           border-radius: 12px;
           font-size: 0.72rem;
-          font-weight: 500;
+          font-weight: 600;
           cursor: default;
           user-select: none;
           transition: background 0.2s, color 0.2s, border-color 0.2s;
           flex-shrink: 0;
+          white-space: nowrap;
         }
         .vision-badge.has-vision {
-          background: rgba(76, 175, 80, 0.15);
+          background: rgba(76, 175, 80, 0.16);
           color: #81c784;
-          border: 1px solid rgba(76, 175, 80, 0.35);
+          border: 1px solid rgba(76, 175, 80, 0.4);
         }
         .vision-badge.has-vision ha-icon {
-          --mdc-icon-size: 15px;
+          --mdc-icon-size: 14px;
           color: #81c784;
         }
         .vision-badge.no-vision {
           background: rgba(255, 255, 255, 0.05);
-          color: var(--secondary-text-color, #8e8e8e);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: var(--secondary-text-color, #9e9e9e);
+          border: 1px solid rgba(255, 255, 255, 0.12);
         }
         .vision-badge.no-vision ha-icon {
-          --mdc-icon-size: 15px;
-          color: var(--secondary-text-color, #8e8e8e);
+          --mdc-icon-size: 14px;
+          color: var(--secondary-text-color, #9e9e9e);
         }
-        @media (max-width: 420px) {
+        @media (max-width: 360px) {
           .vision-badge span {
             display: none;
           }
@@ -595,7 +607,7 @@ class NexusMcpCard extends HTMLElement {
           display: flex;
           align-items: flex-end;
           gap: 8px;
-          padding: 10px 14px;
+          padding: 8px 12px;
           border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
           background: var(--card-background-color, #1e1e1e);
         }
@@ -612,7 +624,7 @@ class NexusMcpCard extends HTMLElement {
           cursor: pointer;
           transition: color 0.2s, background 0.2s;
           flex-shrink: 0;
-          margin-bottom: 1px;
+          margin-bottom: 7px;
         }
         .action-btn-attach:hover {
           color: var(--primary-text-color, #fff);
@@ -624,20 +636,21 @@ class NexusMcpCard extends HTMLElement {
         .chat-input {
           flex: 1;
           border: 1px solid var(--divider-color, rgba(255,255,255,0.15));
-          border-radius: 18px;
-          padding: 9px 16px;
+          border-radius: 16px;
+          padding: 8px 14px;
           font-size: 0.92rem;
           font-family: inherit;
-          line-height: 1.4;
+          line-height: 1.35;
           outline: none;
           background: var(--secondary-background-color, rgba(255,255,255,0.05));
           color: var(--primary-text-color, #fff);
           transition: border-color 0.2s;
           resize: none;
-          overflow-y: auto;
+          overflow: hidden;
           box-sizing: border-box;
-          height: 38px;
-          max-height: 130px;
+          min-height: 52px;
+          height: 52px;
+          max-height: 140px;
         }
         .chat-input:focus {
           border-color: var(--primary-color, #03a9f4);
@@ -661,6 +674,8 @@ class NexusMcpCard extends HTMLElement {
           justify-content: center;
           cursor: pointer;
           transition: transform 0.15s, background 0.2s;
+          flex-shrink: 0;
+          margin-bottom: 7px;
         }
         .action-btn:hover {
           transform: scale(1.05);
@@ -743,8 +758,9 @@ class NexusMcpCard extends HTMLElement {
     if (input && sendBtn) {
       const adjustHeight = () => {
         input.style.height = "auto";
-        const newHeight = Math.min(input.scrollHeight, 130);
-        input.style.height = `${Math.max(newHeight, 38)}px`;
+        const newHeight = Math.min(input.scrollHeight, 140);
+        input.style.height = `${Math.max(newHeight, 52)}px`;
+        input.style.overflowY = input.scrollHeight > 140 ? "auto" : "hidden";
       };
 
       input.addEventListener("input", adjustHeight);
@@ -754,7 +770,8 @@ class NexusMcpCard extends HTMLElement {
         if ((text || this._attachedImage) && !this._isSending) {
           this._sendMessage(text);
           input.value = "";
-          input.style.height = "38px";
+          input.style.height = "52px";
+          input.style.overflowY = "hidden";
         }
       };
 
@@ -889,14 +906,19 @@ class NexusMcpCard extends HTMLElement {
       return Boolean(stateObj.attributes.has_vision);
     }
     const str = `${agentId} ${stateObj?.attributes?.friendly_name || ""}`.toLowerCase();
+    if (str.includes("gpt-oss") || str.includes("120b") || str.includes("20b")) {
+      return false;
+    }
     return Boolean(
       str.includes("gemini") ||
       str.includes("vision") ||
       str.includes("-vl") ||
       str.includes("gpt-4o") ||
       str.includes("omni") ||
+      str.includes("qwen") ||
       str.includes("llava") ||
-      str.includes("claude-3")
+      str.includes("claude-3") ||
+      str.includes("pixtral")
     );
   }
 
@@ -910,7 +932,7 @@ class NexusMcpCard extends HTMLElement {
 
     badge.className = `vision-badge ${hasVision ? "has-vision" : "no-vision"}`;
     const iconName = hasVision ? "mdi:eye-outline" : "mdi:eye-off-outline";
-    const label = hasVision ? (isEs ? "Visión" : "Vision") : (isEs ? "Sin visión" : "No vision");
+    const label = hasVision ? (isEs ? "Visión" : "Vision") : (isEs ? "Texto" : "Text");
     const title = hasVision
       ? (isEs ? "Modelo con visión: admite análisis de imágenes" : "Vision model: supports image analysis")
       : (isEs ? "Modelo solo de texto: no admite imágenes" : "Text-only model: does not support images");
@@ -918,7 +940,7 @@ class NexusMcpCard extends HTMLElement {
     badge.title = title;
     badge.innerHTML = `
       <ha-icon icon="${iconName}"></ha-icon>
-      <span>${label}</span>
+      <span class="vision-badge-text">${label}</span>
     `;
   }
 
@@ -938,8 +960,8 @@ class NexusMcpCard extends HTMLElement {
     for (const ag of agents) {
       const isSelected = ag.id === this._selectedAgent ? "selected" : "";
       const hasVision = this._agentHasVision(ag.id);
-      const visionTag = hasVision ? (isEs ? " [👁️ Visión]" : " [👁️ Vision]") : "";
-      html += `<option value="${ag.id}" ${isSelected}>${ag.name}${visionTag}</option>`;
+      const prefix = hasVision ? "👁️ " : "";
+      html += `<option value="${ag.id}" ${isSelected}>${prefix}${ag.name}</option>`;
     }
     select.innerHTML = html;
   }
