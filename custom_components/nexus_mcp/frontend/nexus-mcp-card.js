@@ -360,6 +360,73 @@ class NexusMcpCard extends HTMLElement {
           border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
           border-bottom-left-radius: 4px;
         }
+        .code-block-container {
+          margin: 8px 0;
+          border-radius: 8px;
+          overflow: hidden;
+          background: #151515;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          text-align: left;
+        }
+        .code-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 5px 10px;
+          background: #222;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          font-family: var(--code-font-family, Consolas, Monaco, monospace);
+          font-size: 0.74rem;
+          color: var(--secondary-text-color, #aaa);
+          text-transform: uppercase;
+          font-weight: 600;
+          letter-spacing: 0.5px;
+        }
+        .code-copy-btn {
+          background: transparent;
+          border: none;
+          color: var(--secondary-text-color, #bbb);
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 0.74rem;
+          font-weight: 500;
+          padding: 2px 6px;
+          border-radius: 4px;
+          transition: background 0.15s, color 0.15s;
+        }
+        .code-copy-btn:hover {
+          background: rgba(255, 255, 255, 0.12);
+          color: #fff;
+        }
+        .code-copy-btn.copied {
+          color: #4caf50 !important;
+        }
+        .code-copy-btn ha-icon {
+          --mdc-icon-size: 14px;
+        }
+        .code-content {
+          margin: 0;
+          padding: 10px 12px;
+          overflow-x: auto;
+          font-family: var(--code-font-family, Consolas, Monaco, "Courier New", monospace);
+          font-size: 0.86rem;
+          line-height: 1.45;
+          color: #e0e0e0;
+          background: transparent;
+          white-space: pre;
+          word-break: normal;
+        }
+        .inline-code {
+          background: rgba(255, 255, 255, 0.1);
+          color: #ffb74d;
+          padding: 2px 5px;
+          border-radius: 4px;
+          font-family: var(--code-font-family, Consolas, Monaco, monospace);
+          font-size: 0.88em;
+        }
         .image-preview-bar {
           display: none;
           align-items: center;
@@ -676,6 +743,58 @@ class NexusMcpCard extends HTMLElement {
     select.innerHTML = html;
   }
 
+  _formatContent(rawContent) {
+    if (!rawContent) return "";
+
+    // 1. Extract triple-backtick code blocks and protect them with placeholders
+    const codeBlocks = [];
+    const codeBlockRegex = /```([a-zA-Z0-9_\-\.\+]*)\r?\n?([\s\S]*?)```/g;
+    let text = rawContent.replace(codeBlockRegex, (match, lang, code) => {
+      const id = `__NEXUS_CODE_BLOCK_${codeBlocks.length}__`;
+      codeBlocks.push({ lang: (lang || "yaml").trim(), code: code });
+      return id;
+    });
+
+    // 2. Escape HTML on surrounding text
+    text = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // 3. Convert markdown bold **text** to <strong>text</strong>
+    text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+
+    // 4. Convert markdown inline code `code` to <code class="inline-code">
+    text = text.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
+
+    // 5. Reinsert formatted code boxes
+    codeBlocks.forEach((block, i) => {
+      const placeholder = `__NEXUS_CODE_BLOCK_${i}__`;
+      const cleanCode = block.code.trim();
+      const escapedCode = cleanCode
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      const langLabel = block.lang || "yaml";
+      const isEs = this._isSpanish();
+      const copyLabel = isEs ? "Copiar código" : "Copy code";
+      const dataCode = encodeURIComponent(cleanCode);
+
+      const boxHtml = `
+        <div class="code-block-container">
+          <div class="code-header">
+            <span class="code-lang">${langLabel}</span>
+            <button class="code-copy-btn" data-code="${dataCode}" title="${copyLabel}">
+              <ha-icon icon="mdi:content-copy"></ha-icon>
+              <span class="copy-text">${copyLabel}</span>
+            </button>
+          </div>
+          <pre class="code-content"><code>${escapedCode}</code></pre>
+        </div>
+      `;
+      text = text.replace(placeholder, boxHtml);
+    });
+
+    return text;
+  }
+
   _updateMessagesView() {
     if (!this.shadowRoot) return;
     const container = this.shadowRoot.getElementById("messages-container");
@@ -698,7 +817,7 @@ class NexusMcpCard extends HTMLElement {
     this._messages.forEach((msg, idx) => {
       const isUser = msg.role === "user";
       const label = isUser ? (isEs ? "🧑 Tú" : "🧑 You") : "🤖 " + (msg.agent_name || (isEs ? "IA" : "AI"));
-      const content = (msg.content || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const formattedContent = this._formatContent(msg.content || "");
       const imageHtml = msg.image
         ? `<img class="bubble-image" src="${msg.image}" alt="${isEs ? "Imagen adjunta" : "Attached image"}" />`
         : "";
@@ -712,7 +831,7 @@ class NexusMcpCard extends HTMLElement {
               <ha-icon icon="mdi:content-copy"></ha-icon>
             </button>
           </div>
-          <div class="bubble-content">${imageHtml}${content}</div>
+          <div class="bubble-content">${imageHtml}${formattedContent}</div>
         </div>
       `;
     });
@@ -720,7 +839,7 @@ class NexusMcpCard extends HTMLElement {
     container.innerHTML = html;
     container.scrollTop = container.scrollHeight;
 
-    // Attach copy button click events
+    // Attach copy button click events for entire bubble
     const copyButtons = container.querySelectorAll(".bubble-copy-btn");
     copyButtons.forEach((btn) => {
       btn.onclick = async (e) => {
@@ -750,6 +869,39 @@ class NexusMcpCard extends HTMLElement {
           }, 1800);
         } catch (err) {
           console.error("Nexus MCP Card: Failed to copy text:", err);
+        }
+      };
+    });
+
+    // Attach copy button click events for code blocks
+    const codeButtons = container.querySelectorAll(".code-copy-btn");
+    codeButtons.forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
+        if (!rawCode) return;
+        const isEs = this._isSpanish();
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(rawCode);
+          } else {
+            const textarea = document.createElement("textarea");
+            textarea.value = rawCode;
+            textarea.style.position = "fixed";
+            textarea.style.opacity = "0";
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
+          }
+          btn.classList.add("copied");
+          btn.innerHTML = `<ha-icon icon="mdi:check"></ha-icon><span class="copy-text">${isEs ? "¡Copiado!" : "Copied!"}</span>`;
+          setTimeout(() => {
+            btn.classList.remove("copied");
+            btn.innerHTML = `<ha-icon icon="mdi:content-copy"></ha-icon><span class="copy-text">${isEs ? "Copiar código" : "Copy code"}</span>`;
+          }, 1800);
+        } catch (err) {
+          console.error("Nexus MCP Card: Failed to copy code:", err);
         }
       };
     });
@@ -1017,7 +1169,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.3.1 Vision & Copy Ready ",
+  "%c NEXUS MCP CARD %c v1.3.2 Code Blocks & Copy Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );

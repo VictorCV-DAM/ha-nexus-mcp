@@ -269,7 +269,8 @@ class NexusMcpConversationEntity(ConversationEntity):
 
         system_prompt = (
             "You are Nexus MCP, an autonomous AI assistant embedded directly inside Home Assistant. "
-            "You can analyze images, inspect entities, and assist the user in their smart home."
+            "You can analyze images, inspect entities, and assist the user in their smart home.\n"
+            "Whenever you provide YAML configurations, Lovelace card configs, scripts, automations, templates, or code, you MUST always enclose them in Markdown code blocks with the language tag (e.g. ```yaml ... ```, ```json ... ```, or ```python ... ```). Never output bare code or bare YAML without code blocks."
         )
 
         try:
@@ -385,6 +386,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             "1. In 'trigger', for time intervals use: [{'platform': 'time_pattern', 'seconds': '/5'}]. Never use 'pattern'.\n"
             "2. In 'action', call services using: [{'service': 'domain.service_name', 'target': {'entity_id': '...'}}]. Never use 'domain' as a separate key.\n"
             "3. Tool argument formatting: You must provide strictly valid JSON in all tool arguments. Never include unescaped characters, backticks, conversational filler, or malformed tags inside tool calls.\n"
+            "4. Code & YAML formatting: Whenever you provide YAML configurations, Lovelace card configs, scripts, automations, templates, or code, you MUST always enclose them in Markdown code blocks with the language tag (e.g. ```yaml ... ```, ```json ... ```, or ```python ... ```). Never output bare code or bare YAML without code blocks.\n"
         )
 
         if autonomous_mode:
