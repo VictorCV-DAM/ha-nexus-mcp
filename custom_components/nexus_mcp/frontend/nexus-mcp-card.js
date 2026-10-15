@@ -1,15 +1,14 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant
- * Interactive Chat, Conversation History, and Quick Assist Integration.
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.3.0 Dev)
+ * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
-// Register card in Home Assistant Card Picker
 window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === "nexus-mcp-card")) {
   window.customCards.push({
     type: "nexus-mcp-card",
     name: "Nexus MCP Chat & Historial",
-    description: "Tarjeta interactiva para chatear, ver el historial y retomar conversaciones con Nexus MCP.",
+    description: "Tarjeta interactiva para chatear con cualquier IA de Home Assistant, cambiar de modelo en vivo y gestionar historiales.",
     preview: true,
     documentationURL: "https://github.com/VictorCV-DAM/ha-nexus-mcp",
   });
@@ -21,13 +20,15 @@ class NexusMcpCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._config = {};
     this._hass = null;
+    this._selectedAgent = null;
+    this._conversationId = null;
+    this._messages = [];
     this._isSending = false;
   }
 
   static getStubConfig() {
     return {
       title: "Nexus MCP Intercom",
-      entity: "sensor.nexus_mcp_historial_de_conversaciones",
     };
   }
 
@@ -42,9 +43,12 @@ class NexusMcpCard extends HTMLElement {
   setConfig(config) {
     this._config = {
       title: "Nexus MCP Intercom",
-      entity: "sensor.nexus_mcp_historial_de_conversaciones",
+      agent_id: null,
       ...config,
     };
+    if (this._config.agent_id) {
+      this._selectedAgent = this._config.agent_id;
+    }
     this._render();
   }
 
@@ -52,23 +56,68 @@ class NexusMcpCard extends HTMLElement {
     const oldHass = this._hass;
     this._hass = hass;
 
-    // Auto-discover sensor if configured entity doesn't exist
-    if (this._config.entity && !hass.states[this._config.entity]) {
-      const candidates = Object.keys(hass.states).filter(
-        (e) => e.startsWith("sensor.nexus_mcp_") && e.includes("historial")
-      );
-      if (candidates.length > 0) {
-        this._config.entity = candidates[0];
+    // Auto-select agent if not already selected
+    if (!this._selectedAgent) {
+      const agents = this._getAvailableAgents();
+      // Prefer Groq 120b or any nexus_mcp agent
+      const nexusAgent = agents.find((a) => a.id.includes("nexus_mcp_intercom_openai_gpt_oss_120b"))
+        || agents.find((a) => a.id.startsWith("conversation.nexus_mcp_"))
+        || agents[0];
+      if (nexusAgent) {
+        this._selectedAgent = nexusAgent.id;
+        this._loadHistoryForAgent(this._selectedAgent);
       }
     }
 
-    const entityId = this._config.entity;
-    const currentState = entityId ? hass.states[entityId] : null;
-    const oldState = oldHass && entityId ? oldHass.states[entityId] : null;
-
-    if (!oldHass || currentState !== oldState) {
-      this._updateContent();
+    if (!oldHass) {
+      this._updateAgentDropdown();
+      this._updateMessagesView();
     }
+  }
+
+  _getAvailableAgents() {
+    if (!this._hass) return [];
+    return Object.keys(this._hass.states)
+      .filter((e) => e.startsWith("conversation."))
+      .map((entityId) => {
+        const stateObj = this._hass.states[entityId];
+        let name = stateObj.attributes?.friendly_name || entityId.replace("conversation.", "");
+        name = name.replace("Nexus MCP Intercom (", "").replace(")", "");
+        return {
+          id: entityId,
+          name: name,
+        };
+      })
+      .sort((a, b) => {
+        // Put nexus_mcp agents first
+        const aNexus = a.id.includes("nexus_mcp");
+        const bNexus = b.id.includes("nexus_mcp");
+        if (aNexus && !bNexus) return -1;
+        if (!aNexus && bNexus) return 1;
+        return a.name.localeCompare(b.name);
+      });
+  }
+
+  _loadHistoryForAgent(agentId) {
+    if (!agentId) return;
+    try {
+      const saved = localStorage.getItem(`nexus_mcp_history_${agentId}`);
+      if (saved) {
+        this._messages = JSON.parse(saved);
+      } else {
+        this._messages = [];
+      }
+    } catch (e) {
+      this._messages = [];
+    }
+    this._updateMessagesView();
+  }
+
+  _saveHistoryForAgent(agentId) {
+    if (!agentId) return;
+    try {
+      localStorage.setItem(`nexus_mcp_history_${agentId}`, JSON.stringify(this._messages.slice(-30)));
+    } catch (e) {}
   }
 
   _render() {
@@ -84,36 +133,57 @@ class NexusMcpCard extends HTMLElement {
           flex-direction: column;
           height: 100%;
           overflow: hidden;
-          background: var(--card-background-color, #fff);
+          background: var(--card-background-color, #1e1e1e);
           border-radius: var(--ha-card-border-radius, 12px);
-          box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,0.08));
-          border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, var(--divider-color, #e0e0e0));
+          box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,0.15));
+          border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, var(--divider-color, rgba(255,255,255,0.08)));
           font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
         }
         .header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 14px 16px;
-          border-bottom: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+          padding: 12px 16px;
+          border-bottom: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
           background: var(--app-header-background-color, transparent);
+          gap: 12px;
         }
-        .header-title {
+        .header-title-group {
           display: flex;
           align-items: center;
           gap: 10px;
-          font-size: 1.1rem;
-          font-weight: 600;
-          color: var(--primary-text-color, #212121);
+          flex: 1;
+          min-width: 0;
         }
-        .header-title ha-icon {
+        .header-title-group ha-icon {
           color: var(--primary-color, #03a9f4);
-          --mdc-icon-size: 24px;
+          --mdc-icon-size: 26px;
+          flex-shrink: 0;
+        }
+        .agent-select {
+          background: var(--secondary-background-color, rgba(255,255,255,0.06));
+          color: var(--primary-text-color, #e1e1e1);
+          border: 1px solid var(--divider-color, rgba(255,255,255,0.15));
+          border-radius: 8px;
+          padding: 6px 10px;
+          font-size: 0.88rem;
+          font-weight: 500;
+          outline: none;
+          cursor: pointer;
+          max-width: 220px;
+          text-overflow: ellipsis;
+          overflow: hidden;
+          white-space: nowrap;
+          transition: border-color 0.2s;
+        }
+        .agent-select:focus {
+          border-color: var(--primary-color, #03a9f4);
         }
         .header-actions {
           display: flex;
           align-items: center;
           gap: 6px;
+          flex-shrink: 0;
         }
         .icon-btn {
           background: transparent;
@@ -125,23 +195,23 @@ class NexusMcpCard extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: center;
-          color: var(--secondary-text-color, #757575);
+          color: var(--secondary-text-color, #9e9e9e);
           transition: background 0.2s, color 0.2s;
         }
         .icon-btn:hover {
-          background: var(--secondary-background-color, rgba(0, 0, 0, 0.05));
-          color: var(--primary-text-color, #212121);
+          background: var(--secondary-background-color, rgba(255, 255, 255, 0.08));
+          color: var(--primary-text-color, #fff);
         }
         .messages-container {
           flex: 1;
           overflow-y: auto;
           max-height: 380px;
-          min-height: 200px;
+          min-height: 220px;
           padding: 16px;
           display: flex;
           flex-direction: column;
           gap: 12px;
-          background: var(--card-background-color, #fff);
+          background: var(--card-background-color, #1a1a1a);
         }
         .empty-state {
           display: flex;
@@ -149,14 +219,14 @@ class NexusMcpCard extends HTMLElement {
           align-items: center;
           justify-content: center;
           height: 100%;
-          min-height: 160px;
-          color: var(--secondary-text-color, #757575);
+          min-height: 180px;
+          color: var(--secondary-text-color, #888);
           text-align: center;
           gap: 8px;
         }
         .empty-state ha-icon {
-          --mdc-icon-size: 40px;
-          opacity: 0.6;
+          --mdc-icon-size: 42px;
+          opacity: 0.5;
         }
         .message-bubble {
           display: flex;
@@ -178,7 +248,7 @@ class NexusMcpCard extends HTMLElement {
           font-size: 0.72rem;
           margin-bottom: 3px;
           font-weight: 500;
-          color: var(--secondary-text-color, #757575);
+          color: var(--secondary-text-color, #888);
           display: flex;
           align-items: center;
           gap: 4px;
@@ -190,19 +260,19 @@ class NexusMcpCard extends HTMLElement {
           padding: 10px 14px;
           border-radius: 14px;
           font-size: 0.92rem;
-          line-height: 1.4;
+          line-height: 1.45;
           white-space: pre-wrap;
           word-break: break-word;
         }
         .message-bubble.user .bubble-content {
-          background: var(--primary-color, #03a9f4);
-          color: var(--text-primary-color, #fff);
+          background: var(--primary-color, #0288d1);
+          color: #fff;
           border-bottom-right-radius: 4px;
         }
         .message-bubble.assistant .bubble-content {
-          background: var(--secondary-background-color, #f5f5f5);
-          color: var(--primary-text-color, #212121);
-          border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+          background: var(--secondary-background-color, #2a2a2a);
+          color: var(--primary-text-color, #f0f0f0);
+          border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
           border-bottom-left-radius: 4px;
         }
         .input-bar {
@@ -210,18 +280,18 @@ class NexusMcpCard extends HTMLElement {
           align-items: center;
           gap: 8px;
           padding: 10px 14px;
-          border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
-          background: var(--card-background-color, #fff);
+          border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+          background: var(--card-background-color, #1e1e1e);
         }
         .chat-input {
           flex: 1;
-          border: 1px solid var(--divider-color, #ccc);
+          border: 1px solid var(--divider-color, rgba(255,255,255,0.15));
           border-radius: 20px;
           padding: 10px 16px;
           font-size: 0.92rem;
           outline: none;
-          background: var(--secondary-background-color, #fff);
-          color: var(--primary-text-color, #212121);
+          background: var(--secondary-background-color, rgba(255,255,255,0.05));
+          color: var(--primary-text-color, #fff);
           transition: border-color 0.2s;
         }
         .chat-input:focus {
@@ -229,7 +299,7 @@ class NexusMcpCard extends HTMLElement {
         }
         .action-btn {
           background: var(--primary-color, #03a9f4);
-          color: var(--text-primary-color, #fff);
+          color: #fff;
           border: none;
           border-radius: 50%;
           width: 38px;
@@ -250,18 +320,13 @@ class NexusMcpCard extends HTMLElement {
           opacity: 0.5;
           cursor: not-allowed;
         }
-        .action-btn.secondary {
-          background: var(--secondary-background-color, #f0f0f0);
-          color: var(--primary-text-color, #212121);
-          border: 1px solid var(--divider-color, #ccc);
-        }
       </style>
 
       <ha-card>
         <div class="header">
-          <div class="header-title">
+          <div class="header-title-group">
             <ha-icon icon="mdi:robot-happy-outline"></ha-icon>
-            <span id="title">${this._config.title || "Nexus MCP Intercom"}</span>
+            <select class="agent-select" id="agent-select" title="Seleccionar IA / Modelo"></select>
           </div>
           <div class="header-actions">
             <button class="icon-btn" id="btn-assist" title="Abrir Assist / Voz">
@@ -273,19 +338,14 @@ class NexusMcpCard extends HTMLElement {
           </div>
         </div>
 
-        <div class="messages-container" id="messages-container">
-          <div class="empty-state">
-            <ha-icon icon="mdi:forum-outline"></ha-icon>
-            <div>Cargando historial de Nexus MCP...</div>
-          </div>
-        </div>
+        <div class="messages-container" id="messages-container"></div>
 
         <div class="input-bar">
           <input
             type="text"
             class="chat-input"
             id="chat-input"
-            placeholder="Escribe a Nexus MCP..."
+            placeholder="Escribe un mensaje a la IA..."
             autocomplete="off"
           />
           <button class="action-btn" id="btn-send" title="Enviar">
@@ -296,7 +356,8 @@ class NexusMcpCard extends HTMLElement {
     `;
 
     this._setupListeners();
-    this._updateContent();
+    this._updateAgentDropdown();
+    this._updateMessagesView();
   }
 
   _setupListeners() {
@@ -304,11 +365,12 @@ class NexusMcpCard extends HTMLElement {
     const sendBtn = this.shadowRoot.getElementById("btn-send");
     const resetBtn = this.shadowRoot.getElementById("btn-reset");
     const assistBtn = this.shadowRoot.getElementById("btn-assist");
+    const agentSelect = this.shadowRoot.getElementById("agent-select");
 
     if (input && sendBtn) {
       const handleSend = () => {
         const text = input.value.trim();
-        if (text) {
+        if (text && !this._isSending) {
           this._sendMessage(text);
           input.value = "";
         }
@@ -320,6 +382,14 @@ class NexusMcpCard extends HTMLElement {
           e.preventDefault();
           handleSend();
         }
+      };
+    }
+
+    if (agentSelect) {
+      agentSelect.onchange = (e) => {
+        this._selectedAgent = e.target.value;
+        this._conversationId = null;
+        this._loadHistoryForAgent(this._selectedAgent);
       };
     }
 
@@ -336,50 +406,46 @@ class NexusMcpCard extends HTMLElement {
     }
   }
 
-  _updateContent() {
-    if (!this.shadowRoot || !this._hass) return;
+  _updateAgentDropdown() {
+    if (!this.shadowRoot) return;
+    const select = this.shadowRoot.getElementById("agent-select");
+    if (!select) return;
 
-    const titleEl = this.shadowRoot.getElementById("title");
-    if (titleEl) {
-      titleEl.textContent = this._config.title || "Nexus MCP Intercom";
-    }
-
-    const container = this.shadowRoot.getElementById("messages-container");
-    if (!container) return;
-
-    const entityId = this._config.entity;
-    const stateObj = entityId ? this._hass.states[entityId] : null;
-
-    if (!stateObj) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
-          <div>Esperando entidad <code>${entityId || "sensor"}</code></div>
-          <small>Nexus MCP creará el historial al recibir mensajes.</small>
-        </div>
-      `;
+    const agents = this._getAvailableAgents();
+    if (agents.length === 0) {
+      select.innerHTML = `<option value="">Buscando IAs...</option>`;
       return;
     }
 
-    const history = stateObj.attributes?.history || [];
+    let html = "";
+    for (const ag of agents) {
+      const isSelected = ag.id === this._selectedAgent ? "selected" : "";
+      html += `<option value="${ag.id}" ${isSelected}>${ag.name}</option>`;
+    }
+    select.innerHTML = html;
+  }
 
-    if (history.length === 0) {
+  _updateMessagesView() {
+    if (!this.shadowRoot) return;
+    const container = this.shadowRoot.getElementById("messages-container");
+    if (!container) return;
+
+    if (this._messages.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
           <ha-icon icon="mdi:chat-outline"></ha-icon>
-          <div>Sin conversaciones recientes.</div>
-          <small>Escribe abajo o pulsa el micrófono para hablar con Nexus MCP.</small>
+          <div>Sin mensajes con esta IA.</div>
+          <small>Escribe abajo o pulsa el micrófono para hablar.</small>
         </div>
       `;
       return;
     }
 
     let html = "";
-    for (const msg of history) {
-      const role = msg.role || "user";
+    for (const msg of this._messages) {
+      const isUser = msg.role === "user";
+      const label = isUser ? "🧑 Tú" : "🤖 " + (msg.agent_name || "IA");
       const content = (msg.content || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      const isUser = role === "user";
-      const label = isUser ? "🧑 Tú" : "🤖 Nexus MCP";
 
       html += `
         <div class="message-bubble ${isUser ? "user" : "assistant"}">
@@ -394,26 +460,30 @@ class NexusMcpCard extends HTMLElement {
   }
 
   async _sendMessage(text) {
-    if (!this._hass || !text) return;
+    if (!this._hass || !text || this._isSending) return;
+    this._isSending = true;
 
-    // Optimistically render user message
+    const agentId = this._selectedAgent;
+    const agents = this._getAvailableAgents();
+    const currentAgent = agents.find((a) => a.id === agentId);
+    const agentName = currentAgent ? currentAgent.name : "Nexus MCP";
+
+    // 1. Add user message
+    this._messages.push({
+      role: "user",
+      content: text,
+      timestamp: Date.now(),
+    });
+    this._saveHistoryForAgent(agentId);
+    this._updateMessagesView();
+
+    // 2. Add waiting bubble
     const container = this.shadowRoot.getElementById("messages-container");
     if (container) {
-      const emptyState = container.querySelector(".empty-state");
-      if (emptyState) emptyState.remove();
-
-      const userBubble = document.createElement("div");
-      userBubble.className = "message-bubble user";
-      userBubble.innerHTML = `
-        <div class="bubble-label">🧑 Tú</div>
-        <div class="bubble-content">${text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
-      `;
-      container.appendChild(userBubble);
-
       const waitingBubble = document.createElement("div");
       waitingBubble.className = "message-bubble assistant waiting-bubble";
       waitingBubble.innerHTML = `
-        <div class="bubble-label">🤖 Nexus MCP</div>
+        <div class="bubble-label">🤖 ${agentName}</div>
         <div class="bubble-content" style="font-style: italic; opacity: 0.7;">Pensando...</div>
       `;
       container.appendChild(waitingBubble);
@@ -424,56 +494,83 @@ class NexusMcpCard extends HTMLElement {
     if (sendBtn) sendBtn.disabled = true;
 
     try {
-      // Find the Nexus MCP conversation agent if present
-      const agentId = Object.keys(this._hass.states).find(
-        (e) => e.startsWith("conversation.nexus_mcp_")
-      );
-
-      const serviceData = { text };
+      // Direct call via Home Assistant WebSocket conversation/process
+      const payload = {
+        type: "conversation/process",
+        text: text,
+      };
       if (agentId) {
-        serviceData.agent_id = agentId;
+        payload.agent_id = agentId;
+      }
+      if (this._conversationId) {
+        payload.conversation_id = this._conversationId;
       }
 
-      await this._hass.callService("conversation", "process", serviceData);
-    } catch (err) {
-      console.error("Nexus MCP Card error sending utterance:", err);
-      if (container) {
-        const errorBubble = document.createElement("div");
-        errorBubble.className = "message-bubble assistant";
-        errorBubble.innerHTML = `
-          <div class="bubble-label">⚠️ Error</div>
-          <div class="bubble-content" style="color: var(--error-color, red);">No se pudo enviar el mensaje: ${err.message || err}</div>
-        `;
-        container.appendChild(errorBubble);
+      const res = await this._hass.callWS(payload);
+      
+      const reply =
+        res?.response?.speech?.plain?.speech ||
+        res?.response?.card?.text ||
+        "Comando procesado correctamente.";
+
+      if (res?.conversation_id) {
+        this._conversationId = res.conversation_id;
       }
+
+      // Add assistant response to history
+      this._messages.push({
+        role: "assistant",
+        agent_name: agentName,
+        content: reply,
+        timestamp: Date.now(),
+      });
+      this._saveHistoryForAgent(agentId);
+    } catch (err) {
+      console.error("Nexus MCP Card execution error:", err);
+      this._messages.push({
+        role: "assistant",
+        agent_name: "Error",
+        content: `Error al procesar: ${err.message || JSON.stringify(err)}`,
+        timestamp: Date.now(),
+      });
+      this._saveHistoryForAgent(agentId);
     } finally {
+      this._isSending = false;
       if (sendBtn) sendBtn.disabled = false;
-      const waiting = container?.querySelector(".waiting-bubble");
-      if (waiting) waiting.remove();
+      this._updateMessagesView();
     }
   }
 
   async _clearHistory() {
-    if (!this._hass) return;
-    try {
-      await this._hass.callService("nexus_mcp", "clear_history", {});
-      const container = this.shadowRoot.getElementById("messages-container");
-      if (container) {
-        container.innerHTML = `
-          <div class="empty-state">
-            <ha-icon icon="mdi:check-circle-outline"></ha-icon>
-            <div>Conversación reiniciada.</div>
-            <small>La memoria de Nexus MCP se ha restablecido correctamente.</small>
-          </div>
-        `;
-      }
-    } catch (err) {
-      console.error("Nexus MCP Card error clearing history:", err);
+    const agentId = this._selectedAgent;
+    this._messages = [];
+    this._conversationId = null;
+    if (agentId) {
+      try {
+        localStorage.removeItem(`nexus_mcp_history_${agentId}`);
+      } catch (e) {}
     }
+
+    // Try to notify HA to clear memory
+    if (this._hass) {
+      try {
+        await this._hass.callService("nexus_mcp", "clear_history", {});
+      } catch (e) {
+        // If clear_history action isn't available, send conversational reset command
+        try {
+          await this._hass.callWS({
+            type: "conversation/process",
+            text: "nueva conversación",
+            agent_id: agentId,
+          });
+        } catch (err2) {}
+      }
+    }
+
+    this._updateMessagesView();
   }
 
   _openAssist() {
-    // Triggers standard Home Assistant Assist popup dialog
     const event = new CustomEvent("hass-action", {
       bubbles: true,
       composed: true,
@@ -498,9 +595,25 @@ class NexusMcpCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    this._render();
   }
 
   _render() {
+    if (!this._hass) return;
+
+    const agents = Object.keys(this._hass.states)
+      .filter((e) => e.startsWith("conversation."))
+      .map((id) => ({
+        id,
+        name: this._hass.states[id].attributes?.friendly_name || id,
+      }));
+
+    let optionsHtml = `<option value="">(Automático / Selector en vivo)</option>`;
+    for (const ag of agents) {
+      const isSel = this._config?.agent_id === ag.id ? "selected" : "";
+      optionsHtml += `<option value="${ag.id}" ${isSel}>${ag.name}</option>`;
+    }
+
     this.innerHTML = `
       <div style="padding: 16px; display: flex; flex-direction: column; gap: 14px;">
         <label style="display: flex; flex-direction: column; gap: 4px; font-weight: 500;">
@@ -513,28 +626,25 @@ class NexusMcpCardEditor extends HTMLElement {
           />
         </label>
         <label style="display: flex; flex-direction: column; gap: 4px; font-weight: 500;">
-          Entidad de Historial (Sensor)
-          <input
-            type="text"
-            id="cfg-entity"
-            value="${this._config.entity || "sensor.nexus_mcp_historial_de_conversaciones"}"
-            style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc);"
-          />
+          IA / Agente predeterminado (Opcional)
+          <select id="cfg-agent" style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc);">
+            ${optionsHtml}
+          </select>
         </label>
         <small style="color: var(--secondary-text-color, #666);">
-          La tarjeta detecta automáticamente el sensor de Nexus MCP y muestra los mensajes en tiempo real.
+          La tarjeta incluye un selector en su cabecera para cambiar de modelo de IA al vuelo.
         </small>
       </div>
     `;
 
     const titleInput = this.querySelector("#cfg-title");
-    const entityInput = this.querySelector("#cfg-entity");
+    const agentSelect = this.querySelector("#cfg-agent");
 
     const handleChange = () => {
       const newConfig = {
         ...this._config,
         title: titleInput.value,
-        entity: entityInput.value,
+        agent_id: agentSelect.value || undefined,
       };
       const event = new CustomEvent("config-changed", {
         detail: { config: newConfig },
@@ -544,17 +654,15 @@ class NexusMcpCardEditor extends HTMLElement {
       this.dispatchEvent(event);
     };
 
-    if (titleInput && entityInput) {
-      titleInput.oninput = handleChange;
-      entityInput.oninput = handleChange;
-    }
+    if (titleInput) titleInput.oninput = handleChange;
+    if (agentSelect) agentSelect.onchange = handleChange;
   }
 }
 
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.2.0 Loaded Successfully ",
+  "%c NEXUS MCP CARD %c Multi-Agent Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
