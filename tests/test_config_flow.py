@@ -127,6 +127,50 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
         self.assertIn("openrouter_api_url", placeholders)
         self.assertIn("ha_mcp_repo_url", placeholders)
 
+    async def test_step_mcp_server_creates_entry_with_model_in_title(self) -> None:
+        """Verify async_step_mcp_server sets model in entry title."""
+        flow = NexusMcpConfigFlow()
+        flow.hass = MagicMock()
+        flow._provider = PROVIDER_GROQ_FREE
+        flow._llm_data = {
+            CONF_LLM_PROVIDER: PROVIDER_GROQ_FREE,
+            CONF_API_KEY: "gsk_test",
+            CONF_MODEL: "llama-3.3-70b-versatile",
+        }
+        result = await flow.async_step_mcp_server(
+            {CONF_MCP_SERVER_URL: "http://127.0.0.1:9584", CONF_AUTONOMOUS_MODE: False}
+        )
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(result["title"], "Nexus MCP (llama-3.3-70b-versatile)")
+
+    async def test_options_flow_updates_entry_title_on_model_change(self) -> None:
+        """Verify OptionsFlow updates the entry title when model is modified."""
+        mock_entry = MagicMock()
+        mock_entry.title = "Nexus MCP (old-model)"
+        mock_entry.data = {
+            CONF_LLM_PROVIDER: PROVIDER_GROQ_FREE,
+            CONF_API_KEY: "gsk_test",
+            CONF_MODEL: "old-model",
+            CONF_BASE_URL: "https://api.groq.com/openai/v1",
+            CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
+            CONF_AUTONOMOUS_MODE: False,
+        }
+        mock_entry.options = {}
+
+        options_flow = NexusMcpOptionsFlow(mock_entry)
+        options_flow.hass = MagicMock()
+
+        await options_flow.async_step_init(
+            {
+                CONF_MODEL: "llama-3.3-70b-versatile",
+                CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
+                CONF_AUTONOMOUS_MODE: True,
+            }
+        )
+        options_flow.hass.config_entries.async_update_entry.assert_called_once()
+        call_kwargs = options_flow.hass.config_entries.async_update_entry.call_args[1]
+        self.assertEqual(call_kwargs["title"], "Nexus MCP (llama-3.3-70b-versatile)")
+
 
 if __name__ == "__main__":
     unittest.main()

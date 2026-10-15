@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import DOMAIN
+from .const import CONF_MODEL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,6 +17,14 @@ PLATFORMS = ["conversation"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Nexus MCP from a config entry."""
+    # Ensure entry title displays the selected model name (auto-migrating existing entries)
+    model = entry.data.get(CONF_MODEL)
+    if model:
+        desired_title = f"Nexus MCP ({model})"
+        if entry.title != desired_title and (entry.title.startswith("Nexus MCP") or not entry.title):
+            _LOGGER.info("Updating entry title from '%s' to '%s'", entry.title, desired_title)
+            hass.config_entries.async_update_entry(entry, title=desired_title)
+
     hass.data.setdefault(DOMAIN, {})
     _LOGGER.info("Initializing Nexus MCP Intercom (%s)", entry.title)
 

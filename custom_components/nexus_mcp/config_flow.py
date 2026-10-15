@@ -269,8 +269,9 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_MCP_SERVER_URL: user_input[CONF_MCP_SERVER_URL].strip(),
                 CONF_AUTONOMOUS_MODE: user_input[CONF_AUTONOMOUS_MODE],
             }
+            model_name = config_data.get(CONF_MODEL) or self._provider
             return self.async_create_entry(
-                title=f"Nexus MCP ({self._provider})", data=config_data
+                title=f"Nexus MCP ({model_name})", data=config_data
             )
 
         schema = vol.Schema(
@@ -328,8 +329,11 @@ class NexusMcpOptionsFlow(config_entries.OptionsFlow):
                     val = user_input[k]
                     updated_data[k] = val.strip() if isinstance(val, str) else val
 
+            model_name = updated_data.get(CONF_MODEL) or updated_data.get(CONF_LLM_PROVIDER)
+            new_title = f"Nexus MCP ({model_name})" if model_name else self.config_entry.title
+
             self.hass.config_entries.async_update_entry(
-                self.config_entry, data=updated_data, options=user_input
+                self.config_entry, title=new_title, data=updated_data, options=user_input
             )
             return self.async_create_entry(title="", data=user_input)
 
