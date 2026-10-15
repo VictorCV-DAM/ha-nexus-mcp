@@ -216,12 +216,13 @@ class NexusMcpCard extends HTMLElement {
     if (this._config && this._config.language) {
       return this._config.language === "es";
     }
+    const haObj = this._hass || document.querySelector("home-assistant")?.hass;
     const lang = String(
-      this._hass?.locale?.language ||
-      this._hass?.language ||
-      this._hass?.selectedLanguage ||
+      haObj?.locale?.language ||
+      haObj?.language ||
+      haObj?.selectedLanguage ||
       navigator.language ||
-      "es"
+      "en"
     ).toLowerCase();
     return lang.startsWith("es");
   }
@@ -1438,7 +1439,8 @@ class NexusMcpCardEditor extends HTMLElement {
     if (this._config && this._config.language) {
       return this._config.language === "es";
     }
-    const lang = this._hass?.locale?.language || this._hass?.language || navigator.language || "es";
+    const haObj = this._hass || document.querySelector("home-assistant")?.hass;
+    const lang = haObj?.locale?.language || haObj?.language || haObj?.selectedLanguage || navigator.language || "en";
     return String(lang).toLowerCase().startsWith("es");
   }
 
