@@ -105,7 +105,7 @@
           "model": "Identificador del modelo a utilizar.",
           "base_url": "URL base del endpoint para tu proveedor.",
           "mcp_server_url": "Endpoint del servidor ha-mcp (https://github.com/homeassistant-ai/ha-mcp).",
-          "autonomous_mode": "Si se activa, Nexus MCP ejecutará acciones directamente sin confirmación interactiva."
+          "autonomous_mode": "Si está activado, Nexus MCP creará automatizaciones directamente. Si está desactivado (por defecto), te explicará lo que ha entendido y te pedirá confirmación antes de proceder a su creación."
         }
       }
     }

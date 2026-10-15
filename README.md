@@ -9,7 +9,7 @@
   [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
   [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1.0%20%E2%80%94%202026.9.4%2B-41BDF5.svg?logo=home-assistant)](https://www.home-assistant.io/)
   [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
-  [![Tests](https://img.shields.io/badge/Tests-20%2F20%20Passing-brightgreen.svg)](tests/)
+  [![Tests](https://img.shields.io/badge/Tests-24%2F24%20Passing-brightgreen.svg)](tests/)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   
   [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange?logo=buy-me-a-coffee)](https://buymeacoffee.com/VictorCV)
@@ -51,6 +51,7 @@ Click the badge above or use the direct link to open this repository directly in
   * `ha_get_entity_state`: State and attribute inspection.
   * `ha_call_service`: Real-time execution of any Home Assistant service (`light.turn_on`, `switch.toggle`, `climate.set_temperature`, etc.).
   * `ha_create_automation`: Dynamic generation and hot-reload of Home Assistant automations (`automations.yaml`), with automatic schema sanitization for time patterns and service actions.
+  * **🛡️ Autonomous Mode & Interactive Confirmation**: When Autonomous Mode is disabled (default), Nexus MCP will tell you what it understood, describe the exact planned automation (triggers, conditions, actions, entity IDs), and ask for your confirmation before creating it. If Autonomous Mode is enabled, it creates automations immediately without asking.
 * **🌐 100% Free & Fast Cloud Providers**:
   * **Groq Cloud (Recommended in Europe & Worldwide)**:
     * 1-click Google/GitHub login, zero credit card, zero phone verification required.
