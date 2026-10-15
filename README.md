@@ -124,6 +124,19 @@ entity: sensor.nexus_mcp_historial_de_conversaciones
 ```
 *(Tip: If you prefer standard Markdown cards, you can also use `{{ state_attr('sensor.nexus_mcp_historial_de_conversaciones', 'formatted_markdown') }}`)*
 
+### 👁️ Multimodal Vision, Image Paste (`Ctrl+V`) & 1-Click Text Selection
+Interact visually with your smart home using vision-capable AI models (e.g. `qwen/qwen3.8-27b`, Google Gemini Flash, or local vision models):
+
+<p align="center">
+  <img src="images/18_card_image_paste.png" width="31%" align="middle" style="vertical-align: middle;" alt="Clipboard Image Paste Ctrl+V" />
+  <img src="images/19_card_vision_analysis.png" width="31%" align="middle" style="vertical-align: middle;" alt="Multimodal Real-Time Vision Analysis" />
+  <img src="images/20_card_text_selection.png" width="31%" align="middle" style="vertical-align: middle;" alt="1-Click Copy and Manual Text Selection" />
+</p>
+
+* **🖼️ Instant Clipboard Paste (`Ctrl + V`) & File Attach (`📎`)**: Take a screenshot with `Win + Shift + S` or copy an image anywhere on the web, and paste it directly into the chat. You can also click the paperclip icon (`📎`) to upload an image from disk. Includes instant thumbnail preview with a removal button (`✕`).
+* **🧠 Real-Time Multimodal Diagnostics**: Upload camera snapshots, device photos, or Home Assistant error screenshots directly to the AI for instant automated diagnosis and actionable recommendations.
+* **📋 1-Click Message Copy & Native Text Selection**: Every message bubble features a 1-click copy icon button (`mdi:content-copy`) with instant visual checkmark feedback (`mdi:check`). Full cursor text selection is enabled on all message bubbles for seamless copying of code blocks, YAML configurations, or entity IDs.
+
 ---
 
 ## 🚀 Key Features
@@ -243,7 +256,28 @@ Nexus MCP maintains a rigorous test suite covering config flows, options flows, 
 python -m unittest discover -s tests
 ```
 
-*Result:* **36/36 unit tests passing (100% success rate)**.
+*Result:* **38/38 unit tests passing (100% success rate)**.
+
+---
+
+## 🏷️ Release Notes: v1.3.1
+
+* **👁️ Multimodal Vision Support & Dedicated WebSocket Pipeline (`nexus_mcp/chat`)**:
+  * Added end-to-end multimodal inference support for vision models (`qwen/qwen3.8-27b`, Google Gemini Vision, OpenAI Vision, and Ollama Vision).
+  * Implemented `nexus_mcp/chat` WebSocket command handling base64 DataURLs seamlessly alongside standard Home Assistant text processing.
+  * Graceful fallback guidance: if an image is sent while using a text-only model, Nexus MCP explains the limitation and suggests switching to a vision model.
+* **🖼️ Clipboard Image Paste (`Ctrl+V`) & File Attachment (`📎`)**:
+  * Direct clipboard screenshot pasting (`Win + Shift + S` or copied image) anywhere on the card or input bar with zero lag.
+  * Dedicated paperclip attachment button (`mdi:paperclip`) for browsing and uploading image files from disk or mobile gallery.
+  * Active image preview container with thumbnail card, filename caption, and 1-click removal button (`✕`).
+* **📋 1-Click Message Copying & Full Text Selection**:
+  * Each message bubble includes a 1-click copy icon button (`mdi:content-copy`) with animated visual checkmark feedback (`mdi:check`).
+  * CSS `user-select: text` enabled across all message bubbles, enabling fluent cursor selection of text, code blocks, or YAML automations.
+* **🛡️ Corrupted Tool Message Sanitizer & HTTP 400 Prevention**:
+  * Strict validation for OpenAI/Groq API message sequencing: automatically converts orphaned or unlinked `role: "tool"` execution results into safe assistant notes, eliminating HTTP 400 `invalid_request_error`.
+  * Persistent storage sanitizer: ensures `.storage/nexus_mcp_history_*` only stores clean conversational dialogue (`user` and `assistant`), preventing transient server errors from contaminating memory.
+* **🧪 38/38 Unit Tests Passing (100% Success Rate)**:
+  * Full test suite coverage updated and passing.
 
 ---
 
