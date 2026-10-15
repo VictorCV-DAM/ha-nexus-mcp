@@ -9,7 +9,7 @@
   [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
   [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1.0%20%E2%80%94%202026.9.4%2B-41BDF5.svg?logo=home-assistant)](https://www.home-assistant.io/)
   [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
-  [![Tests](https://img.shields.io/badge/Tests-38%2F38%20Passing-brightgreen.svg)](tests/)
+  [![Tests](https://img.shields.io/badge/Tests-40%2F40%20Passing-brightgreen.svg)](tests/)
   [![Downloads](https://img.shields.io/github/downloads/VictorCV-DAM/ha-nexus-mcp/total.svg?color=brightgreen)](https://github.com/VictorCV-DAM/ha-nexus-mcp/releases)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   
@@ -259,7 +259,28 @@ Nexus MCP maintains a rigorous test suite covering config flows, options flows, 
 python -m unittest discover -s tests
 ```
 
-*Result:* **38/38 unit tests passing (100% success rate)**.
+*Result:* **40/40 unit tests passing (100% success rate)**.
+
+---
+
+## 🏷️ Release Notes: v1.3.3
+
+* **🛡️ Request Timeout Resilience & Anti-Hang Guard**:
+  * Added explicit client timeouts (`40s` for Google Gemini and `45s` for OpenAI/Groq/Ollama) to prevent indefinite hanging on saturated models or network hiccups.
+  * Card frontend protected with safety timeout (`Promise.race`): automatically recovers from stalled or dropped connections, resets waiting bubbles, and surfaces clear error notices.
+* **⏎ Multiline Input with `Ctrl+Enter`**:
+  * Send messages with `Enter` (or send button) and insert new lines without sending using `Ctrl+Enter` (or `Shift+Enter`).
+  * Textbox optimized with dynamic height (52px base), eliminating native scrollbars while preserving full typing comfort.
+* **💾 Selected Agent Persistence**:
+  * The selected AI agent in the card header is remembered across page reloads and browser sessions via client storage, preventing accidental fallback to default.
+* **👁️ Dynamic Multimodal Vision Badge & Universal Model Detection**:
+  * Real-time vision indicator badge (`Visión` / `Texto`) in the card header.
+  * Compact `👁️ ` prefix in the agent dropdown for instant recognition of vision-capable models.
+  * Comprehensive pattern detection covering both cloud and local models (`gemini`, `qwen`, `llava`, `moondream`, `minicpm`, `paligemma`, `cogvlm`, `internvl`, `pixtral`, etc.).
+* **🔧 Groq Cloud Tool Message Validator**:
+  * Fixed HTTP 400 Bad Request (`messages[...].content must be a string`) during multi-turn tool calling when receiving empty or dictionary outputs.
+* **🧪 40/40 Unit Tests Passing (100% Success Rate)**:
+  * Full test suite updated and passing with zero regressions.
 
 ---
 
