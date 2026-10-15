@@ -155,7 +155,26 @@ class NexusMcpCard extends HTMLElement {
           flex: 1;
           min-width: 0;
         }
-        .header-title-group ha-icon {
+        .header-icon-btn {
+          background: transparent;
+          border: none;
+          padding: 0;
+          margin: 0;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          transition: transform 0.15s, opacity 0.2s;
+        }
+        .header-icon-btn:hover {
+          transform: scale(1.1);
+          opacity: 0.85;
+        }
+        .header-icon-btn:active {
+          transform: scale(0.95);
+        }
+        .header-icon-btn ha-icon {
           color: var(--primary-color, #03a9f4);
           --mdc-icon-size: 26px;
           flex-shrink: 0;
@@ -325,7 +344,9 @@ class NexusMcpCard extends HTMLElement {
       <ha-card>
         <div class="header">
           <div class="header-title-group">
-            <ha-icon icon="mdi:robot-happy-outline"></ha-icon>
+            <button class="header-icon-btn" id="btn-config" title="Configurar Nexus MCP">
+              <ha-icon icon="mdi:robot-happy-outline"></ha-icon>
+            </button>
             <select class="agent-select" id="agent-select" title="Seleccionar IA / Modelo"></select>
           </div>
           <div class="header-actions">
@@ -402,6 +423,13 @@ class NexusMcpCard extends HTMLElement {
     if (assistBtn) {
       assistBtn.onclick = () => {
         this._openAssist();
+      };
+    }
+
+    const configBtn = this.shadowRoot.getElementById("btn-config");
+    if (configBtn) {
+      configBtn.onclick = () => {
+        this._openConfiguration();
       };
     }
   }
@@ -590,6 +618,32 @@ class NexusMcpCard extends HTMLElement {
       },
     });
     this.dispatchEvent(event);
+  }
+
+  _openConfiguration() {
+    // 1. Dispatch official Home Assistant navigation action
+    const event = new CustomEvent("hass-action", {
+      bubbles: true,
+      composed: true,
+      detail: {
+        config: {
+          tap_action: {
+            action: "navigate",
+            navigation_path: "/config/integrations/integration/nexus_mcp",
+          },
+        },
+        action: "tap",
+      },
+    });
+    this.dispatchEvent(event);
+
+    // 2. Direct browser navigation fallback for single-page router
+    try {
+      window.history.pushState(null, "", "/config/integrations/integration/nexus_mcp");
+      window.dispatchEvent(new CustomEvent("location-changed"));
+    } catch (e) {
+      window.location.href = "/config/integrations/integration/nexus_mcp";
+    }
   }
 }
 
