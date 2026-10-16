@@ -958,25 +958,37 @@ class NexusMcpConversationEntity(ConversationEntity):
 
         assistant_reply = "OK."
         executed_any_tool = False
+        executed_action_service = False
         force_tool_choice = "required" if is_action_request else None
         hallucination_retried = False
 
         try:
             # Multi-turn tool execution loop (up to 5 turns)
             for turn_idx in range(5):
+                # For direct action commands, maintain tool requirement until ha_call_service executes
+                current_tool_choice = (
+                    "required"
+                    if (is_action_request and not executed_action_service and turn_idx < 3)
+                    else force_tool_choice
+                )
+                force_tool_choice = None
+
                 response = await self._engine.generate_response(
                     messages=prune_history_to_token_budget(history, max_tokens=1500),
                     tools=self._tools,
                     system_prompt=system_prompt,
-                    tool_choice=force_tool_choice,
+                    tool_choice=current_tool_choice,
                 )
-                force_tool_choice = None
 
                 if hasattr(response, "usage") and response.usage:
                     self.record_usage(response.usage, getattr(response, "rate_limits", None))
 
                 if response.tool_calls:
                     executed_any_tool = True
+                    for tc in response.tool_calls:
+                        if tc.name in ("ha_call_service", "ha_create_automation"):
+                            executed_action_service = True
+
                     # Record model's tool calls in history
                     history.append(
                         ChatMessage(
@@ -1047,10 +1059,10 @@ class NexusMcpConversationEntity(ConversationEntity):
                                 tool_name=tc.name,
                             )
                         )
-                    # Loop continues: send tool results back to LLM for final explanation
+                    # Loop continues: send tool results back to LLM for final explanation or next action call
                     continue
 
-                # Anti-hallucination / unexecuted-action check: If no tools were called in this session,
+                # Anti-hallucination / unexecuted-action check: If no action service was called in this session,
                 # but the model's text claims execution or the user gave a direct action command:
                 content_lower = (response.content or "").lower().strip()
                 claims_action = any(
@@ -1076,10 +1088,10 @@ class NexusMcpConversationEntity(ConversationEntity):
                     "ok", "listo", "hecho", "entendido", "de acuerdo", "claro", "done", "perfecto", "ya está", "ya esta"
                 )
                 is_unexecuted = False
-                if not executed_any_tool and not hallucination_retried:
-                    if claims_action or claims_intent_to_search_or_act or is_terse_ack:
+                if not hallucination_retried:
+                    if not executed_action_service and (claims_action or claims_intent_to_search_or_act or is_terse_ack):
                         is_unexecuted = True
-                    elif is_action_request and "?" not in content_lower and not any(
+                    elif is_action_request and not executed_action_service and "?" not in content_lower and not any(
                         err_word in content_lower
                         for err_word in ("no encuentro", "no encontré", "no pude", "no existe", "could not find", "unable to")
                     ):
@@ -1087,7 +1099,7 @@ class NexusMcpConversationEntity(ConversationEntity):
 
                 if is_unexecuted:
                     _LOGGER.warning(
-                        "Nexus MCP intercepted unexecuted action command without tool calls: '%s'. Forcing ha_call_service/ha_search_entities execution.",
+                        "Nexus MCP intercepted unexecuted action command without action service calls: '%s'. Forcing ha_call_service/ha_search_entities execution.",
                         (response.content or "")[:120],
                     )
                     hallucination_retried = True
@@ -1116,14 +1128,14 @@ class NexusMcpConversationEntity(ConversationEntity):
                     if found_entities_summary:
                         entities_text = "\n".join(found_entities_summary)
                         correction_prompt = (
-                            f"[ENTIDADES ENCONTRADAS AUTOMÁTICAMENTE EN HOME ASSISTANT:\n"
+                            f"[ENTIDADES ENCONTRADAS EN HOME ASSISTANT:\n"
                             f"{entities_text}\n\n"
                             "INSTRUCCIÓN OBLIGATORIA: Las entidades de arriba corresponden a lo que el usuario pidió. "
                             "NO vuelvas a decir que vas a buscar ni pidas confirmación. "
-                            "Emite INMEDIATAMENTE las llamadas a `ha_call_service` utilizando los `entity_id` encontrados.]"
+                            "Emite INMEDIATAMENTE las llamadas a `ha_call_service` utilizando los `entity_id` encontrados para ejecutar la orden.]"
                             if is_spanish
                             else (
-                                f"[AUTOMATICALLY RESOLVED ENTITIES FROM HOME ASSISTANT:\n"
+                                f"[FOUND ENTITIES IN HOME ASSISTANT:\n"
                                 f"{entities_text}\n\n"
                                 "MANDATORY INSTRUCTION: The entities above match what the user requested. "
                                 "DO NOT say you will search or ask again. "
@@ -1132,14 +1144,14 @@ class NexusMcpConversationEntity(ConversationEntity):
                         )
                     else:
                         correction_prompt = (
-                            "[ERROR: No has llamado a ninguna herramienta (`ha_call_service` o `ha_search_entities`). "
+                            "[ERROR: No has ejecutado el servicio de control (`ha_call_service`). "
                             "Tus palabras o responder con 'ok' NO controlan dispositivos físicos en Home Assistant. "
                             "Para ejecutar la petición del usuario debes emitir OBLIGATORIAMENTE las llamadas a herramientas "
-                            "(`ha_call_service` para controlar dispositivos o `ha_search_entities` para encontrar sus IDs). "
+                            "(`ha_call_service` para controlar dispositivos físicos o `ha_search_entities` para encontrar sus IDs). "
                             "Emite las llamadas a herramientas AHORA.]"
                             if is_spanish
                             else (
-                                "[ERROR: You have not called any tool (`ha_call_service` or `ha_search_entities`). "
+                                "[ERROR: You have not called `ha_call_service`. "
                                 "Words or saying 'ok' DO NOT control physical devices in Home Assistant. "
                                 "You MUST emit the required tool calls (`ha_call_service` or `ha_search_entities`) NOW.]"
                             )
@@ -1148,7 +1160,19 @@ class NexusMcpConversationEntity(ConversationEntity):
                     continue
 
                 # When no tool calls are returned, we have the final assistant answer
-                assistant_reply = response.content or ("Acción completada." if is_spanish else "Action completed.")
+                if response.content and response.content.strip():
+                    assistant_reply = response.content.strip()
+                elif executed_action_service:
+                    assistant_reply = "Dispositivos actualizados correctamente." if is_spanish else "Devices updated successfully."
+                elif is_action_request:
+                    assistant_reply = (
+                        "No se ha podido ejecutar la acción sobre los dispositivos."
+                        if is_spanish
+                        else "Could not execute the action on the devices."
+                    )
+                else:
+                    assistant_reply = "Acción completada." if is_spanish else "Action completed."
+
                 history.append(ChatMessage(role="assistant", content=assistant_reply))
                 break
 
