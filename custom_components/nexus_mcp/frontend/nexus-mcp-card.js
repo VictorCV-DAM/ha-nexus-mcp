@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.4.0)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.4.1)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -124,6 +124,7 @@ class NexusMcpCard extends HTMLElement {
       }
       this._updateMessagesView();
     }
+    this._updateTokenBadge();
   }
 
   _getAvailableAgents() {
@@ -413,6 +414,50 @@ class NexusMcpCard extends HTMLElement {
         @media (max-width: 360px) {
           .vision-badge span {
             display: none;
+          }
+        }
+        .token-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          padding: 2px 7px;
+          border-radius: 12px;
+          font-size: 0.70rem;
+          font-family: var(--code-font-family, monospace);
+          font-weight: 600;
+          cursor: default;
+          user-select: none;
+          transition: background 0.2s, color 0.2s, border-color 0.2s;
+          flex-shrink: 0;
+          white-space: nowrap;
+          background: rgba(255, 255, 255, 0.05);
+          color: var(--secondary-text-color, #9e9e9e);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .token-badge ha-icon {
+          --mdc-icon-size: 13px;
+          color: var(--primary-color, #03a9f4);
+        }
+        .token-badge.token-warning {
+          background: rgba(255, 152, 0, 0.15);
+          color: #ffb74d;
+          border-color: rgba(255, 152, 0, 0.4);
+        }
+        .token-badge.token-warning ha-icon {
+          color: #ffb74d;
+        }
+        .token-badge.token-critical {
+          background: rgba(244, 67, 54, 0.18);
+          color: #e57373;
+          border-color: rgba(244, 67, 54, 0.5);
+        }
+        .token-badge.token-critical ha-icon {
+          color: #e57373;
+        }
+        @media (max-width: 440px) {
+          .token-badge {
+            font-size: 0.64rem;
+            padding: 2px 5px;
           }
         }
         .icon-btn {
@@ -760,6 +805,7 @@ class NexusMcpCard extends HTMLElement {
             <select class="agent-select" id="agent-select" title="${txtSelectModel}"></select>
           </div>
           <div class="header-actions">
+            <div class="token-badge" id="token-badge" style="display: none;"></div>
             <div class="vision-badge" id="vision-badge"></div>
             <button class="icon-btn" id="btn-assist" title="${txtAssist}">
               <ha-icon icon="mdi:microphone"></ha-icon>
@@ -1001,6 +1047,77 @@ class NexusMcpCard extends HTMLElement {
       <ha-icon icon="${iconName}"></ha-icon>
       <span class="vision-badge-text">${label}</span>
     `;
+  }
+
+  _formatCompactTokens(n) {
+    if (n === null || n === undefined || isNaN(n)) return "0";
+    if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+    return String(Math.round(n));
+  }
+
+  _updateTokenBadge() {
+    if (!this.shadowRoot || !this._hass) return;
+    const badge = this.shadowRoot.getElementById("token-badge");
+    if (!badge) return;
+
+    // Find the daily tokens sensor
+    const tokenSensor = Object.values(this._hass.states).find(
+      (s) => s.entity_id.startsWith("sensor.") && s.entity_id.includes("daily_tokens")
+    );
+
+    if (!tokenSensor || !tokenSensor.attributes) {
+      badge.style.display = "none";
+      return;
+    }
+
+    const attrs = tokenSensor.attributes;
+    const limit = attrs.limit_tokens_minute;
+    const remaining = attrs.remaining_tokens_minute;
+    const lastTotal = attrs.last_total_tokens || 0;
+    const isEs = this._isSpanish();
+
+    if (limit && limit > 0) {
+      // Calculate consumed tokens in current rolling window
+      const usedInWindow = remaining !== null && remaining !== undefined
+        ? Math.max(0, limit - remaining)
+        : lastTotal;
+      const pct = Math.min(100, (usedInWindow / limit) * 100);
+
+      badge.style.display = "inline-flex";
+      let statusClass = "";
+      if (pct >= 85) {
+        statusClass = "token-critical";
+      } else if (pct >= 65) {
+        statusClass = "token-warning";
+      }
+      badge.className = `token-badge ${statusClass}`.trim();
+
+      const label = `${this._formatCompactTokens(usedInWindow)}/${this._formatCompactTokens(limit)} TPM`;
+      const title = isEs
+        ? `Consumo en ventana: ${usedInWindow.toLocaleString()} / ${limit.toLocaleString()} TPM (${Math.round(pct)}%)\nRestantes este minuto: ${(remaining || 0).toLocaleString()}\nÚltima petición: ${lastTotal.toLocaleString()} tokens`
+        : `Rolling window usage: ${usedInWindow.toLocaleString()} / ${limit.toLocaleString()} TPM (${Math.round(pct)}%)\nRemaining this minute: ${(remaining || 0).toLocaleString()}\nLast request: ${lastTotal.toLocaleString()} tokens`;
+
+      badge.title = title;
+      badge.innerHTML = `
+        <ha-icon icon="mdi:flash"></ha-icon>
+        <span>${label}</span>
+      `;
+    } else if (lastTotal > 0) {
+      badge.style.display = "inline-flex";
+      badge.className = "token-badge";
+      const label = `${this._formatCompactTokens(lastTotal)} tok`;
+      const title = isEs
+        ? `Última petición: ${lastTotal.toLocaleString()} tokens`
+        : `Last request: ${lastTotal.toLocaleString()} tokens`;
+      badge.title = title;
+      badge.innerHTML = `
+        <ha-icon icon="mdi:flash"></ha-icon>
+        <span>${label}</span>
+      `;
+    } else {
+      badge.style.display = "none";
+    }
   }
 
   _updateAgentDropdown() {
@@ -1575,7 +1692,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.3.5 Ready ",
+  "%c NEXUS MCP CARD %c v1.4.1 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
