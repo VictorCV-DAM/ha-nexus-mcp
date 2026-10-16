@@ -286,30 +286,31 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                         if retry_after:
                             parsed_ra = parse_reset_duration(retry_after)
                             if parsed_ra > 0:
-                                delay = max(1.0, min(parsed_ra, 10.0))
+                                delay = max(1.0, min(parsed_ra, 25.0))
                         elif "x-ratelimit-reset-tokens" in resp.headers:
                             parsed_reset = parse_reset_duration(resp.headers.get("x-ratelimit-reset-tokens"))
                             if parsed_reset > 0:
-                                delay = max(1.0, min(parsed_reset + 0.5, 10.0))
+                                delay = max(1.0, min(parsed_reset + 0.5, 25.0))
                         elif "try again in" in error_body:
                             import re
                             m = re.search(r"try again in ([\d\.]+)s", error_body)
                             if m:
-                                delay = min(float(m.group(1)) + 0.5, 10.0)
-
-                        # If on Groq and hit rate limit, attempt fallback between 120b, 20b and qwen
-                        if "groq.com" in self._base_url:
-                            if self._model == "openai/gpt-oss-120b":
-                                _LOGGER.warning(
-                                    "Groq rate limit on openai/gpt-oss-120b. Auto-falling back to qwen/qwen3.8-27b...",
-                                )
-                                self._model = "qwen/qwen3.8-27b"
-                                payload["model"] = "qwen/qwen3.8-27b"
-                                await asyncio.sleep(1.0)
-                                continue
-
+                                delay = max(1.0, min(float(m.group(1)) + 0.5, 25.0))
 
                         if attempt < max_retries:
+                            # If rate limit was due to input token limits (ITPM), reduce history size on retry
+                            err_lower = error_body.lower()
+                            if ("itpm" in err_lower or "input tokens" in err_lower or "tokens per minute" in err_lower) and len(payload.get("messages", [])) > 2:
+                                sys_msgs = [m for m in payload["messages"] if m.get("role") == "system"]
+                                other_msgs = [m for m in payload["messages"] if m.get("role") != "system"]
+                                payload["messages"] = sys_msgs + other_msgs[-2:]
+                                _LOGGER.info(
+                                    "HTTP 429 ITPM limit on %s. Pruned payload messages to %d items for retry in %.1fs.",
+                                    self._model,
+                                    len(payload["messages"]),
+                                    delay,
+                                )
+
                             _LOGGER.warning(
                                 "HTTP 429 rate limit from %s (attempt %d). Retrying in %.1fs...",
                                 url,

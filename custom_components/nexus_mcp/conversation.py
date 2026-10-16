@@ -640,7 +640,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             # Multi-turn tool execution loop (up to 4 turns)
             for _ in range(4):
                 response = await self._engine.generate_response(
-                    messages=prune_history_to_token_budget(history, max_tokens=3500),
+                    messages=prune_history_to_token_budget(history, max_tokens=2200),
                     tools=self._tools,
                     system_prompt=system_prompt,
                 )
@@ -709,15 +709,28 @@ class NexusMcpConversationEntity(ConversationEntity):
             _LOGGER.warning("Nexus MCP rate limit/high demand: %s", err)
             reset_sec = getattr(err, "reset_seconds", 5.0) or 5.0
             self.record_rate_limit(reset_sec)
+            m_name = (self._model_name or "").lower()
+            if "120b" in m_name:
+                tip = (
+                    "Consejo: Para comandos con muchas acciones encadenadas en ráfaga sin límite de tokens por minuto, puedes cambiar a Google Gemini ('gemini-3.1-flash-lite'), que ofrece 1.000.000 TPM gratuitos."
+                    if is_spanish
+                    else "Tip: For long chained multi-action commands without TPM constraints, switch to Google Gemini ('gemini-3.1-flash-lite') with 1,000,000 free TPM."
+                )
+            else:
+                tip = (
+                    "Consejo: En Groq puedes usar 'openai/gpt-oss-120b' o en Google 'gemini-3.1-flash-lite' para límites mucho más amplios."
+                    if is_spanish
+                    else "Tip: On Groq you can use 'openai/gpt-oss-120b' or on Google 'gemini-3.1-flash-lite' for generous limits."
+                )
             assistant_reply = (
                 f"Límite de peticiones alcanzado ({err}). "
                 f"Espera aproximadamente {round(reset_sec, 1)}s para la renovación de tokens por minuto (TPM). "
-                "Consejo: En Groq puedes usar 'openai/gpt-oss-120b' o en Google 'gemini-3.1-flash-lite' para límites mucho más amplios."
+                f"{tip}"
                 if is_spanish
                 else (
                     f"Rate limit reached ({err}). "
                     f"Please wait approximately {round(reset_sec, 1)}s for tokens-per-minute (TPM) renewal. "
-                    "Tip: On Groq you can use 'openai/gpt-oss-120b' or on Google 'gemini-3.1-flash-lite' for generous limits."
+                    f"{tip}"
                 )
             )
         except LlmAuthError as err:

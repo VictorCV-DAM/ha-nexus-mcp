@@ -278,7 +278,7 @@ async def execute_builtin_tool(
                         "domain": domain,
                     }
                 )
-                if len(results) >= 20:
+                if len(results) >= 12:
                     break
 
         resp: dict[str, Any] = {
