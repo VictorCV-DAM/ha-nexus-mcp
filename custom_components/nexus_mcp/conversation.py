@@ -36,6 +36,7 @@ from .const import (
     DEFAULT_AUTONOMOUS_MODE,
     DEFAULT_MCP_SERVER_URL,
     DOMAIN,
+    get_model_specs,
 )
 from .discovery import async_autodiscover_ha_mcp_url
 from .llm_engine import ChatMessage, GeminiEngine, LlmAuthError, LlmRateLimitError, create_llm_engine
@@ -290,6 +291,10 @@ class NexusMcpConversationEntity(ConversationEntity):
                 )
             except Exception:
                 pass
+        try:
+            self.async_write_ha_state()
+        except Exception:
+            pass
 
     def record_rate_limit(self, reset_seconds: float = 5.0) -> None:
         """Record rate limit hit with countdown unblock timestamp."""
@@ -308,6 +313,10 @@ class NexusMcpConversationEntity(ConversationEntity):
                 )
             except Exception:
                 pass
+        try:
+            self.async_write_ha_state()
+        except Exception:
+            pass
 
     async def async_added_to_hass(self) -> None:
         """Load persistent conversation history from storage when entity is added."""
@@ -432,21 +441,33 @@ class NexusMcpConversationEntity(ConversationEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes for frontend discovery."""
+        """Return extra state attributes for frontend discovery and live telemetry."""
         is_vision = False
         if hasattr(self._engine, "_is_vision_model"):
             is_vision = bool(self._engine._is_vision_model())
         elif isinstance(self._engine, GeminiEngine):
             is_vision = True
 
+        model_name = self.entry.options.get(
+            CONF_MODEL, self.entry.data.get(CONF_MODEL, "")
+        )
+        provider = self.entry.options.get(
+            CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, "")
+        )
+        specs = get_model_specs(model_name, provider)
+        limit_tpm = self._telemetry.get("limit_tokens") or specs.get("tpm", 8000)
+
         return {
             "has_vision": is_vision,
-            "provider": self.entry.options.get(
-                CONF_LLM_PROVIDER, self.entry.data.get(CONF_LLM_PROVIDER, "")
-            ),
-            "model": self.entry.options.get(
-                CONF_MODEL, self.entry.data.get(CONF_MODEL, "")
-            ),
+            "provider": provider,
+            "model": model_name,
+            "entry_id": self.entry.entry_id,
+            "tokens_today": self._telemetry.get("tokens_today", 0),
+            "last_total_tokens": self._telemetry.get("last_total_tokens", 0),
+            "limit_tokens_minute": limit_tpm,
+            "remaining_tokens_minute": self._telemetry.get("remaining_tokens"),
+            "rate_limit_status": self._telemetry.get("rate_limit_status", "ok"),
+            "rate_limit_reset_seconds": self._telemetry.get("rate_limit_reset_seconds", 0.0),
         }
 
     async def async_chat_process(
@@ -587,7 +608,17 @@ class NexusMcpConversationEntity(ConversationEntity):
             "You are Nexus MCP, an autonomous AI assistant embedded directly inside Home Assistant. "
             "You have direct access to tools to search entities (ha_search_entities), read states (ha_get_entity_state), "
             "control devices (ha_call_service), and create/activate automations (ha_create_automation).\n"
-            "Rules for creating automations with ha_create_automation:\n"
+            "DIRECT DEVICE CONTROL vs AUTOMATIONS (CRITICAL PRECEDENCE):\n"
+            "- ALWAYS prioritize immediate execution using `ha_call_service` when the user asks to turn on/off, toggle, "
+            "dim, adjust, change colors, run sequences, or control devices/lights (even with multiple devices or short delays).\n"
+            "- You can execute multiple `ha_call_service` calls in a single turn to control multiple entities or chain actions.\n"
+            "- Timed actions: `ha_call_service` supports an optional 'delay' parameter in seconds (e.g., delay: 5 to turn off after 5 seconds). "
+            "Use `delay` in `ha_call_service` for timed commands instead of creating an automation!\n"
+            "- NEVER call `ha_create_automation` unless the user explicitly requests a persistent or recurring automation "
+            "(e.g., using words like 'crea una automatización', 'automatiza', 'todos los días a las...', or 'cuando ocurra X haz Y').\n"
+            "- Direct commands (`ha_call_service`), searching (`ha_search_entities`), and reading states (`ha_get_entity_state`) "
+            "NEVER require confirmation and MUST be executed immediately!\n"
+            "Rules for creating automations with ha_create_automation (ONLY when explicitly requested):\n"
             "1. In 'trigger', for time intervals use: [{'platform': 'time_pattern', 'seconds': '/5'}]. Never use 'pattern'.\n"
             "2. In 'action', call services using: [{'service': 'domain.service_name', 'target': {'entity_id': '...'}}]. Never use 'domain' as a separate key.\n"
             "3. Tool argument formatting: You must provide strictly valid JSON in all tool arguments. Never include unescaped characters, backticks, conversational filler, or malformed tags inside tool calls.\n"
@@ -598,8 +629,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             autonomy_prompt = (
                 "AUTONOMOUS MODE: ENABLED.\n"
                 "You have full permission to execute actions and create automations directly without asking for confirmation. "
-                "When the user asks you to create an automation or control a device, do not ask them for confirmation: "
-                "use your tools to search entities if needed and create the automation or execute the service directly!"
+                "Execute the requested service or create the automation directly using your tools."
             )
         elif user_confirmed:
             autonomy_prompt = (
@@ -615,14 +645,15 @@ class NexusMcpConversationEntity(ConversationEntity):
                 else "Would you like me to proceed with creating this automation? Reply 'yes' to confirm (in user's language)."
             )
             autonomy_prompt = (
-                "AUTONOMOUS MODE: DISABLED (CONFIRMATION REQUIRED BEFORE CREATING AUTOMATIONS).\n"
-                "When the user asks to create or modify an automation, you MUST NOT call ha_create_automation yet.\n"
-                "Instead, perform the following steps:\n"
-                "1. If needed, use ha_search_entities or ha_get_entity_state to find the correct entity IDs and verify devices.\n"
-                "2. Explain clearly to the user what you understood from their request.\n"
-                "3. Describe the exact automation you plan to create: specify the trigger(s), condition(s), action(s), and entity IDs.\n"
-                f"4. Ask the user for explicit confirmation before proceeding (for example: '{confirm_example}').\n"
-                "5. Wait for their confirmation in the next turn. DO NOT call ha_create_automation until the user confirms."
+                "CONFIRMATION POLICY FOR AUTOMATIONS:\n"
+                "- Device control (`ha_call_service`), searching (`ha_search_entities`), and reading states (`ha_get_entity_state`) "
+                "NEVER require confirmation and MUST be executed immediately without asking!\n"
+                "- Confirmation is ONLY required when the user explicitly asked to create a persistent automation with `ha_create_automation`.\n"
+                "- If the user asks to create an automation:\n"
+                "  1. If needed, use ha_search_entities or ha_get_entity_state to find the correct entity IDs.\n"
+                "  2. Describe the exact automation you plan to create (trigger, condition, action, entity IDs).\n"
+                f"  3. Ask the user for explicit confirmation (for example: '{confirm_example}').\n"
+                "  4. DO NOT call ha_create_automation until the user confirms in the next turn."
             )
 
         lang_prompt = (
@@ -667,19 +698,40 @@ class NexusMcpConversationEntity(ConversationEntity):
                             _LOGGER.info(
                                 "Intercepted ha_create_automation: Autonomous Mode is OFF and user has not confirmed yet."
                             )
-                            intercept_err = (
-                                "El modo autónomo está desactivado. No debes crear la automatización todavía. "
-                                "Explica al usuario lo que has entendido, describe la automatización exacta (disparador, condición, acción, entidades) "
-                                "y pide explícitamente su confirmación (por ejemplo: '¿Deseas que proceda a crear esta automatización? Responde \"sí\" para confirmar.'). "
-                                "NO vuelvas a llamar a ha_create_automation hasta que el usuario confirme en el siguiente turno."
-                                if is_spanish
-                                else (
-                                    "Autonomous Mode is disabled. You must NOT create the automation yet. "
-                                    "Tell the user what you understood, describe the exact automation (trigger, condition, action, entities), "
-                                    "and explicitly ask for their confirmation (e.g. 'Would you like me to proceed with creating this automation? Reply \"yes\" to confirm.'). "
-                                    "DO NOT call ha_create_automation again until the user confirms in the next turn."
+                            is_explicit_automation_request = any(
+                                w in text.lower()
+                                for w in (
+                                    "automatiza", "automatizacion", "automatización", "automation",
+                                    "crea una automatización", "crear automatizacion", "crea la regla",
+                                    "programa una", "schedule", "todos los días a las", "todas las mañanas",
                                 )
                             )
+                            if not is_explicit_automation_request:
+                                intercept_err = (
+                                    "El usuario NO ha pedido crear una automatización persistente, sino controlar dispositivos directamente. "
+                                    "NO utilices ha_create_automation. Ejecuta la acción inmediatamente usando ha_call_service "
+                                    "(puedes usar el parámetro 'delay' en segundos si hay esperas temporales, por ejemplo delay: 5 para apagar tras 5s)."
+                                    if is_spanish
+                                    else (
+                                        "The user did NOT request to create a persistent automation; they asked for direct device control. "
+                                        "DO NOT use ha_create_automation. Execute the action immediately using ha_call_service "
+                                        "(use the 'delay' parameter in seconds for timed waits, e.g. delay: 5 to turn off after 5s)."
+                                    )
+                                )
+                            else:
+                                intercept_err = (
+                                    "El modo autónomo está desactivado. No debes crear la automatización todavía. "
+                                    "Explica al usuario lo que has entendido, describe la automatización exacta (disparador, condición, acción, entidades) "
+                                    "y pide explícitamente su confirmación (por ejemplo: '¿Deseas que proceda a crear esta automatización? Responde \"sí\" para confirmar.'). "
+                                    "NO vuelvas a llamar a ha_create_automation hasta que el usuario confirme en el siguiente turno."
+                                    if is_spanish
+                                    else (
+                                        "Autonomous Mode is disabled. You must NOT create the automation yet. "
+                                        "Tell the user what you understood, describe the exact automation (trigger, condition, action, entities), "
+                                        "and explicitly ask for their confirmation (e.g. 'Would you like me to proceed with creating this automation? Reply \"yes\" to confirm.'). "
+                                        "DO NOT call ha_create_automation again until the user confirms in the next turn."
+                                    )
+                                )
                             tool_result = {
                                 "status": "confirmation_required",
                                 "error": intercept_err,

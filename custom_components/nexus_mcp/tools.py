@@ -67,7 +67,7 @@ def get_builtin_tools() -> list[McpTool]:
         ),
         McpTool(
             name="ha_call_service",
-            description="Call a Home Assistant service to control a device or perform an action (e.g. turn on a light, lock a door).",
+            description="Call a Home Assistant service to control a device or perform an action (e.g. turn on/off lights, set color/brightness, toggle switches). Supports optional 'delay' in seconds for timed actions (e.g. delay: 5 to turn off after 5 seconds).",
             input_schema={
                 "type": "object",
                 "properties": {
@@ -81,11 +81,15 @@ def get_builtin_tools() -> list[McpTool]:
                     },
                     "target": {
                         "type": "object",
-                        "description": "Target entity or device (e.g. {'entity_id': 'light.living_room'}).",
+                        "description": "Target entity or device (e.g. {'entity_id': 'light.living_room'} or {'entity_id': ['light.left', 'light.right']}).",
                     },
                     "data": {
                         "type": "object",
-                        "description": "Optional service data parameters (e.g. {'brightness': 255}).",
+                        "description": "Optional service data parameters (e.g. {'brightness': 255, 'rgb_color': [0, 255, 0]}).",
+                    },
+                    "delay": {
+                        "type": "number",
+                        "description": "Optional delay in seconds before executing this action (e.g. 5 for 'after 5 seconds').",
                     },
                 },
                 "required": ["domain", "service"],
@@ -322,11 +326,36 @@ async def execute_builtin_tool(
         service = arguments.get("service", "")
         target = arguments.get("target") or {}
         data = arguments.get("data") or {}
+        try:
+            delay = float(arguments.get("delay") or data.get("delay") or 0.0)
+        except (ValueError, TypeError):
+            delay = 0.0
 
         try:
             service_data = {**data}
+            if "delay" in service_data:
+                del service_data["delay"]
             if target:
                 service_data.update(target)
+
+            if delay > 0:
+                import asyncio
+
+                async def _delayed_service_call():
+                    try:
+                        await asyncio.sleep(delay)
+                        await hass.services.async_call(
+                            domain, service, service_data, blocking=False
+                        )
+                    except Exception as ex:
+                        _LOGGER.error("Delayed service execution failed (%s.%s): %s", domain, service, ex)
+
+                if hasattr(hass, "async_create_task"):
+                    hass.async_create_task(_delayed_service_call())
+                return {
+                    "status": "scheduled",
+                    "message": f"Service '{domain}.{service}' scheduled to execute in {delay:.1f} seconds.",
+                }
 
             await hass.services.async_call(
                 domain, service, service_data, blocking=True

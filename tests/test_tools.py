@@ -1,7 +1,7 @@
 """Unit tests for Nexus MCP built-in tools and automation sanitizer."""
 import sys
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 if "homeassistant" not in sys.modules:
     ha_mock = MagicMock()
@@ -120,6 +120,60 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
         serialized = json.dumps(res)
         self.assertIn("2026-10-15T20:45:00", serialized)
 
+    async def test_ha_call_service_immediate(self) -> None:
+        """Verify ha_call_service executes immediately when delay is 0."""
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        mock_hass = MagicMock()
+        mock_hass.services.async_call = AsyncMock()
+
+        res = await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {
+                "domain": "light",
+                "service": "turn_on",
+                "target": {"entity_id": "light.living_room"},
+                "data": {"rgb_color": [0, 255, 0]},
+            },
+        )
+        self.assertEqual(res["status"], "success")
+        mock_hass.services.async_call.assert_awaited_once_with(
+            "light",
+            "turn_on",
+            {"entity_id": "light.living_room", "rgb_color": [0, 255, 0]},
+            blocking=True,
+        )
+
+    async def test_ha_call_service_with_delay(self) -> None:
+        """Verify ha_call_service schedules execution when delay is provided."""
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        mock_hass = MagicMock()
+        mock_hass.services.async_call = AsyncMock()
+        created_tasks = []
+        def fake_create_task(coro):
+            created_tasks.append(coro)
+            coro.close()
+            return MagicMock()
+
+        mock_hass.async_create_task = fake_create_task
+
+        res = await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {
+                "domain": "light",
+                "service": "turn_off",
+                "target": {"entity_id": ["light.left", "light.right"]},
+                "delay": 5,
+            },
+        )
+        self.assertEqual(res["status"], "scheduled")
+        self.assertIn("scheduled to execute in 5.0 seconds", res["message"])
+        self.assertEqual(len(created_tasks), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
+

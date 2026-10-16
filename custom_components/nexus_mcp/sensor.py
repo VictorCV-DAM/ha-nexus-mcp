@@ -22,124 +22,17 @@ from .const import (
     CONF_LLM_PROVIDER,
     CONF_MODEL,
     DOMAIN,
+    MODEL_THEORETICAL_SPECS,
     PROVIDER_CUSTOM_OPENAI,
     PROVIDER_GEMINI_FREE,
     PROVIDER_GROQ_FREE,
     PROVIDER_QWEN_FREE,
     get_entity_description,
+    get_model_specs,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-# Known theoretical specifications and default tier limits
-MODEL_THEORETICAL_SPECS: dict[str, dict[str, Any]] = {
-    # Groq Cloud models (Free Dev Tier)
-    "openai/gpt-oss-120b": {
-        "tpm": 8000,
-        "rpm": 30,
-        "rpd": 14400,
-        "context_window": 131072,
-        "tpm_window_seconds": 60,
-        "daily_reset_hour_utc": 0,
-        "reset_tz": "UTC",
-    },
-    "openai/gpt-oss-20b": {
-        "tpm": 8000,
-        "rpm": 30,
-        "rpd": 14400,
-        "context_window": 131072,
-        "tpm_window_seconds": 60,
-        "daily_reset_hour_utc": 0,
-        "reset_tz": "UTC",
-    },
-    "qwen/qwen3.8-27b": {
-        "tpm": 7000,
-        "rpm": 30,
-        "rpd": 14400,
-        "context_window": 131072,
-        "tpm_window_seconds": 60,
-        "daily_reset_hour_utc": 0,
-        "reset_tz": "UTC",
-    },
-    # Google Gemini models (Free Tier)
-    "gemini-3.1-flash-lite": {
-        "tpm": 250000,
-        "rpm": 15,
-        "rpd": 500,
-        "context_window": 1048576,
-        "tpm_window_seconds": 60,
-        "daily_reset_hour_utc": 8,  # Midnight PST = 08:00 UTC
-        "reset_tz": "PST (08:00 UTC)",
-    },
-    "gemini-flash-latest": {
-        "tpm": 250000,
-        "rpm": 5,
-        "rpd": 20,
-        "context_window": 1048576,
-        "tpm_window_seconds": 60,
-        "daily_reset_hour_utc": 8,
-        "reset_tz": "PST (08:00 UTC)",
-    },
-    "gemini-3.8-flash": {
-        "tpm": 250000,
-        "rpm": 5,
-        "rpd": 20,
-        "context_window": 1048576,
-        "tpm_window_seconds": 60,
-        "daily_reset_hour_utc": 8,
-        "reset_tz": "PST (08:00 UTC)",
-    },
-    # Qwen Cloud models
-    "qwen-plus-latest": {
-        "tpm": 60000,
-        "rpm": 30,
-        "rpd": 10000,
-        "context_window": 131072,
-        "tpm_window_seconds": 60,
-        "daily_reset_hour_utc": 0,
-        "reset_tz": "UTC",
-    },
-}
-
-
-def get_model_specs(model: str, provider: str) -> dict[str, Any]:
-    """Retrieve theoretical specifications and maximum limits for a given model."""
-    clean_model = model.strip()
-    if clean_model.startswith("models/"):
-        clean_model = clean_model[len("models/"):]
-    if clean_model in MODEL_THEORETICAL_SPECS:
-        return MODEL_THEORETICAL_SPECS[clean_model]
-
-    # Defaults based on provider
-    if provider == PROVIDER_GROQ_FREE:
-        return {
-            "tpm": 8000,
-            "rpm": 30,
-            "rpd": 14400,
-            "context_window": 131072,
-            "tpm_window_seconds": 60,
-            "daily_reset_hour_utc": 0,
-            "reset_tz": "UTC",
-        }
-    if provider == PROVIDER_GEMINI_FREE:
-        return {
-            "tpm": 250000,
-            "rpm": 15,
-            "rpd": 500,
-            "context_window": 1048576,
-            "tpm_window_seconds": 60,
-            "daily_reset_hour_utc": 8,
-            "reset_tz": "PST (08:00 UTC)",
-        }
-    return {
-        "tpm": 60000,
-        "rpm": 30,
-        "rpd": 10000,
-        "context_window": 128000,
-        "tpm_window_seconds": 60,
-        "daily_reset_hour_utc": 0,
-        "reset_tz": "UTC",
-    }
 
 
 async def async_setup_entry(
@@ -399,7 +292,7 @@ class NexusMcpTokenSensor(NexusMcpBaseTelemetrySensor):
             "last_completion_tokens": telem.get("last_completion_tokens", 0),
             "last_total_tokens": telem.get("last_total_tokens", 0),
             "remaining_tokens_minute": telem.get("remaining_tokens"),
-            "limit_tokens_minute": telem.get("limit_tokens"),
+            "limit_tokens_minute": telem.get("limit_tokens") or self.model_specs.get("tpm", 8000),
             "model": telem.get("model", ""),
             "provider": telem.get("provider", ""),
             "date": telem.get("date"),

@@ -859,6 +859,7 @@ class NexusMcpCard extends HTMLElement {
     this._setupListeners();
     this._updateAgentDropdown();
     this._updateVisionBadge();
+    this._updateTokenBadge();
     this._updateMessagesView();
   }
 
@@ -975,6 +976,7 @@ class NexusMcpCard extends HTMLElement {
           console.warn("Could not save selected agent to localStorage:", err);
         }
         this._updateVisionBadge();
+        this._updateTokenBadge();
         this._conversationId = null;
         this._loadHistoryForAgent(this._selectedAgent);
       };
@@ -1065,68 +1067,85 @@ class NexusMcpCard extends HTMLElement {
     return String(Math.round(n));
   }
 
+  _getModelFallbackLimit(modelName) {
+    const clean = (modelName || "").toLowerCase();
+    if (clean.includes("120b")) return 8000;
+    if (clean.includes("20b")) return 8000;
+    if (clean.includes("27b")) return 7000;
+    if (clean.includes("gemini")) return 250000;
+    if (clean.includes("qwen-plus")) return 60000;
+    return 8000;
+  }
+
   _updateTokenBadge() {
     if (!this.shadowRoot || !this._hass) return;
     const badge = this.shadowRoot.getElementById("token-badge");
     if (!badge) return;
 
-    // Find the daily tokens sensor
-    const tokenSensor = Object.values(this._hass.states).find(
+    // 1. Resolve currently selected conversation agent entity and attributes
+    const agentEntityId = this._selectedAgent;
+    const agentState = agentEntityId ? this._hass.states[agentEntityId] : null;
+    const modelName = agentState?.attributes?.model || "";
+    const entryId = agentState?.attributes?.entry_id || "";
+
+    // 2. Find corresponding daily_tokens sensor matching selected agent's model or entry_id
+    const tokenSensors = Object.values(this._hass.states).filter(
       (s) => s.entity_id.startsWith("sensor.") && s.entity_id.includes("daily_tokens")
     );
-
-    if (!tokenSensor || !tokenSensor.attributes) {
-      badge.style.display = "none";
-      return;
+    let tokenSensor = null;
+    if (modelName) {
+      tokenSensor = tokenSensors.find(
+        (s) => s.attributes?.model && s.attributes.model.toLowerCase() === modelName.toLowerCase()
+      );
+    }
+    if (!tokenSensor && entryId) {
+      tokenSensor = tokenSensors.find((s) => s.entity_id.includes(entryId));
+    }
+    if (!tokenSensor && agentEntityId) {
+      const slug = agentEntityId.replace("conversation.", "").replace("nexus_mcp_intercom_", "").replace("nexus_mcp_", "");
+      tokenSensor = tokenSensors.find((s) => s.entity_id.includes(slug));
+    }
+    if (!tokenSensor && tokenSensors.length > 0) {
+      tokenSensor = tokenSensors[0];
     }
 
-    const attrs = tokenSensor.attributes;
-    const limit = attrs.limit_tokens_minute;
+    // 3. Extract telemetry attributes from sensor or conversation entity
+    const attrs = tokenSensor?.attributes || agentState?.attributes || {};
+    const fallbackLimit = this._getModelFallbackLimit(modelName || attrs.model);
+    const limit = attrs.limit_tokens_minute || fallbackLimit;
     const remaining = attrs.remaining_tokens_minute;
     const lastTotal = attrs.last_total_tokens || 0;
     const isEs = this._isSpanish();
 
-    if (limit && limit > 0) {
-      // Calculate consumed tokens in current rolling window
-      const usedInWindow = remaining !== null && remaining !== undefined
-        ? Math.max(0, limit - remaining)
-        : lastTotal;
-      const pct = Math.min(100, (usedInWindow / limit) * 100);
-
-      badge.style.display = "inline-flex";
-      let statusClass = "";
-      if (pct >= 85) {
-        statusClass = "token-critical";
-      } else if (pct >= 65) {
-        statusClass = "token-warning";
-      }
-      badge.className = `token-badge ${statusClass}`.trim();
-
-      const label = `${this._formatCompactTokens(usedInWindow)} / ${this._formatCompactTokens(limit)} TPM`;
-      const title = isEs
-        ? `Consumo en ventana: ${usedInWindow.toLocaleString()} / ${limit.toLocaleString()} TPM (${Math.round(pct)}%)\nRestantes este minuto: ${(remaining || 0).toLocaleString()}\nÚltima petición: ${lastTotal.toLocaleString()} tokens`
-        : `Rolling window usage: ${usedInWindow.toLocaleString()} / ${limit.toLocaleString()} TPM (${Math.round(pct)}%)\nRemaining this minute: ${(remaining || 0).toLocaleString()}\nLast request: ${lastTotal.toLocaleString()} tokens`;
-
-      badge.title = title;
-      badge.innerHTML = `
-        <ha-icon icon="mdi:flash"></ha-icon>
-        <span>${label}</span>
-      `;
+    // 4. Calculate consumed tokens in current window
+    let usedInWindow = 0;
+    if (remaining !== null && remaining !== undefined && limit > 0) {
+      usedInWindow = Math.max(0, limit - Number(remaining));
     } else if (lastTotal > 0) {
-      badge.style.display = "inline-flex";
-      badge.className = "token-badge";
-      const label = `${this._formatCompactTokens(lastTotal)} tok`;
-      const title = isEs
-        ? `Última petición: ${lastTotal.toLocaleString()} tokens`
-        : `Last request: ${lastTotal.toLocaleString()} tokens`;
-      badge.title = title;
-      badge.innerHTML = `
-        <ha-icon icon="mdi:flash"></ha-icon>
-        <span>${label}</span>
-      `;
-    } else {
-      badge.style.display = "none";
+      usedInWindow = lastTotal;
     }
+
+    const pct = limit > 0 ? Math.min(100, (usedInWindow / limit) * 100) : 0;
+
+    badge.style.display = "inline-flex";
+    let statusClass = "";
+    if (pct >= 85) {
+      statusClass = "token-critical";
+    } else if (pct >= 65) {
+      statusClass = "token-warning";
+    }
+    badge.className = `token-badge ${statusClass}`.trim();
+
+    const label = `${this._formatCompactTokens(usedInWindow)} / ${this._formatCompactTokens(limit)} TPM`;
+    const title = isEs
+      ? `Consumo en ventana: ${usedInWindow.toLocaleString()} / ${limit.toLocaleString()} TPM (${Math.round(pct)}%)\nRestantes este minuto: ${(remaining != null ? Number(remaining) : Math.max(0, limit - usedInWindow)).toLocaleString()}\nÚltima petición: ${lastTotal.toLocaleString()} tokens\nModelo: ${modelName || attrs.model || "Nexus MCP"}`
+      : `Rolling window usage: ${usedInWindow.toLocaleString()} / ${limit.toLocaleString()} TPM (${Math.round(pct)}%)\nRemaining this minute: ${(remaining != null ? Number(remaining) : Math.max(0, limit - usedInWindow)).toLocaleString()}\nLast request: ${lastTotal.toLocaleString()} tokens\nModel: ${modelName || attrs.model || "Nexus MCP"}`;
+
+    badge.title = title;
+    badge.innerHTML = `
+      <ha-icon icon="mdi:flash"></ha-icon>
+      <span>${label}</span>
+    `;
   }
 
   _updateAgentDropdown() {
@@ -1149,6 +1168,7 @@ class NexusMcpCard extends HTMLElement {
       html += `<option value="${ag.id}" ${isSelected}>${prefix}${ag.name}</option>`;
     }
     select.innerHTML = html;
+    this._updateTokenBadge();
   }
 
   _formatContent(rawContent) {
@@ -1452,6 +1472,7 @@ class NexusMcpCard extends HTMLElement {
     } finally {
       this._isSending = false;
       if (sendBtn) sendBtn.disabled = false;
+      this._updateTokenBadge();
       this._updateMessagesView(true);
     }
   }
