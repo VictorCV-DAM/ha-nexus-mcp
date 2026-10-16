@@ -1091,11 +1091,11 @@ class NexusMcpConversationEntity(ConversationEntity):
                         for term in extracted_terms:
                             try:
                                 s_res = await execute_builtin_tool(self.hass, "ha_search_entities", {"query": term})
-                                matches = s_res.get("matches", [])
+                                matches = s_res.get("results") or s_res.get("matches") or []
                                 if matches:
                                     for m in matches[:3]:
                                         found_entities_summary.append(
-                                            f"- {m.get('entity_id')} (Nombre: {m.get('friendly_name') or m.get('name')}, estado: {m.get('state')})"
+                                            f"- {m.get('entity_id')} (Nombre: {m.get('name') or m.get('friendly_name')}, estado: {m.get('state')})"
                                         )
                             except Exception as ex:
                                 _LOGGER.debug("Auto-search error for '%s': %s", term, ex)
