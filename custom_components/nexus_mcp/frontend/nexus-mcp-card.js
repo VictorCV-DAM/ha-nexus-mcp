@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.4.1)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.4.2)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -416,47 +416,54 @@ class NexusMcpCard extends HTMLElement {
             display: none;
           }
         }
+        .card-footer {
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          padding: 2px 14px 8px 14px;
+          background: var(--card-background-color, #1e1e1e);
+        }
         .token-badge {
           display: inline-flex;
           align-items: center;
-          gap: 3px;
+          gap: 4px;
           padding: 2px 7px;
-          border-radius: 12px;
-          font-size: 0.70rem;
+          border-radius: 8px;
+          font-size: 0.72rem;
           font-family: var(--code-font-family, monospace);
-          font-weight: 600;
+          font-weight: 500;
           cursor: default;
           user-select: none;
-          transition: background 0.2s, color 0.2s, border-color 0.2s;
+          transition: color 0.2s, background 0.2s;
           flex-shrink: 0;
           white-space: nowrap;
-          background: rgba(255, 255, 255, 0.05);
+          background: rgba(255, 255, 255, 0.04);
           color: var(--secondary-text-color, #9e9e9e);
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.08);
         }
         .token-badge ha-icon {
           --mdc-icon-size: 13px;
           color: var(--primary-color, #03a9f4);
         }
         .token-badge.token-warning {
-          background: rgba(255, 152, 0, 0.15);
+          background: rgba(255, 152, 0, 0.12);
           color: #ffb74d;
-          border-color: rgba(255, 152, 0, 0.4);
+          border-color: rgba(255, 152, 0, 0.35);
         }
         .token-badge.token-warning ha-icon {
           color: #ffb74d;
         }
         .token-badge.token-critical {
-          background: rgba(244, 67, 54, 0.18);
+          background: rgba(244, 67, 54, 0.15);
           color: #e57373;
-          border-color: rgba(244, 67, 54, 0.5);
+          border-color: rgba(244, 67, 54, 0.45);
         }
         .token-badge.token-critical ha-icon {
           color: #e57373;
         }
         @media (max-width: 440px) {
           .token-badge {
-            font-size: 0.64rem;
+            font-size: 0.66rem;
             padding: 2px 5px;
           }
         }
@@ -805,7 +812,6 @@ class NexusMcpCard extends HTMLElement {
             <select class="agent-select" id="agent-select" title="${txtSelectModel}"></select>
           </div>
           <div class="header-actions">
-            <div class="token-badge" id="token-badge" style="display: none;"></div>
             <div class="vision-badge" id="vision-badge"></div>
             <button class="icon-btn" id="btn-assist" title="${txtAssist}">
               <ha-icon icon="mdi:microphone"></ha-icon>
@@ -843,6 +849,9 @@ class NexusMcpCard extends HTMLElement {
           <button class="action-btn" id="btn-send" title="${txtSend}">
             <ha-icon icon="mdi:send"></ha-icon>
           </button>
+        </div>
+        <div class="card-footer">
+          <div class="token-badge" id="token-badge" style="display: none;"></div>
         </div>
       </ha-card>
     `;
@@ -1093,7 +1102,7 @@ class NexusMcpCard extends HTMLElement {
       }
       badge.className = `token-badge ${statusClass}`.trim();
 
-      const label = `${this._formatCompactTokens(usedInWindow)}/${this._formatCompactTokens(limit)} TPM`;
+      const label = `${this._formatCompactTokens(usedInWindow)} / ${this._formatCompactTokens(limit)} TPM`;
       const title = isEs
         ? `Consumo en ventana: ${usedInWindow.toLocaleString()} / ${limit.toLocaleString()} TPM (${Math.round(pct)}%)\nRestantes este minuto: ${(remaining || 0).toLocaleString()}\nÚltima petición: ${lastTotal.toLocaleString()} tokens`
         : `Rolling window usage: ${usedInWindow.toLocaleString()} / ${limit.toLocaleString()} TPM (${Math.round(pct)}%)\nRemaining this minute: ${(remaining || 0).toLocaleString()}\nLast request: ${lastTotal.toLocaleString()} tokens`;
@@ -1692,7 +1701,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.4.1 Ready ",
+  "%c NEXUS MCP CARD %c v1.4.2 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
