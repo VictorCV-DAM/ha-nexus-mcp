@@ -255,11 +255,22 @@ def extract_fallback_tool_calls(
             return True
         if "domain" in d and "service" in d:
             return True
+        if len(d) == 1:
+            k = next(iter(d.keys()))
+            if k in known_tool_names or k.startswith("ha_") or k.startswith("nexus_"):
+                return True
         return False
 
     def _dict_to_tool_call(d: dict[str, Any]) -> LlmToolCall:
         name = d.get("name") or d.get("function")
-        if not name and "domain" in d and "service" in d:
+        if not name and len(d) == 1 and ("domain" not in d or "service" not in d):
+            k = next(iter(d.keys()))
+            if k in known_tool_names or k.startswith("ha_") or k.startswith("nexus_"):
+                name = k
+                args = d[k]
+            else:
+                args = {}
+        elif not name and "domain" in d and "service" in d:
             name = "ha_call_service"
             args = d
         else:
@@ -381,6 +392,7 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                 clean_model = "qwen/qwen3.8-27b"
         self._model = clean_model
         self._api_key = api_key or "sk-no-key-required"
+        self._supports_native_tools = True
 
     def _is_vision_model(self) -> bool:
         """Check if the configured model supports vision/multimodal input."""
@@ -463,8 +475,28 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
         }
 
         if tools:
-            payload["tools"] = [tool.to_openai_tool() for tool in tools]
-            payload["tool_choice"] = tool_choice or "auto"
+            if self._supports_native_tools:
+                payload["tools"] = [tool.to_openai_tool() for tool in tools]
+                payload["tool_choice"] = tool_choice or "auto"
+            else:
+                tools_doc = (
+                    "\n\n# Available Tools\n"
+                    "You may call functions to interact with Home Assistant.\n"
+                    "When calling a function, output strictly valid JSON within <tools>...</tools> tags:\n"
+                    "<tools>\n"
+                    '{"name": "ha_call_service", "arguments": {"domain": "...", "service": "...", "service_data": {...}}}\n'
+                    "</tools>\n\n"
+                    "Function definitions:\n"
+                    + json.dumps([t.to_openai_tool()["function"] for t in tools], ensure_ascii=False, indent=2)
+                )
+                has_sys = False
+                for m in payload["messages"]:
+                    if m.get("role") == "system":
+                        m["content"] = (m.get("content", "") + tools_doc).strip()
+                        has_sys = True
+                        break
+                if not has_sys:
+                    payload["messages"].insert(0, {"role": "system", "content": tools_doc.strip()})
             payload["temperature"] = 0.1
 
         data = None
@@ -544,6 +576,40 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
 
                     if resp.status == 400:
                         text = await resp.text()
+                        # If Ollama rejected because model does not support native tools
+                        if "does not support tools" in text.lower():
+                            _LOGGER.info(
+                                "Model '%s' does not support native tools in Ollama (attempt %d/%d). "
+                                "Switching to prompt-based tool calling with fallback extractor...",
+                                self._model,
+                                attempt + 1,
+                                max_retries + 1,
+                            )
+                            self._supports_native_tools = False
+                            payload.pop("tools", None)
+                            payload.pop("tool_choice", None)
+                            if tools:
+                                tools_doc = (
+                                    "\n\n# Available Tools\n"
+                                    "You may call functions to interact with Home Assistant.\n"
+                                    "When calling a function, output strictly valid JSON within <tools>...</tools> tags:\n"
+                                    "<tools>\n"
+                                    '{"name": "ha_call_service", "arguments": {"domain": "...", "service": "...", "service_data": {...}}}\n'
+                                    "</tools>\n\n"
+                                    "Function definitions:\n"
+                                    + json.dumps([t.to_openai_tool()["function"] for t in tools], ensure_ascii=False, indent=2)
+                                )
+                                has_sys = False
+                                for m in payload["messages"]:
+                                    if m.get("role") == "system":
+                                        m["content"] = (m.get("content", "") + tools_doc).strip()
+                                        has_sys = True
+                                        break
+                                if not has_sys:
+                                    payload["messages"].insert(0, {"role": "system", "content": tools_doc.strip()})
+                            await asyncio.sleep(0.5)
+                            continue
+
                         # If Groq or OpenAI rejected with tool_use_failed, malformed JSON, or failed_generation
                         if any(w in text.lower() for w in ("malformed", "tool_use_failed", "failed_generation", "invalid json")):
                             _LOGGER.warning(

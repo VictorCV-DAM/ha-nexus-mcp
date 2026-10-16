@@ -417,6 +417,69 @@ class TestLlmEngine(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls3[0].name, "ha_call_service")
         self.assertEqual(rem3, "Voy a encender la luz:")
 
+        # 4. Qwen2.5-VL style: single-key dictionary where key is the tool name
+        content4 = (
+            "<tools>\n"
+            '{"ha_call_service": {"domain": "light", "service": "turn_on", "service_data": {"entity_id": "light.cocina"}}}\n'
+            "</tools>"
+        )
+        calls4, rem4 = extract_fallback_tool_calls(content4, tools)
+        self.assertEqual(len(calls4), 1)
+        self.assertEqual(calls4[0].name, "ha_call_service")
+        self.assertEqual(calls4[0].arguments["domain"], "light")
+        self.assertEqual(calls4[0].arguments["service_data"]["entity_id"], "light.cocina")
+        self.assertIsNone(rem4)
+
+    async def test_ollama_does_not_support_tools_retry(self) -> None:
+        """Verify OpenAiCompatibleEngine automatically retries without native tools when Ollama returns 400."""
+        from unittest.mock import AsyncMock, MagicMock
+        from custom_components.nexus_mcp.llm_engine import OpenAiCompatibleEngine, ChatMessage
+        from custom_components.nexus_mcp.mcp_client import McpTool
+
+        mock_session = MagicMock()
+        mock_resp_fail = AsyncMock()
+        mock_resp_fail.status = 400
+        mock_resp_fail.text.return_value = '{"error":{"message":"qwen2.5-vl does not support tools","type":"invalid_request_error"}}'
+
+        mock_resp_ok = AsyncMock()
+        mock_resp_ok.status = 200
+        mock_resp_ok.json.return_value = {
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": '<tools>\\n{"ha_call_service": {"domain": "light", "service": "turn_on"}}\\n</tools>',
+                },
+                "finish_reason": "stop",
+            }],
+            "usage": {"total_tokens": 50},
+        }
+        mock_resp_ok.headers = {}
+
+        responses = [mock_resp_fail, mock_resp_ok]
+
+        class MockPostContext:
+            def __init__(self, resp):
+                self._resp = resp
+            async def __aenter__(self):
+                return self._resp
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+
+        mock_session.post.side_effect = lambda *a, **kw: MockPostContext(responses.pop(0))
+
+        engine = OpenAiCompatibleEngine(
+            session=mock_session,
+            base_url="http://192.168.1.208:11434/v1",
+            model="qwen2.5-vl-7b-instruct-q5_k_m:latest",
+        )
+        tools = [McpTool(name="ha_call_service", description="Call service", input_schema={})]
+        messages = [ChatMessage(role="user", content="enciende la luz")]
+
+        resp = await engine.generate_response(messages=messages, tools=tools)
+        self.assertFalse(engine._supports_native_tools)
+        self.assertEqual(len(resp.tool_calls), 1)
+        self.assertEqual(resp.tool_calls[0].name, "ha_call_service")
+
 
 if __name__ == "__main__":
     unittest.main()
