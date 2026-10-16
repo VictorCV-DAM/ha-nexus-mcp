@@ -983,6 +983,12 @@ class NexusMcpConversationEntity(ConversationEntity):
                 if hasattr(response, "usage") and response.usage:
                     self.record_usage(response.usage, getattr(response, "rate_limits", None))
 
+                # Clean thinking artifacts from response content
+                if response.content:
+                    clean_c = re.sub(r"^\s*<think(?:ing)?>[\s\S]*?</think(?:ing)?>\s*", "", response.content, flags=re.IGNORECASE).strip()
+                    clean_c = re.sub(r"</?think(?:ing)?>", "", clean_c, flags=re.IGNORECASE).strip()
+                    response.content = clean_c
+
                 if response.tool_calls:
                     executed_any_tool = True
                     for tc in response.tool_calls:
@@ -1128,22 +1134,25 @@ class NexusMcpConversationEntity(ConversationEntity):
                     if found_entities_summary:
                         entities_text = "\n".join(found_entities_summary)
                         correction_prompt = (
+                            f"[RECORDATORIO DE LA ORDEN DEL USUARIO: '{text}']\n"
                             f"[ENTIDADES ENCONTRADAS EN HOME ASSISTANT:\n"
                             f"{entities_text}\n\n"
-                            "INSTRUCCIÓN OBLIGATORIA: Las entidades de arriba corresponden a lo que el usuario pidió. "
-                            "NO vuelvas a decir que vas a buscar ni pidas confirmación. "
-                            "Emite INMEDIATAMENTE las llamadas a `ha_call_service` utilizando los `entity_id` encontrados para ejecutar la orden.]"
+                            "INSTRUCCIÓN OBLIGATORIA: Ejecuta las acciones exactas pedidas por el usuario para cada entidad "
+                            "(turn_off para apagar, turn_on para encender). Asocia cada dispositivo por su NOMBRE real. "
+                            "NO inviertas las acciones. Emite INMEDIATAMENTE las llamadas a `ha_call_service` necesarias.]"
                             if is_spanish
                             else (
+                                f"[USER REQUEST REMINDER: '{text}']\n"
                                 f"[FOUND ENTITIES IN HOME ASSISTANT:\n"
                                 f"{entities_text}\n\n"
-                                "MANDATORY INSTRUCTION: The entities above match what the user requested. "
-                                "DO NOT say you will search or ask again. "
-                                "Emit `ha_call_service` calls immediately using the found entity IDs.]"
+                                "MANDATORY INSTRUCTION: Execute the exact actions requested by the user for each entity "
+                                "(turn_off to turn off, turn_on to turn on). Match each device by its real NAME. "
+                                "DO NOT invert actions. Emit the required `ha_call_service` calls immediately.]"
                             )
                         )
                     else:
                         correction_prompt = (
+                            f"[RECORDATORIO DE LA ORDEN DEL USUARIO: '{text}']\n"
                             "[ERROR: No has ejecutado el servicio de control (`ha_call_service`). "
                             "Tus palabras o responder con 'ok' NO controlan dispositivos físicos en Home Assistant. "
                             "Para ejecutar la petición del usuario debes emitir OBLIGATORIAMENTE las llamadas a herramientas "
@@ -1151,6 +1160,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                             "Emite las llamadas a herramientas AHORA.]"
                             if is_spanish
                             else (
+                                f"[USER REQUEST REMINDER: '{text}']\n"
                                 "[ERROR: You have not called `ha_call_service`. "
                                 "Words or saying 'ok' DO NOT control physical devices in Home Assistant. "
                                 "You MUST emit the required tool calls (`ha_call_service` or `ha_search_entities`) NOW.]"
