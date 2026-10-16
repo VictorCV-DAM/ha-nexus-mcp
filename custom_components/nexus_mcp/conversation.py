@@ -91,6 +91,33 @@ def is_transient_error_message(content: str | None) -> bool:
     )
 
 
+def extract_candidate_search_terms(text: str) -> list[str]:
+    """Extract candidate entity names / search keywords from action prompt or assistant text."""
+    if not text:
+        return []
+    terms: list[str] = []
+    clean = re.sub(r"[!?,.:;\(\)\[\]]", " ", text)
+    keywords = [
+        "taller", "aire acondicionado", "aire", "bombilla izquierda", "bombilla derecha",
+        "bombilla", "monitor", "salon", "cocina", "ventilador", "enchufe", "calefactor",
+        "luces", "luz", "interruptor"
+    ]
+    for kw in keywords:
+        if kw in clean.lower() and kw not in terms:
+            terms.append(kw)
+    matches = re.findall(
+        r"(?:enciende|apaga|cambia|ajusta|pon|busca|id de|dispositivo|dispositivos)\s+(?:el|la|los|las|del|de)?\s*([a-záéíóúñ\w\s]{3,25})",
+        clean,
+        re.IGNORECASE,
+    )
+    for m in matches:
+        cand = m.strip().lower()
+        cand = re.sub(r"^(?:de|del|la|el|los|las)\s+", "", cand).strip()
+        if cand and len(cand) >= 3 and cand not in terms and cand not in ("todo", "todas", "dispositivo", "dispositivos", "automatización", "automatizacion"):
+            terms.append(cand)
+    return terms[:5]
+
+
 def prune_history_to_token_budget(
     messages: list[ChatMessage], max_tokens: int = 3500
 ) -> list[ChatMessage]:
@@ -825,6 +852,25 @@ class NexusMcpConversationEntity(ConversationEntity):
         user_confirmed = _is_user_confirmation(history, text)
         is_action_request = bool(ACTION_COMMAND_REGEX.search(text))
 
+        # Check if the user is giving an affirmative continuation (e.g. 'dale', 'vale', 'adelante', 'hazlo', 'procede', 'ok')
+        clean_text_lower = text.lower().strip()
+        is_affirmative_continuation = clean_text_lower in (
+            "dale", "vale", "adelante", "hazlo", "procede", "proceder", "continua",
+            "continúa", "ok", "de acuerdo", "perfecto", "sí", "si", "yes", "do it",
+            "go ahead", "proceed", "claro", "por supuesto", "venga"
+        )
+        if is_affirmative_continuation:
+            # Check if any recent assistant message discussed searching, controlling devices or automations
+            has_pending_action = any(
+                m.role == "assistant" and any(
+                    k in (m.content or "").lower() for k in ("buscar", "encender", "apagar", "cambiar", "automatiz", "dispositivo", "entidad", "taller", "bombilla", "aire")
+                )
+                for m in history[-4:]
+            )
+            if has_pending_action:
+                is_action_request = True
+                user_confirmed = True
+
         user_lang = resolve_user_language(text, getattr(user_input, "language", None), self.hass)
         is_spanish = user_lang == "es"
         lang_prompt = build_language_directive(user_lang)
@@ -1007,12 +1053,21 @@ class NexusMcpConversationEntity(ConversationEntity):
                         "i've executed", "i have executed", "done! i've",
                     )
                 )
+                claims_intent_to_search_or_act = any(
+                    p in content_lower
+                    for p in (
+                        "vamos a buscar", "buscaremos", "voy a buscar", "debo buscar", "primero buscaremos",
+                        "primero buscaré", "primero voy a", "buscar el id", "buscaremos el id",
+                        "vamos a encender", "voy a encender", "vamos a apagar", "voy a apagar",
+                        "i will search", "let me search", "let's search", "i will turn", "let me turn",
+                    )
+                )
                 is_terse_ack = content_lower.rstrip("!.,") in (
                     "ok", "listo", "hecho", "entendido", "de acuerdo", "claro", "done", "perfecto", "ya está", "ya esta"
                 )
                 is_unexecuted = False
                 if not executed_any_tool and not hallucination_retried:
-                    if claims_action or is_terse_ack:
+                    if claims_action or claims_intent_to_search_or_act or is_terse_ack:
                         is_unexecuted = True
                     elif is_action_request and "?" not in content_lower and not any(
                         err_word in content_lower
@@ -1027,26 +1082,59 @@ class NexusMcpConversationEntity(ConversationEntity):
                     )
                     hallucination_retried = True
                     force_tool_choice = "required"
+
+                    # Proactive entity resolution: If the model is talking about searching or needing IDs,
+                    # automatically query Home Assistant for entities matching terms from the user request and assistant text!
+                    extracted_terms = extract_candidate_search_terms(f"{text} {response.content or ''}")
+                    found_entities_summary: list[str] = []
+                    if extracted_terms and self.hass:
+                        for term in extracted_terms:
+                            try:
+                                s_res = await execute_builtin_tool(self.hass, "ha_search_entities", {"query": term})
+                                matches = s_res.get("matches", [])
+                                if matches:
+                                    for m in matches[:3]:
+                                        found_entities_summary.append(
+                                            f"- {m.get('entity_id')} (Nombre: {m.get('friendly_name') or m.get('name')}, estado: {m.get('state')})"
+                                        )
+                            except Exception as ex:
+                                _LOGGER.debug("Auto-search error for '%s': %s", term, ex)
+
                     if response.content:
                         history.append(ChatMessage(role="assistant", content=response.content))
-                    history.append(
-                        ChatMessage(
-                            role="user",
-                            content=(
-                                "[ERROR: No has llamado a ninguna herramienta (`ha_call_service` o `ha_search_entities`). "
-                                "Tus palabras o responder con 'ok' NO controlan dispositivos físicos en Home Assistant. "
-                                "Para ejecutar la petición del usuario debes emitir OBLIGATORIAMENTE las llamadas a herramientas "
-                                "(`ha_call_service` para controlar dispositivos o `ha_search_entities` para encontrar sus IDs). "
-                                "Emite las llamadas a herramientas AHORA.]"
-                                if is_spanish
-                                else (
-                                    "[ERROR: You have not called any tool (`ha_call_service` or `ha_search_entities`). "
-                                    "Words or saying 'ok' DO NOT control physical devices in Home Assistant. "
-                                    "You MUST emit the required tool calls (`ha_call_service` or `ha_search_entities`) NOW.]"
-                                )
-                            ),
+
+                    if found_entities_summary:
+                        entities_text = "\n".join(found_entities_summary)
+                        correction_prompt = (
+                            f"[ENTIDADES ENCONTRADAS AUTOMÁTICAMENTE EN HOME ASSISTANT:\n"
+                            f"{entities_text}\n\n"
+                            "INSTRUCCIÓN OBLIGATORIA: Las entidades de arriba corresponden a lo que el usuario pidió. "
+                            "NO vuelvas a decir que vas a buscar ni pidas confirmación. "
+                            "Emite INMEDIATAMENTE las llamadas a `ha_call_service` utilizando los `entity_id` encontrados.]"
+                            if is_spanish
+                            else (
+                                f"[AUTOMATICALLY RESOLVED ENTITIES FROM HOME ASSISTANT:\n"
+                                f"{entities_text}\n\n"
+                                "MANDATORY INSTRUCTION: The entities above match what the user requested. "
+                                "DO NOT say you will search or ask again. "
+                                "Emit `ha_call_service` calls immediately using the found entity IDs.]"
+                            )
                         )
-                    )
+                    else:
+                        correction_prompt = (
+                            "[ERROR: No has llamado a ninguna herramienta (`ha_call_service` o `ha_search_entities`). "
+                            "Tus palabras o responder con 'ok' NO controlan dispositivos físicos en Home Assistant. "
+                            "Para ejecutar la petición del usuario debes emitir OBLIGATORIAMENTE las llamadas a herramientas "
+                            "(`ha_call_service` para controlar dispositivos o `ha_search_entities` para encontrar sus IDs). "
+                            "Emite las llamadas a herramientas AHORA.]"
+                            if is_spanish
+                            else (
+                                "[ERROR: You have not called any tool (`ha_call_service` or `ha_search_entities`). "
+                                "Words or saying 'ok' DO NOT control physical devices in Home Assistant. "
+                                "You MUST emit the required tool calls (`ha_call_service` or `ha_search_entities`) NOW.]"
+                            )
+                        )
+                    history.append(ChatMessage(role="user", content=correction_prompt))
                     continue
 
                 # When no tool calls are returned, we have the final assistant answer
