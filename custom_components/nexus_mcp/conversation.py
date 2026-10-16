@@ -56,6 +56,20 @@ RESET_COMMANDS = {
     "clear history", "start over",
 }
 
+ACTION_COMMAND_REGEX = re.compile(
+    r"\b(enciende|encender|enciéndelas|enciendelas|enciendela|enciéndela|"
+    r"apaga|apagar|apágalas|apagalas|apágala|apagala|"
+    r"cambia|cambiar|cámbialas|cambialas|cámbiala|cambiala|"
+    r"prende|prender|préndelas|prendelas|préndela|prendela|"
+    r"pon|poner|ponlas|ponla|"
+    r"ajusta|ajustar|ajústalas|ajustalas|"
+    r"sube|subir|baja|bajar|"
+    r"activa|activar|desactiva|desactivar|"
+    r"abre|abrir|cierra|cerrar|"
+    r"turn on|turn off|toggle)\b",
+    re.IGNORECASE,
+)
+
 
 def is_transient_error_message(content: str | None) -> bool:
     """Check if message content is a transient system error that should not be saved or sent back to LLM."""
@@ -808,6 +822,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             )
         )
         user_confirmed = _is_user_confirmation(history, text)
+        is_action_request = bool(ACTION_COMMAND_REGEX.search(text))
 
         user_lang = resolve_user_language(text, getattr(user_input, "language", None), self.hass)
         is_spanish = user_lang == "es"
@@ -822,6 +837,10 @@ class NexusMcpConversationEntity(ConversationEntity):
             "- You CANNOT control physical hardware with text or words alone. The ONLY way devices turn on/off or change color in the real world is by invoking `ha_call_service` in a tool call.\n"
             "- ALWAYS prioritize immediate execution using `ha_call_service` when the user asks to turn on/off, toggle, "
             "dim, adjust, change colors, run sequences, or control devices/lights (even with multiple devices or short delays).\n"
+            "- ENTITY RESOLUTION MANDATE:\n"
+            "  If the user names devices, rooms, or areas (e.g. 'luz del taller', 'aire acondicionado', 'bombilla izquierda') "
+            "  and you do not know their exact entity_id, you MUST immediately call `ha_search_entities` (e.g. with query: 'taller', 'aire', 'bombilla', etc.) to discover them. "
+            "  NEVER output 'ok', 'listo', or text claiming completion without calling tools!\n"
             "- SINGLE-TURN EXECUTION MANDATE FOR SEQUENCES AND TIMED ACTIONS:\n"
             "  1. When turning on lights and changing color (e.g. 'enciende las bombillas y cámbialas a color púrpura'), combine them into a single `ha_call_service` with domain: 'light', service: 'turn_on', data: {'rgb_color': [128, 0, 128]}. Do NOT make a separate call or turn just to set the color!\n"
             "  2. `ha_call_service` supports an optional 'delay' parameter in seconds (e.g. delay: 5 for 5 seconds).\n"
@@ -873,7 +892,7 @@ class NexusMcpConversationEntity(ConversationEntity):
 
         assistant_reply = "OK."
         executed_any_tool = False
-        force_tool_choice = None
+        force_tool_choice = "required" if is_action_request else None
         hallucination_retried = False
 
         try:
@@ -965,9 +984,9 @@ class NexusMcpConversationEntity(ConversationEntity):
                     # Loop continues: send tool results back to LLM for final explanation
                     continue
 
-                # Anti-hallucination check: If no tools were called in this session,
+                # Anti-hallucination / unexecuted-action check: If no tools were called in this session,
                 # but the model's text claims execution or the user gave a direct action command:
-                content_lower = (response.content or "").lower()
+                content_lower = (response.content or "").lower().strip()
                 claims_action = any(
                     p in content_lower
                     for p in (
@@ -978,9 +997,22 @@ class NexusMcpConversationEntity(ConversationEntity):
                         "i've executed", "i have executed", "done! i've",
                     )
                 )
-                if claims_action and not executed_any_tool and not hallucination_retried:
+                is_terse_ack = content_lower.rstrip("!.,") in (
+                    "ok", "listo", "hecho", "entendido", "de acuerdo", "claro", "done", "perfecto", "ya está", "ya esta"
+                )
+                is_unexecuted = False
+                if not executed_any_tool and not hallucination_retried:
+                    if claims_action or is_terse_ack:
+                        is_unexecuted = True
+                    elif is_action_request and "?" not in content_lower and not any(
+                        err_word in content_lower
+                        for err_word in ("no encuentro", "no encontré", "no pude", "no existe", "could not find", "unable to")
+                    ):
+                        is_unexecuted = True
+
+                if is_unexecuted:
                     _LOGGER.warning(
-                        "Nexus MCP intercepted hallucinated action text without tool calls: '%s'. Forcing ha_call_service execution.",
+                        "Nexus MCP intercepted unexecuted action command without tool calls: '%s'. Forcing ha_call_service/ha_search_entities execution.",
                         (response.content or "")[:120],
                     )
                     hallucination_retried = True
@@ -991,9 +1023,17 @@ class NexusMcpConversationEntity(ConversationEntity):
                         ChatMessage(
                             role="user",
                             content=(
-                                "[ERROR: Has generado texto afirmando que ejecutaste la acción, pero NO has llamado a ninguna herramienta (`ha_call_service`). "
-                                "Tus palabras NO controlan bombillas ni dispositivos físicos en Home Assistant. Tienes que emitir OBLIGATORIAMENTE las llamadas a herramientas `ha_call_service` "
-                                "para encender, cambiar color o apagar (con delay si se pidió). Emite las llamadas a herramientas AHORA.]"
+                                "[ERROR: No has llamado a ninguna herramienta (`ha_call_service` o `ha_search_entities`). "
+                                "Tus palabras o responder con 'ok' NO controlan dispositivos físicos en Home Assistant. "
+                                "Para ejecutar la petición del usuario debes emitir OBLIGATORIAMENTE las llamadas a herramientas "
+                                "(`ha_call_service` para controlar dispositivos o `ha_search_entities` para encontrar sus IDs). "
+                                "Emite las llamadas a herramientas AHORA.]"
+                                if is_spanish
+                                else (
+                                    "[ERROR: You have not called any tool (`ha_call_service` or `ha_search_entities`). "
+                                    "Words or saying 'ok' DO NOT control physical devices in Home Assistant. "
+                                    "You MUST emit the required tool calls (`ha_call_service` or `ha_search_entities`) NOW.]"
+                                )
                             ),
                         )
                     )

@@ -110,6 +110,72 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(mock_engine.generate_response.await_count, 2)
             self.assertEqual(result.response.speech_text, "Acción confirmada tras ejecutar las herramientas.")
 
+    async def test_async_process_terse_ack_interception(self) -> None:
+        """Test that model replying 'ok' to an action command is intercepted and forced to call tools."""
+        mock_hass = MagicMock()
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "test_entry_terse_ok"
+        mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
+
+        with patch("custom_components.nexus_mcp.conversation.create_llm_engine") as mock_factory, \
+             patch("custom_components.nexus_mcp.conversation.intent.IntentResponse", side_effect=FakeIntentResponse), \
+             patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
+
+            mock_engine = AsyncMock()
+            # First turn: model responds "ok" without any tool calls
+            # Second turn: model is forced to call tools and returns confirmation
+            mock_engine.generate_response.side_effect = [
+                LlmResponse(content="ok"),
+                LlmResponse(content="He encendido la luz del taller y la bombilla izquierda."),
+            ]
+            mock_factory.return_value = mock_engine
+
+            entity = NexusMcpConversationEntity(mock_hass, mock_entry)
+
+            user_input = MagicMock()
+            user_input.text = "enciende la luz del taller, enciende el aire acondicionado y enciende la bombilla izquierda"
+            user_input.conversation_id = "conv_terse_ok"
+            user_input.language = "es"
+
+            result = await entity.async_process(user_input)
+
+            # Verification: generate_response was called twice because turn 0 'ok' was intercepted
+            self.assertEqual(mock_engine.generate_response.await_count, 2)
+            # Turn 0 was called with tool_choice="required" because input was an action command
+            first_call_kwargs = mock_engine.generate_response.await_args_list[0].kwargs
+            self.assertEqual(first_call_kwargs.get("tool_choice"), "required")
+            self.assertIn("He encendido", result.response.speech_text)
+
+    async def test_async_process_conversational_no_tool_choice(self) -> None:
+        """Test that a conversational query does NOT force tool_choice and returns in 1 turn."""
+        mock_hass = MagicMock()
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "test_entry_conversational"
+        mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
+
+        with patch("custom_components.nexus_mcp.conversation.create_llm_engine") as mock_factory, \
+             patch("custom_components.nexus_mcp.conversation.intent.IntentResponse", side_effect=FakeIntentResponse), \
+             patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
+
+            mock_engine = AsyncMock()
+            mock_engine.generate_response.return_value = LlmResponse(content="Soy el modelo GPT-4 de OpenAI.")
+            mock_factory.return_value = mock_engine
+
+            entity = NexusMcpConversationEntity(mock_hass, mock_entry)
+
+            user_input = MagicMock()
+            user_input.text = "que modelo me esta respondiendo"
+            user_input.conversation_id = "conv_model_query"
+            user_input.language = "es"
+
+            result = await entity.async_process(user_input)
+
+            # Verification: exactly 1 turn, tool_choice is None (auto)
+            self.assertEqual(mock_engine.generate_response.await_count, 1)
+            first_call_kwargs = mock_engine.generate_response.await_args_list[0].kwargs
+            self.assertIsNone(first_call_kwargs.get("tool_choice"))
+            self.assertEqual(result.response.speech_text, "Soy el modelo GPT-4 de OpenAI.")
+
     async def test_async_process_error_handling(self) -> None:
         """Test error handling when the server fails in Spanish."""
         mock_hass = MagicMock()
