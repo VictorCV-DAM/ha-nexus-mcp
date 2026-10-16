@@ -10,7 +10,9 @@ import asyncio
 from dataclasses import dataclass, field
 import json
 import logging
+import re
 from typing import Any
+import uuid
 
 import aiohttp
 
@@ -231,6 +233,123 @@ def prune_api_messages_for_budget(api_messages: list[dict[str, Any]]) -> list[di
             m["content"] = m["content"][:300] + "... [trimmed]"
 
     return sanitize_openai_api_messages(sys_msgs + active_msgs)
+
+
+def extract_fallback_tool_calls(
+    content: str | None,
+    tools: list[McpTool] | None = None,
+) -> tuple[list[LlmToolCall], str | None]:
+    """Extract tool calls from text/markdown/XML emitted by local LLMs (e.g. Ollama Qwen Coder)."""
+    if not content or not isinstance(content, str):
+        return [], content
+
+    known_tool_names = {t.name for t in (tools or [])}
+    tool_calls: list[LlmToolCall] = []
+    cleaned_content = content
+
+    def _is_tool_call_dict(d: Any) -> bool:
+        if not isinstance(d, dict):
+            return False
+        name = d.get("name") or d.get("function")
+        if name and (name in known_tool_names or name.startswith("ha_") or name.startswith("nexus_")):
+            return True
+        if "domain" in d and "service" in d:
+            return True
+        return False
+
+    def _dict_to_tool_call(d: dict[str, Any]) -> LlmToolCall:
+        name = d.get("name") or d.get("function")
+        if not name and "domain" in d and "service" in d:
+            name = "ha_call_service"
+            args = d
+        else:
+            args = d.get("arguments") or d.get("parameters") or d.get("params") or {}
+            if not args and "domain" in d and "service" in d:
+                args = d
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except Exception:
+                args = {}
+        call_id = f"call_{uuid.uuid4().hex[:8]}"
+        return LlmToolCall(
+            call_id=call_id,
+            name=str(name),
+            arguments=args if isinstance(args, dict) else {},
+        )
+
+    def _parse_objects_from_text(raw_text: str) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        clean = raw_text.strip()
+        # Clean markdown code fences if wrapped
+        clean = re.sub(r"^```(?:json)?\s*", "", clean, flags=re.MULTILINE)
+        clean = re.sub(r"\s*```$", "", clean, flags=re.MULTILINE).strip()
+
+        # Try whole block as single JSON object or array
+        try:
+            parsed = json.loads(clean)
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if _is_tool_call_dict(item):
+                        results.append(item)
+                return results
+            elif _is_tool_call_dict(parsed):
+                return [parsed]
+        except Exception:
+            pass
+
+        # Try line-by-line (NDJSON / JSON lines inside tags)
+        for line in clean.splitlines():
+            line_str = line.strip()
+            if not line_str or not (line_str.startswith("{") and line_str.endswith("}")):
+                continue
+            try:
+                parsed_line = json.loads(line_str)
+                if _is_tool_call_dict(parsed_line):
+                    results.append(parsed_line)
+            except Exception:
+                pass
+        if results:
+            return results
+
+        # Try regex search for all top-level JSON objects in the block
+        json_obj_pattern = re.compile(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", re.DOTALL)
+        for match in json_obj_pattern.finditer(clean):
+            try:
+                parsed_obj = json.loads(match.group(0))
+                if _is_tool_call_dict(parsed_obj):
+                    results.append(parsed_obj)
+            except Exception:
+                pass
+
+        return results
+
+    # 1. XML-style tags: <tools>...</tools>, <tool_call>...</tool_call>, <tool>...</tool>
+    tag_regex = re.compile(r"<(tools|tool_call|tool)>(.*?)</\1>", re.DOTALL | re.IGNORECASE)
+    tag_matches = list(tag_regex.finditer(content))
+    if tag_matches:
+        for m in tag_matches:
+            for obj in _parse_objects_from_text(m.group(2)):
+                tool_calls.append(_dict_to_tool_call(obj))
+        cleaned_content = tag_regex.sub("", cleaned_content).strip()
+
+    # 2. Markdown code blocks: ```json ... ``` or ``` ... ```
+    if not tool_calls:
+        block_regex = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
+        for m in block_regex.finditer(content):
+            for obj in _parse_objects_from_text(m.group(1)):
+                tool_calls.append(_dict_to_tool_call(obj))
+        if tool_calls:
+            cleaned_content = block_regex.sub("", cleaned_content).strip()
+
+    # 3. Bare JSON at root: {"name": "ha_call_service", ...}
+    if not tool_calls:
+        for obj in _parse_objects_from_text(content):
+            tool_calls.append(_dict_to_tool_call(obj))
+        if tool_calls:
+            cleaned_content = ""
+
+    return tool_calls, (cleaned_content if cleaned_content else None)
 
 
 class OpenAiCompatibleEngine(BaseLlmEngine):
@@ -523,6 +642,21 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
             except json.JSONDecodeError:
                 args = {}
             tool_calls.append(LlmToolCall(call_id=call_id, name=fn_name, arguments=args))
+
+        # Fallback: Many local models (such as Ollama Qwen Coder, DeepSeek, abliterated GGUFs)
+        # emit tool calls into text/content (wrapped in <tools>...</tools>, <tool_call>...</tool_call>,
+        # or markdown code blocks ```json ... ```) rather than filling OpenAI tool_calls.
+        if not tool_calls and content and tools:
+            fallback_calls, remaining_content = extract_fallback_tool_calls(content, tools)
+            if fallback_calls:
+                _LOGGER.info(
+                    "Extracted %d fallback tool call(s) from %s text output: %s",
+                    len(fallback_calls),
+                    self._model,
+                    [c.name for c in fallback_calls],
+                )
+                tool_calls = fallback_calls
+                content = remaining_content
 
         usage = data.get("usage") or {}
 

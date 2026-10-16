@@ -36,6 +36,7 @@ from .const import (
     DEFAULT_AUTONOMOUS_MODE,
     DEFAULT_MCP_SERVER_URL,
     DOMAIN,
+    PROVIDER_OLLAMA_LOCAL,
     get_model_specs,
 )
 from .discovery import async_autodiscover_ha_mcp_url
@@ -856,6 +857,15 @@ class NexusMcpConversationEntity(ConversationEntity):
             "3. Tool argument formatting: You must provide strictly valid JSON in all tool arguments. Never include unescaped characters, backticks, conversational filler, or malformed tags inside tool calls.\n"
             "4. Code & YAML formatting: Whenever you provide YAML configurations, Lovelace card configs, scripts, automations, templates, or code, you MUST always enclose them in Markdown code blocks with the language tag (e.g. ```yaml ... ```, ```json ... ```, or ```python ... ```). Never output bare code or bare YAML without code blocks.\n"
         )
+
+        if self._provider == PROVIDER_OLLAMA_LOCAL:
+            base_system_prompt += (
+                "- LOCAL MODEL / OLLAMA TOOL CALL FORMAT:\n"
+                "  When invoking tools, you may use standard tool calls or output strictly valid JSON within <tools>...</tools> or <tool_call>...</tool_call> tags:\n"
+                "  <tools>\n"
+                "  {\"name\": \"ha_call_service\", \"arguments\": {\"domain\": \"light\", \"service\": \"turn_on\", \"service_data\": {\"entity_id\": \"...\"}}}\n"
+                "  </tools>\n"
+            )
 
         if autonomous_mode:
             autonomy_prompt = (

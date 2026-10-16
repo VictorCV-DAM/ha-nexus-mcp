@@ -369,6 +369,54 @@ class TestLlmEngine(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(pruned[1]["content"], "Active command")
         self.assertTrue(pruned[-1]["content"].endswith("... [trimmed]"))
 
+    def test_extract_fallback_tool_calls(self) -> None:
+        """Test extraction of tool calls from XML tags and markdown code blocks emitted by local LLMs."""
+        from custom_components.nexus_mcp.llm_engine import extract_fallback_tool_calls
+        from custom_components.nexus_mcp.mcp_client import McpTool
+
+        tools = [
+            McpTool(name="ha_call_service", description="Call service", input_schema={}),
+            McpTool(name="ha_search_entities", description="Search entities", input_schema={}),
+        ]
+
+        # 1. Ollama Qwen Coder style: <tools> tag with single JSON
+        content1 = (
+            "<tools>\n"
+            '{"name": "ha_call_service", "arguments": {"domain": "light", "service": "turn_on", "service_data": {"entity_id": "light.cocina"}}}\n'
+            "</tools>"
+        )
+        calls1, rem1 = extract_fallback_tool_calls(content1, tools)
+        self.assertEqual(len(calls1), 1)
+        self.assertEqual(calls1[0].name, "ha_call_service")
+        self.assertEqual(calls1[0].arguments["domain"], "light")
+        self.assertEqual(calls1[0].arguments["service_data"]["entity_id"], "light.cocina")
+        self.assertIsNone(rem1)
+
+        # 2. Multiple tool calls in single <tools> block (NDJSON)
+        content2 = (
+            "<tools>\n"
+            '{"name": "ha_call_service", "arguments": {"domain": "light", "service": "turn_on", "service_data": {"entity_id": "light.cocina"}}}\n'
+            '{"name": "ha_call_service", "arguments": {"domain": "light", "service": "turn_off", "service_data": {"entity_id": "light.salon"}}}\n'
+            "</tools>"
+        )
+        calls2, rem2 = extract_fallback_tool_calls(content2, tools)
+        self.assertEqual(len(calls2), 2)
+        self.assertEqual(calls2[0].arguments["service_data"]["entity_id"], "light.cocina")
+        self.assertEqual(calls2[1].arguments["service_data"]["entity_id"], "light.salon")
+        self.assertIsNone(rem2)
+
+        # 3. Markdown code block with conversational prefix
+        content3 = (
+            "Voy a encender la luz:\n"
+            "```json\n"
+            '{"name": "ha_call_service", "arguments": {"domain": "light", "service": "turn_on"}}\n'
+            "```"
+        )
+        calls3, rem3 = extract_fallback_tool_calls(content3, tools)
+        self.assertEqual(len(calls3), 1)
+        self.assertEqual(calls3[0].name, "ha_call_service")
+        self.assertEqual(rem3, "Voy a encender la luz:")
+
 
 if __name__ == "__main__":
     unittest.main()
