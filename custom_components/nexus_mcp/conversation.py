@@ -105,17 +105,29 @@ def extract_candidate_search_terms(text: str) -> list[str]:
     for kw in keywords:
         if kw in clean.lower() and kw not in terms:
             terms.append(kw)
-    matches = re.findall(
-        r"(?:enciende|apaga|cambia|ajusta|pon|busca|id de|dispositivo|dispositivos)\s+(?:el|la|los|las|del|de)?\s*([a-záéíóúñ\w\s]{3,25})",
-        clean,
-        re.IGNORECASE,
-    )
-    for m in matches:
-        cand = m.strip().lower()
-        cand = re.sub(r"^(?:de|del|la|el|los|las)\s+", "", cand).strip()
-        if cand and len(cand) >= 3 and cand not in terms and cand not in ("todo", "todas", "dispositivo", "dispositivos", "automatización", "automatizacion"):
-            terms.append(cand)
-    return terms[:5]
+
+    # Split compound commands separated by commas, 'y', or 'luego'
+    clauses = re.split(r"[,;]|\s+y\s+|\s+luego\s+", text, flags=re.IGNORECASE)
+    for clause in clauses:
+        clause_clean = clause.strip()
+        m = re.search(
+            r"(?:enciende|apaga|cambia|ajusta|pon|busca|id de|dispositivo|dispositivos)\s+(?:el|la|los|las|del|de)?\s*([a-záéíóúñ0-9_\s]{2,30})",
+            clause_clean,
+            re.IGNORECASE,
+        )
+        if m:
+            cand = m.group(1).strip().lower()
+            cand = re.sub(r"^(?:de|del|la|el|los|las)\s+", "", cand).strip()
+            if cand and len(cand) >= 2 and cand not in terms and cand not in ("todo", "todas", "dispositivo", "dispositivos", "automatización", "automatizacion"):
+                terms.append(cand)
+                # If term has "luz del taller" -> also add "taller"
+                for sep in (" del ", " de "):
+                    if sep in cand:
+                        sub = cand.split(sep)[-1].strip()
+                        if sub and len(sub) >= 3 and sub not in terms:
+                            terms.append(sub)
+
+    return terms[:6]
 
 
 def prune_history_to_token_budget(
@@ -892,7 +904,10 @@ class NexusMcpConversationEntity(ConversationEntity):
             "  1. When turning on lights and changing color (e.g. 'enciende las bombillas y cámbialas a color púrpura'), combine them into a single `ha_call_service` with domain: 'light', service: 'turn_on', data: {'rgb_color': [128, 0, 128]}. Do NOT make a separate call or turn just to set the color!\n"
             "  2. `ha_call_service` supports an optional 'delay' parameter in seconds (e.g. delay: 5 for 5 seconds).\n"
             "  3. Emit ALL sequence steps as multiple tool calls in ONE SINGLE TURN (e.g., call 1: turn_on with rgb_color; call 2: turn_off with delay: 5). Do NOT wait across multiple turns to execute each step!\n"
-            "- NEVER, UNDER ANY CIRCUMSTANCES, CLAIM THAT AN ACTION WAS PERFORMED (e.g., 'He encendido', 'Apagué', '¡Listo! He ejecutado la secuencia', 'Done!') UNLESS YOU ACTUALLY INVOKED `ha_call_service` IN A TOOL CALL! Describing actions with words without calling tools does NOT execute them.\n"
+            "- MULTI-DEVICE EXECUTION MANDATE:\n"
+            "  When the user asks to control multiple devices (e.g. 'enciende la luz del taller, enciende el aire acondicionado y enciende la bombilla izquierda'), you MUST execute `ha_call_service` for EVERY device that you can identify. NEVER abort or stop execution for the other devices just because one device is missing or not found. Control the devices you found first, and then in your conversational response inform the user which devices were controlled and ask for clarification only on the missing device.\n"
+            "- LIGHTS AS SMART PLUGS / SWITCHES:\n"
+            "  In Home Assistant, lights are frequently controlled via smart plugs or relays in the 'switch' domain (e.g. `switch.luz_taller_enchufe_1`). When searching for or controlling lights or lamps, if an entity is not found under `light`, check the `switch` domain as well. `ha_call_service` with service 'turn_on' works seamlessly for both switches and lights.\n"
             "- Direct commands (`ha_call_service`), searching (`ha_search_entities`), and reading states (`ha_get_entity_state`) "
             "NEVER require confirmation and MUST be executed immediately without asking!\n"
             "- NEVER call `ha_create_automation` unless the user explicitly requests a persistent or recurring automation "

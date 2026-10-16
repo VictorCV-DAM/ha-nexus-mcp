@@ -174,6 +174,96 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(created_tasks), 1)
 
 
+    async def test_ha_search_entities_light_switch_fallback_and_ranking(self) -> None:
+        """Verify ha_search_entities finds smart plug switches when searching for lights and ranks properly."""
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        mock_hass = MagicMock()
+        state_workshop_plug = MagicMock()
+        state_workshop_plug.entity_id = "switch.luz_taller_enchufe_1"
+        state_workshop_plug.state = "off"
+        state_workshop_plug.attributes = {"friendly_name": "Socket 1"}
+
+        state_bar_light = MagicMock()
+        state_bar_light.entity_id = "light.barra_de_luz"
+        state_bar_light.state = "off"
+        state_bar_light.attributes = {"friendly_name": "Barra de luz"}
+
+        state_left_bulb = MagicMock()
+        state_left_bulb.entity_id = "light.bombilla_izquierda"
+        state_left_bulb.state = "off"
+        state_left_bulb.attributes = {"friendly_name": "Bombilla Izquierda"}
+
+        mock_hass.states.async_all.return_value = [state_bar_light, state_workshop_plug, state_left_bulb]
+
+        # 1. Searching for 'luz del taller' with domain='light' should match switch.luz_taller_enchufe_1
+        # and rank it ABOVE light.barra_de_luz
+        res_taller = await execute_builtin_tool(
+            mock_hass,
+            "ha_search_entities",
+            {"query": "luz del taller", "domain": "light"},
+        )
+        self.assertTrue(res_taller["count"] >= 1)
+        self.assertEqual(res_taller["results"][0]["entity_id"], "switch.luz_taller_enchufe_1")
+
+        # 2. Searching for 'bombilla izquierda'
+        res_bulb = await execute_builtin_tool(
+            mock_hass,
+            "ha_search_entities",
+            {"query": "bombilla izquierda"},
+        )
+        self.assertEqual(res_bulb["results"][0]["entity_id"], "light.bombilla_izquierda")
+
+    async def test_ha_call_service_smart_routing(self) -> None:
+        """Verify ha_call_service resolves missing domain and reroutes light.turn_on on switch entities."""
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        mock_hass = MagicMock()
+        mock_hass.services.async_call = AsyncMock()
+
+        # 1. Missing domain with turn_on and target switch.luz_taller_enchufe_1 -> routes to switch or homeassistant
+        await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {"service": "turn_on", "target": {"entity_id": "switch.luz_taller_enchufe_1"}},
+        )
+        mock_hass.services.async_call.assert_awaited_with(
+            "switch",
+            "turn_on",
+            {"entity_id": "switch.luz_taller_enchufe_1"},
+            blocking=True,
+        )
+
+        # 2. Calling domain 'light' on switch.luz_taller_enchufe_1 -> automatically redirects to 'homeassistant'
+        await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {"domain": "light", "service": "turn_on", "target": {"entity_id": "switch.luz_taller_enchufe_1"}},
+        )
+        mock_hass.services.async_call.assert_awaited_with(
+            "homeassistant",
+            "turn_on",
+            {"entity_id": "switch.luz_taller_enchufe_1"},
+            blocking=True,
+        )
+
+        # 3. Handling service_data from Ollama local model format
+        await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {
+                "service": "turn_on",
+                "service_data": {"entity_id": "light.bombilla_izquierda", "brightness": 200},
+            },
+        )
+        mock_hass.services.async_call.assert_awaited_with(
+            "light",
+            "turn_on",
+            {"entity_id": "light.bombilla_izquierda", "brightness": 200},
+            blocking=True,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
 

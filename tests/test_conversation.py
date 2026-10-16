@@ -764,6 +764,18 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(len(user_queries) >= 1)
 
 
+    def test_extract_candidate_search_terms_compound_command(self) -> None:
+        """Verify candidate term extraction isolates clauses and area keywords from compound commands."""
+        from custom_components.nexus_mcp.conversation import extract_candidate_search_terms
+
+        text = "enciende la luz del taller, enciende el aire acondicionado y enciende la bombilla izquierda"
+        terms = extract_candidate_search_terms(text)
+
+        self.assertIn("taller", terms)
+        self.assertIn("aire acondicionado", terms)
+        self.assertIn("bombilla izquierda", terms)
+
+
 if __name__ == "__main__":
     unittest.main()
 
