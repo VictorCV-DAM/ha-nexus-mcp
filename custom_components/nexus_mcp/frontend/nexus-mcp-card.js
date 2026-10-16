@@ -124,7 +124,6 @@ class NexusMcpCard extends HTMLElement {
       }
       this._updateMessagesView();
     }
-    this._updateTokenBadge();
   }
 
   _getAvailableAgents() {
@@ -414,57 +413,6 @@ class NexusMcpCard extends HTMLElement {
         @media (max-width: 360px) {
           .vision-badge span {
             display: none;
-          }
-        }
-        .card-footer {
-          display: flex;
-          align-items: center;
-          justify-content: flex-start;
-          padding: 2px 14px 8px 14px;
-          background: var(--card-background-color, #1e1e1e);
-        }
-        .token-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          padding: 2px 7px;
-          border-radius: 8px;
-          font-size: 0.72rem;
-          font-family: var(--code-font-family, monospace);
-          font-weight: 500;
-          cursor: default;
-          user-select: none;
-          transition: color 0.2s, background 0.2s;
-          flex-shrink: 0;
-          white-space: nowrap;
-          background: rgba(255, 255, 255, 0.04);
-          color: var(--secondary-text-color, #9e9e9e);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        .token-badge ha-icon {
-          --mdc-icon-size: 13px;
-          color: var(--primary-color, #03a9f4);
-        }
-        .token-badge.token-warning {
-          background: rgba(255, 152, 0, 0.12);
-          color: #ffb74d;
-          border-color: rgba(255, 152, 0, 0.35);
-        }
-        .token-badge.token-warning ha-icon {
-          color: #ffb74d;
-        }
-        .token-badge.token-critical {
-          background: rgba(244, 67, 54, 0.15);
-          color: #e57373;
-          border-color: rgba(244, 67, 54, 0.45);
-        }
-        .token-badge.token-critical ha-icon {
-          color: #e57373;
-        }
-        @media (max-width: 440px) {
-          .token-badge {
-            font-size: 0.66rem;
-            padding: 2px 5px;
           }
         }
         .icon-btn {
@@ -850,16 +798,12 @@ class NexusMcpCard extends HTMLElement {
             <ha-icon icon="mdi:send"></ha-icon>
           </button>
         </div>
-        <div class="card-footer">
-          <div class="token-badge" id="token-badge" style="display: none;"></div>
-        </div>
       </ha-card>
     `;
 
     this._setupListeners();
     this._updateAgentDropdown();
     this._updateVisionBadge();
-    this._updateTokenBadge();
     this._updateMessagesView();
   }
 
@@ -976,7 +920,6 @@ class NexusMcpCard extends HTMLElement {
           console.warn("Could not save selected agent to localStorage:", err);
         }
         this._updateVisionBadge();
-        this._updateTokenBadge();
         this._conversationId = null;
         this._loadHistoryForAgent(this._selectedAgent);
       };
@@ -1060,94 +1003,6 @@ class NexusMcpCard extends HTMLElement {
     `;
   }
 
-  _formatCompactTokens(n) {
-    if (n === null || n === undefined || isNaN(n)) return "0";
-    if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
-    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
-    return String(Math.round(n));
-  }
-
-  _getModelFallbackLimit(modelName) {
-    const clean = (modelName || "").toLowerCase();
-    if (clean.includes("120b")) return 8000;
-    if (clean.includes("20b")) return 8000;
-    if (clean.includes("27b")) return 7000;
-    if (clean.includes("gemini")) return 250000;
-    if (clean.includes("qwen-plus")) return 60000;
-    return 8000;
-  }
-
-  _updateTokenBadge() {
-    if (!this.shadowRoot || !this._hass) return;
-    const badge = this.shadowRoot.getElementById("token-badge");
-    if (!badge) return;
-
-    // 1. Resolve currently selected conversation agent entity and attributes
-    const agentEntityId = this._selectedAgent;
-    const agentState = agentEntityId ? this._hass.states[agentEntityId] : null;
-    const modelName = agentState?.attributes?.model || "";
-    const entryId = agentState?.attributes?.entry_id || "";
-
-    // 2. Find corresponding daily_tokens sensor matching selected agent's model or entry_id
-    const tokenSensors = Object.values(this._hass.states).filter(
-      (s) => s.entity_id.startsWith("sensor.") && s.entity_id.includes("daily_tokens")
-    );
-    let tokenSensor = null;
-    if (modelName) {
-      tokenSensor = tokenSensors.find(
-        (s) => s.attributes?.model && s.attributes.model.toLowerCase() === modelName.toLowerCase()
-      );
-    }
-    if (!tokenSensor && entryId) {
-      tokenSensor = tokenSensors.find((s) => s.entity_id.includes(entryId));
-    }
-    if (!tokenSensor && agentEntityId) {
-      const slug = agentEntityId.replace("conversation.", "").replace("nexus_mcp_intercom_", "").replace("nexus_mcp_", "");
-      tokenSensor = tokenSensors.find((s) => s.entity_id.includes(slug));
-    }
-    if (!tokenSensor && tokenSensors.length > 0) {
-      tokenSensor = tokenSensors[0];
-    }
-
-    // 3. Extract telemetry attributes from sensor or conversation entity
-    const attrs = tokenSensor?.attributes || agentState?.attributes || {};
-    const fallbackLimit = this._getModelFallbackLimit(modelName || attrs.model);
-    const limit = attrs.limit_tokens_minute || fallbackLimit;
-    const remaining = attrs.remaining_tokens_minute;
-    const lastTotal = attrs.last_total_tokens || 0;
-    const isEs = this._isSpanish();
-
-    // 4. Calculate consumed tokens in current window
-    let usedInWindow = 0;
-    if (remaining !== null && remaining !== undefined && limit > 0) {
-      usedInWindow = Math.max(0, limit - Number(remaining));
-    } else if (lastTotal > 0) {
-      usedInWindow = lastTotal;
-    }
-
-    const pct = limit > 0 ? Math.min(100, (usedInWindow / limit) * 100) : 0;
-
-    badge.style.display = "inline-flex";
-    let statusClass = "";
-    if (pct >= 85) {
-      statusClass = "token-critical";
-    } else if (pct >= 65) {
-      statusClass = "token-warning";
-    }
-    badge.className = `token-badge ${statusClass}`.trim();
-
-    const label = `${this._formatCompactTokens(usedInWindow)} / ${this._formatCompactTokens(limit)} TPM`;
-    const title = isEs
-      ? `Consumo en ventana: ${usedInWindow.toLocaleString()} / ${limit.toLocaleString()} TPM (${Math.round(pct)}%)\nRestantes este minuto: ${(remaining != null ? Number(remaining) : Math.max(0, limit - usedInWindow)).toLocaleString()}\nÚltima petición: ${lastTotal.toLocaleString()} tokens\nModelo: ${modelName || attrs.model || "Nexus MCP"}`
-      : `Rolling window usage: ${usedInWindow.toLocaleString()} / ${limit.toLocaleString()} TPM (${Math.round(pct)}%)\nRemaining this minute: ${(remaining != null ? Number(remaining) : Math.max(0, limit - usedInWindow)).toLocaleString()}\nLast request: ${lastTotal.toLocaleString()} tokens\nModel: ${modelName || attrs.model || "Nexus MCP"}`;
-
-    badge.title = title;
-    badge.innerHTML = `
-      <ha-icon icon="mdi:flash"></ha-icon>
-      <span>${label}</span>
-    `;
-  }
-
   _updateAgentDropdown() {
     if (!this.shadowRoot) return;
     const select = this.shadowRoot.getElementById("agent-select");
@@ -1168,7 +1023,6 @@ class NexusMcpCard extends HTMLElement {
       html += `<option value="${ag.id}" ${isSelected}>${prefix}${ag.name}</option>`;
     }
     select.innerHTML = html;
-    this._updateTokenBadge();
   }
 
   _formatContent(rawContent) {
@@ -1476,7 +1330,6 @@ class NexusMcpCard extends HTMLElement {
     } finally {
       this._isSending = false;
       if (sendBtn) sendBtn.disabled = false;
-      this._updateTokenBadge();
       this._updateMessagesView(true);
     }
   }

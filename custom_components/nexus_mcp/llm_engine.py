@@ -136,6 +136,7 @@ class BaseLlmEngine(ABC):
         messages: list[ChatMessage],
         tools: list[McpTool] | None = None,
         system_prompt: str | None = None,
+        tool_choice: str | None = None,
     ) -> LlmResponse:
         """Generate response and handle tool calls."""
 
@@ -189,6 +190,7 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
         messages: list[ChatMessage],
         tools: list[McpTool] | None = None,
         system_prompt: str | None = None,
+        tool_choice: str | None = None,
     ) -> LlmResponse:
         """Send chat completion request to OpenAI-compatible endpoint."""
         url = f"{self._base_url}/chat/completions"
@@ -268,7 +270,7 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
 
         if tools:
             payload["tools"] = [tool.to_openai_tool() for tool in tools]
-            payload["tool_choice"] = "auto"
+            payload["tool_choice"] = tool_choice or "auto"
             payload["temperature"] = 0.1
 
         data = None
@@ -467,6 +469,7 @@ class GeminiEngine(BaseLlmEngine):
         messages: list[ChatMessage],
         tools: list[McpTool] | None = None,
         system_prompt: str | None = None,
+        tool_choice: str | None = None,
     ) -> LlmResponse:
         """Call Gemini generateContent endpoint."""
         url = f"{GEMINI_API_URL}/{self._model}:generateContent?key={self._api_key}"
@@ -546,6 +549,18 @@ class GeminiEngine(BaseLlmEngine):
                     ]
                 }
             ]
+            if tool_choice == "required":
+                payload["toolConfig"] = {
+                    "functionCallingConfig": {
+                        "mode": "ANY"
+                    }
+                }
+            elif tool_choice == "none":
+                payload["toolConfig"] = {
+                    "functionCallingConfig": {
+                        "mode": "NONE"
+                    }
+                }
 
         max_attempts = 3
         backoff_seconds = 1.5

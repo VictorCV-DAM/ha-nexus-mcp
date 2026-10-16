@@ -741,16 +741,19 @@ class NexusMcpConversationEntity(ConversationEntity):
             "You are Nexus MCP, an autonomous AI assistant embedded directly inside Home Assistant. "
             "You have direct access to tools to search entities (ha_search_entities), read states (ha_get_entity_state), "
             "control devices (ha_call_service), and create/activate automations (ha_create_automation).\n"
-            "DIRECT DEVICE CONTROL vs AUTOMATIONS (CRITICAL PRECEDENCE):\n"
+            "CRITICAL DEVICE CONTROL MANDATE (PHYSICAL HARDWARE EXECUTION):\n"
+            "- You CANNOT control physical hardware with text or words alone. The ONLY way devices turn on/off or change color in the real world is by invoking `ha_call_service` in a tool call.\n"
             "- ALWAYS prioritize immediate execution using `ha_call_service` when the user asks to turn on/off, toggle, "
             "dim, adjust, change colors, run sequences, or control devices/lights (even with multiple devices or short delays).\n"
-            "- You can execute multiple `ha_call_service` calls in a single turn to control multiple entities or chain actions.\n"
-            "- Timed actions: `ha_call_service` supports an optional 'delay' parameter in seconds (e.g., delay: 5 to turn off after 5 seconds). "
-            "Use `delay` in `ha_call_service` for timed commands instead of creating an automation!\n"
+            "- MULTI-DEVICE & CHAINED COMMANDS: You can emit MULTIPLE `ha_call_service` calls in a SINGLE turn to control multiple entities or chain actions sequentially.\n"
+            "- TIMED WAITS & PAUSES: `ha_call_service` supports an optional 'delay' parameter in seconds (e.g. delay: 5 for 5 seconds). "
+            "If the user asks for pauses between actions (e.g. 'dejando 5s entre cada acción' or 'apaga tras 5 segundos'), emit all `ha_call_service` calls with their incremental delays (delay: 0, delay: 5, delay: 10, delay: 15). "
+            "NEVER create an automation for short delays or immediate sequence commands!\n"
+            "- NEVER, UNDER ANY CIRCUMSTANCES, CLAIM THAT AN ACTION WAS PERFORMED (e.g., 'He encendido', 'Apagué', '¡Listo! He ejecutado la secuencia', 'Done!') UNLESS YOU ACTUALLY INVOKED `ha_call_service` IN A TOOL CALL! Describing actions with words without calling tools does NOT execute them.\n"
+            "- Direct commands (`ha_call_service`), searching (`ha_search_entities`), and reading states (`ha_get_entity_state`) "
+            "NEVER require confirmation and MUST be executed immediately without asking!\n"
             "- NEVER call `ha_create_automation` unless the user explicitly requests a persistent or recurring automation "
             "(e.g., using words like 'crea una automatización', 'automatiza', 'todos los días a las...', or 'cuando ocurra X haz Y').\n"
-            "- Direct commands (`ha_call_service`), searching (`ha_search_entities`), and reading states (`ha_get_entity_state`) "
-            "NEVER require confirmation and MUST be executed immediately!\n"
             "Rules for creating automations with ha_create_automation (ONLY when explicitly requested):\n"
             "1. In 'trigger', for time intervals use: [{'platform': 'time_pattern', 'seconds': '/5'}]. Never use 'pattern'.\n"
             "2. In 'action', call services using: [{'service': 'domain.service_name', 'target': {'entity_id': '...'}}]. Never use 'domain' as a separate key.\n"
@@ -792,19 +795,26 @@ class NexusMcpConversationEntity(ConversationEntity):
         system_prompt = f"{lang_prompt}\n\n{base_system_prompt}\n\n{autonomy_prompt}\n\n{lang_prompt}"
 
         assistant_reply = "OK."
+        executed_any_tool = False
+        force_tool_choice = None
+        hallucination_retried = False
 
         try:
-            # Multi-turn tool execution loop (up to 4 turns)
-            for _ in range(4):
+            # Multi-turn tool execution loop (up to 5 turns)
+            for turn_idx in range(5):
                 response = await self._engine.generate_response(
                     messages=prune_history_to_token_budget(history, max_tokens=2200),
                     tools=self._tools,
                     system_prompt=system_prompt,
+                    tool_choice=force_tool_choice,
                 )
+                force_tool_choice = None
+
                 if hasattr(response, "usage") and response.usage:
                     self.record_usage(response.usage, getattr(response, "rate_limits", None))
 
                 if response.tool_calls:
+                    executed_any_tool = True
                     # Record model's tool calls in history
                     history.append(
                         ChatMessage(
@@ -876,6 +886,46 @@ class NexusMcpConversationEntity(ConversationEntity):
                             )
                         )
                     # Loop continues: send tool results back to LLM for final explanation
+                    continue
+
+                # Anti-hallucination check: If no tools were called in this session,
+                # but the model's text claims execution or the user gave a direct action command:
+                content_lower = (response.content or "").lower()
+                claims_action = any(
+                    p in content_lower
+                    for p in (
+                        "he ejecutado", "he encendido", "he apagado", "he cambiado",
+                        "encendí", "apagué", "cambié", "he puesto", "puse",
+                        "secuencia completa", "deberían estar ahora", "deberian estar ahora",
+                        "i've turned", "i have turned", "i turned off", "i turned on",
+                        "i've executed", "i have executed", "done! i've",
+                    )
+                )
+                user_is_action = any(
+                    w in text.lower()
+                    for w in (
+                        "enciende", "apaga", "cambia", "prende", "pon", "ajusta",
+                        "sube", "baja", "turn on", "turn off", "toggle", "switch",
+                    )
+                )
+
+                if (claims_action or (user_is_action and turn_idx == 0)) and not executed_any_tool and not hallucination_retried:
+                    _LOGGER.warning(
+                        "Nexus MCP intercepted hallucinated action text without tool calls: '%s'. Forcing ha_call_service execution.",
+                        (response.content or "")[:120],
+                    )
+                    hallucination_retried = True
+                    force_tool_choice = "required"
+                    history.append(
+                        ChatMessage(
+                            role="user",
+                            content=(
+                                "[ERROR: Has generado texto afirmando que ejecutaste la acción, pero NO has llamado a ninguna herramienta (`ha_call_service`). "
+                                "Tus palabras NO controlan bombillas ni dispositivos físicos en Home Assistant. Tienes que emitir OBLIGATORIAMENTE las llamadas a herramientas `ha_call_service` "
+                                "para encender, cambiar color o apagar (con delay si se pidió). Emite las llamadas a herramientas AHORA.]"
+                            ),
+                        )
+                    )
                     continue
 
                 # When no tool calls are returned, we have the final assistant answer

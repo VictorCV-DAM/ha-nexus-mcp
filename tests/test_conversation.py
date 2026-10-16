@@ -60,22 +60,55 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
 
             mock_engine = AsyncMock()
             mock_engine.generate_response.return_value = LlmResponse(
-                content="Luz del salón apagada."
+                content="¡Hola! Estoy listo para ayudarte con tu hogar inteligente."
             )
             mock_factory.return_value = mock_engine
 
             entity = NexusMcpConversationEntity(mock_hass, mock_entry)
 
             user_input = MagicMock()
-            user_input.text = "Apaga la luz del salón"
+            user_input.text = "Hola, ¿qué puedes hacer?"
             user_input.conversation_id = "conv_1"
             user_input.language = "es"
 
             result = await entity.async_process(user_input)
 
             self.assertEqual(result.conversation_id, "conv_1")
-            self.assertEqual(result.response.speech_text, "Luz del salón apagada.")
+            self.assertEqual(result.response.speech_text, "¡Hola! Estoy listo para ayudarte con tu hogar inteligente.")
             mock_engine.generate_response.assert_awaited_once()
+
+    async def test_async_process_hallucination_interception(self) -> None:
+        """Test that assistant claims of physical action without tools are intercepted."""
+        mock_hass = MagicMock()
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "test_entry_hallucinate"
+        mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
+
+        with patch("custom_components.nexus_mcp.conversation.create_llm_engine") as mock_factory, \
+             patch("custom_components.nexus_mcp.conversation.intent.IntentResponse", side_effect=FakeIntentResponse), \
+             patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
+
+            mock_engine = AsyncMock()
+            # First turn: model hallucinates execution text with no tool calls
+            # Second turn: model is forced to call tool
+            mock_engine.generate_response.side_effect = [
+                LlmResponse(content="¡Listo! He ejecutado la secuencia completa y encendí la bombilla."),
+                LlmResponse(content="Acción confirmada tras ejecutar las herramientas."),
+            ]
+            mock_factory.return_value = mock_engine
+
+            entity = NexusMcpConversationEntity(mock_hass, mock_entry)
+
+            user_input = MagicMock()
+            user_input.text = "Enciende la bombilla y cámbiala a verde"
+            user_input.conversation_id = "conv_hallucinate"
+            user_input.language = "es"
+
+            result = await entity.async_process(user_input)
+
+            # Verification: generate_response was called twice due to anti-hallucination retry
+            self.assertEqual(mock_engine.generate_response.await_count, 2)
+            self.assertEqual(result.response.speech_text, "Acción confirmada tras ejecutar las herramientas.")
 
     async def test_async_process_error_handling(self) -> None:
         """Test error handling when the server fails in Spanish."""
