@@ -332,14 +332,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             needs_update = True
 
     desired_title = f"Nexus MCP ({current_model})" if current_model else entry.title
-    title_needs_update = entry.title != desired_title and (entry.title.startswith("Nexus MCP") or not entry.title)
-
-    if needs_update or title_needs_update:
-        _LOGGER.info("Migrating entry '%s' -> title='%s', model='%s'", entry.title, desired_title, current_model)
-        hass.config_entries.async_update_entry(entry, title=desired_title, data=updated_data)
+    if needs_update:
+        # Update in-memory entry data cleanly without triggering re-entrant reload loops
+        entry.data = {**entry.data, **updated_data}
 
     hass.data.setdefault(DOMAIN, {})
-    _LOGGER.info("Initializing Nexus MCP Intercom (%s)", entry.title)
+    _LOGGER.info("Initializing Nexus MCP Intercom (%s)", desired_title)
 
     # Store entry config and context
     hass.data[DOMAIN][entry.entry_id] = {

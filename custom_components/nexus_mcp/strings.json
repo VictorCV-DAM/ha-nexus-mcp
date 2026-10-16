@@ -94,6 +94,7 @@
         "title": "Nexus MCP Settings & Credentials",
         "description": "Configure your Nexus MCP agent settings, credentials, and endpoints. To get or renew your API keys / tokens:\n\n• **Google Gemini**: 👉 [Get key at Google AI Studio]({gemini_api_url})\n• **Groq Cloud (Recommended in Europe)**: 👉 [Get key at Groq Console]({groq_api_url}) | [Model Catalog]({groq_models_url})\n• **Qwen Cloud**: 👉 [Get key at Alibaba Model Studio]({qwen_api_url})\n• **OpenRouter**: 👉 [Get key at OpenRouter]({openrouter_api_url})\n• **HA-MCP Tools**: 👉 [GitHub Repository]({ha_mcp_repo_url})",
         "data": {
+          "llm_provider": "AI Inference Provider",
           "api_key": "API Key / Token",
           "model": "Model Name",
           "base_url": "Endpoint Base URL",
@@ -101,9 +102,10 @@
           "autonomous_mode": "Autonomous Mode (Execute without confirmation)"
         },
         "data_description": {
-          "api_key": "Enter your API key for this provider.",
+          "llm_provider": "AI provider (Google Gemini, Groq Cloud, Qwen Cloud, Ollama Local, or OpenAI compatible).",
+          "api_key": "Enter your API key for this provider (not required for Ollama Local).",
           "model": "Model identifier to use.",
-          "base_url": "Endpoint base URL for this provider.",
+          "base_url": "Endpoint base URL for this provider (e.g. http://localhost:11434/v1 for Ollama).",
           "mcp_server_url": "SSE endpoint URL of the HA-MCP server.",
           "autonomous_mode": "If enabled, Nexus MCP will create automations directly. If disabled (default), it will explain what it understood and ask for your confirmation before proceeding."
         }

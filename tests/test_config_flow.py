@@ -37,6 +37,7 @@ if "homeassistant" not in sys.modules:
     ha_mock = MagicMock()
     sys.modules["homeassistant"] = ha_mock
     config_entries_mock = MagicMock()
+    config_entries_mock.SOURCE_RECONFIGURE = "reconfigure"
     config_entries_mock.ConfigFlow = FakeConfigFlow
     config_entries_mock.OptionsFlow = FakeOptionsFlow
     config_entries_mock.OptionsFlowWithConfigEntry = FakeOptionsFlow
@@ -228,7 +229,62 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
         mock_hass.async_create_task = MagicMock(side_effect=lambda coro: asyncio.create_task(coro))
         await async_reload_entry(mock_hass, mock_entry)
         await asyncio.sleep(0.1)
-        mock_hass.config_entries.async_reload.assert_awaited_once_with("test_entry_reload_id")
+        mock_hass.config_entries.async_reload.assert_called_once_with("test_entry_reload_id")
+
+    async def test_reconfigure_flow_success(self) -> None:
+        """Verify reconfigure flow finishes using async_update_reload_and_abort."""
+        flow = NexusMcpConfigFlow()
+        flow.hass = MagicMock()
+        flow.source = "reconfigure"
+        mock_reconfigure_entry = MagicMock()
+        mock_reconfigure_entry.entry_id = "reconfig_123"
+        flow._get_reconfigure_entry = MagicMock(return_value=mock_reconfigure_entry)
+        flow.async_update_reload_and_abort = MagicMock(return_value={"type": "abort", "reason": "reconfigure_successful"})
+
+        flow._provider = "ollama_local"
+        flow._llm_data = {
+            CONF_LLM_PROVIDER: "ollama_local",
+            CONF_MODEL: "qwen2.5-coder:7b",
+            CONF_BASE_URL: "http://localhost:11434/v1",
+        }
+
+        result = await flow.async_step_mcp_server(
+            {CONF_MCP_SERVER_URL: "http://127.0.0.1:9584", CONF_AUTONOMOUS_MODE: False}
+        )
+        flow.async_update_reload_and_abort.assert_called_once()
+        self.assertEqual(result["type"], "abort")
+
+    async def test_options_flow_ollama_local_modification(self) -> None:
+        """Verify OptionsFlow for Ollama local updates model and base_url cleanly."""
+        mock_entry = MagicMock()
+        mock_entry.title = "Nexus MCP (gemma-4-E4B)"
+        mock_entry.data = {
+            CONF_LLM_PROVIDER: "ollama_local",
+            CONF_MODEL: "gemma-4-E4B",
+            CONF_BASE_URL: "http://localhost:11434/v1",
+            CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
+            CONF_AUTONOMOUS_MODE: False,
+        }
+        mock_entry.options = {}
+
+        options_flow = NexusMcpOptionsFlow(mock_entry)
+        options_flow.hass = MagicMock()
+
+        result = await options_flow.async_step_init(
+            {
+                CONF_LLM_PROVIDER: "ollama_local",
+                CONF_MODEL: "qwen2.5-coder:7b",
+                CONF_BASE_URL: "http://192.168.1.100:11434/v1",
+                CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
+                CONF_AUTONOMOUS_MODE: True,
+            }
+        )
+        self.assertEqual(result["type"], "create_entry")
+        options_flow.hass.config_entries.async_update_entry.assert_called_once()
+        call_kwargs = options_flow.hass.config_entries.async_update_entry.call_args[1]
+        self.assertEqual(call_kwargs["title"], "Nexus MCP (qwen2.5-coder:7b)")
+        self.assertEqual(call_kwargs["data"][CONF_MODEL], "qwen2.5-coder:7b")
+        self.assertEqual(call_kwargs["data"][CONF_BASE_URL], "http://192.168.1.100:11434/v1")
 
 
 if __name__ == "__main__":

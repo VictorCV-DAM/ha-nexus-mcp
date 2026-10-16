@@ -94,6 +94,7 @@
         "title": "Nexus MCP: Configuración y Credenciales",
         "description": "Modifica los parámetros de tu agente Nexus MCP, credenciales y endpoints. Para obtener o renovar tu clave API / token:\n\n• **Google Gemini**: 👉 [Obtener clave en Google AI Studio]({gemini_api_url})\n• **Groq Cloud (Recomendado en Europa)**: 👉 [Obtener clave en Groq Console]({groq_api_url}) | [Catálogo de Modelos]({groq_models_url})\n• **Qwen Cloud**: 👉 [Obtener clave en Alibaba Model Studio]({qwen_api_url})\n• **OpenRouter**: 👉 [Obtener clave en OpenRouter]({openrouter_api_url})\n• **HA-MCP Tools**: 👉 [Repositorio GitHub]({ha_mcp_repo_url})",
         "data": {
+          "llm_provider": "Proveedor de IA",
           "api_key": "Clave API / Token",
           "model": "Nombre del Modelo",
           "base_url": "URL Base del Endpoint",
@@ -101,9 +102,10 @@
           "autonomous_mode": "Modo Autónomo (Ejecutar sin confirmación)"
         },
         "data_description": {
-          "api_key": "Introduce tu clave API para este proveedor.",
+          "llm_provider": "Proveedor de inteligencia artificial (Gemini, Groq, Qwen, Ollama Local o Custom OpenAI).",
+          "api_key": "Introduce tu clave API para este proveedor (no requerida para Ollama Local).",
           "model": "Identificador del modelo a utilizar.",
-          "base_url": "URL del endpoint para este proveedor.",
+          "base_url": "URL del endpoint para este proveedor (por ejemplo http://localhost:11434/v1 para Ollama).",
           "mcp_server_url": "URL del endpoint SSE del servidor HA-MCP.",
           "autonomous_mode": "Si está activado, Nexus MCP creará automatizaciones directamente. Si está desactivado (por defecto), te explicará lo que ha entendido y te pedirá confirmación antes de proceder a su creación."
         }

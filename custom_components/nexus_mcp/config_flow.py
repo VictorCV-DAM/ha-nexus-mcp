@@ -281,8 +281,31 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_AUTONOMOUS_MODE: user_input[CONF_AUTONOMOUS_MODE],
             }
             model_name = config_data.get(CONF_MODEL) or self._provider
+            new_title = f"Nexus MCP ({model_name})"
+
+            is_reconfigure = (
+                getattr(self, "source", None) in (getattr(config_entries, "SOURCE_RECONFIGURE", "reconfigure"), "reconfigure")
+                or (isinstance(getattr(self, "context", None), dict) and self.context.get("source") in (getattr(config_entries, "SOURCE_RECONFIGURE", "reconfigure"), "reconfigure"))
+            )
+            if is_reconfigure:
+                reconfigure_entry = (
+                    self._get_reconfigure_entry()
+                    if hasattr(self, "_get_reconfigure_entry")
+                    else self.hass.config_entries.async_get_entry(self.context.get("entry_id"))
+                )
+                if hasattr(self, "async_update_reload_and_abort"):
+                    return self.async_update_reload_and_abort(
+                        reconfigure_entry,
+                        title=new_title,
+                        data=config_data,
+                    )
+                self.hass.config_entries.async_update_entry(
+                    reconfigure_entry, title=new_title, data=config_data
+                )
+                return self.async_abort(reason="reconfigure_successful")
+
             return self.async_create_entry(
-                title=f"Nexus MCP ({model_name})", data=config_data
+                title=new_title, data=config_data
             )
 
         schema = vol.Schema(
@@ -346,6 +369,7 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
         if user_input is not None:
             updated_data = dict(self.config_entry.data or {})
             for k in (
+                CONF_LLM_PROVIDER,
                 CONF_API_KEY,
                 CONF_MODEL,
                 CONF_BASE_URL,
@@ -382,11 +406,21 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
         data = self.config_entry.data or {}
         options = self.config_entry.options or {}
 
-        provider = data.get(CONF_LLM_PROVIDER, PROVIDER_GEMINI_FREE)
-        current_api_key = data.get(CONF_API_KEY, "") or ""
-        current_model = data.get(CONF_MODEL, "") or ""
-        current_base_url = data.get(CONF_BASE_URL, "") or ""
-        current_mcp_url = data.get(CONF_MCP_SERVER_URL, DEFAULT_MCP_SERVER_URL) or DEFAULT_MCP_SERVER_URL
+        provider = options.get(
+            CONF_LLM_PROVIDER, data.get(CONF_LLM_PROVIDER, PROVIDER_GEMINI_FREE)
+        )
+        current_api_key = options.get(
+            CONF_API_KEY, data.get(CONF_API_KEY, "") or ""
+        )
+        current_model = options.get(
+            CONF_MODEL, data.get(CONF_MODEL, "") or ""
+        )
+        current_base_url = options.get(
+            CONF_BASE_URL, data.get(CONF_BASE_URL, "") or ""
+        )
+        current_mcp_url = options.get(
+            CONF_MCP_SERVER_URL, data.get(CONF_MCP_SERVER_URL, DEFAULT_MCP_SERVER_URL)
+        ) or DEFAULT_MCP_SERVER_URL
         current_autonomous = options.get(
             CONF_AUTONOMOUS_MODE,
             data.get(CONF_AUTONOMOUS_MODE, DEFAULT_AUTONOMOUS_MODE),
@@ -394,32 +428,22 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
         if current_autonomous is None:
             current_autonomous = DEFAULT_AUTONOMOUS_MODE
 
-        fields: dict[Any, Any] = {}
-        if provider in (
-            PROVIDER_GEMINI_FREE,
-            PROVIDER_GROQ_FREE,
-            PROVIDER_QWEN_FREE,
-            PROVIDER_CUSTOM_OPENAI,
-        ):
-            fields[vol.Optional(CONF_API_KEY, default=current_api_key)] = str
-        if current_model or provider in (
-            PROVIDER_GEMINI_FREE,
-            PROVIDER_GROQ_FREE,
-            PROVIDER_QWEN_FREE,
-            PROVIDER_OLLAMA_LOCAL,
-            PROVIDER_CUSTOM_OPENAI,
-        ):
-            fields[vol.Optional(CONF_MODEL, default=current_model)] = str
-        if current_base_url or provider in (
-            PROVIDER_GROQ_FREE,
-            PROVIDER_QWEN_FREE,
-            PROVIDER_OLLAMA_LOCAL,
-            PROVIDER_CUSTOM_OPENAI,
-        ):
-            fields[vol.Optional(CONF_BASE_URL, default=current_base_url)] = str
-
-        fields[vol.Required(CONF_MCP_SERVER_URL, default=current_mcp_url)] = str
-        fields[vol.Required(CONF_AUTONOMOUS_MODE, default=bool(current_autonomous))] = bool
+        fields: dict[Any, Any] = {
+            vol.Optional(CONF_LLM_PROVIDER, default=provider): vol.In(
+                {
+                    PROVIDER_GEMINI_FREE: "Google Gemini (Free Tier / Gratis)",
+                    PROVIDER_GROQ_FREE: "Groq Cloud (Qwen / Llama - 100% Gratis en Europa, 14.400 req/día)",
+                    PROVIDER_QWEN_FREE: "Qwen Cloud / DashScope (Alibaba Model Studio)",
+                    PROVIDER_OLLAMA_LOCAL: "Ollama Local (Qwen 2.5 Coder / Gratis Local)",
+                    PROVIDER_CUSTOM_OPENAI: "OpenAI / OpenRouter / Custom BYOK",
+                }
+            ),
+            vol.Optional(CONF_API_KEY, default=current_api_key): str,
+            vol.Optional(CONF_MODEL, default=current_model): str,
+            vol.Optional(CONF_BASE_URL, default=current_base_url): str,
+            vol.Required(CONF_MCP_SERVER_URL, default=current_mcp_url): str,
+            vol.Required(CONF_AUTONOMOUS_MODE, default=bool(current_autonomous)): bool,
+        }
 
         schema = vol.Schema(fields)
 
