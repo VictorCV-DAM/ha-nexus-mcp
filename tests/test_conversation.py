@@ -523,7 +523,67 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
             session_history = entity._history.get("test_err_session", [])
             self.assertFalse(any("Rate limit" in (m.content or "") for m in session_history))
 
+    def test_resolve_user_language_accuracy(self) -> None:
+        """Verify resolve_user_language correctly identifies Spanish, Danish, and HA default."""
+        from custom_components.nexus_mcp.conversation import resolve_user_language
+
+        # 1. Complex Spanish command even if caller says 'en'
+        lang_es = resolve_user_language(
+            "enciende la bombilla izquierda y luego la derecha y cámbialas a color verde y luego apaga ambas tras 5 segundos",
+            explicit_lang="en",
+        )
+        self.assertEqual(lang_es, "es")
+
+        # 2. Short Spanish command with diacritics
+        lang_es_acc = resolve_user_language("¿cómo estás?", explicit_lang="en")
+        self.assertEqual(lang_es_acc, "es")
+
+        # 3. Danish command
+        lang_da = resolve_user_language("tænd lyset i stuen", explicit_lang="en")
+        self.assertEqual(lang_da, "da")
+
+        # 4. Fallback to HA config when ambiguous
+        mock_hass = MagicMock()
+        mock_hass.config.language = "es-ES"
+        lang_ha = resolve_user_language("tv", explicit_lang="en", hass=mock_hass)
+        self.assertEqual(lang_ha, "es")
+
+    async def test_system_prompt_enforces_user_language(self) -> None:
+        """Verify system prompt contains critical language directive matching user query."""
+        from custom_components.nexus_mcp.const import CONF_LLM_PROVIDER, PROVIDER_GEMINI_FREE
+        from custom_components.nexus_mcp.conversation import NexusMcpConversationEntity
+        from custom_components.nexus_mcp.llm_engine import LlmResponse
+
+        mock_hass = MagicMock()
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "test_entry_lang"
+        mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
+
+        with patch("custom_components.nexus_mcp.conversation.create_llm_engine") as mock_factory, \
+             patch("custom_components.nexus_mcp.conversation.intent.IntentResponse", side_effect=FakeIntentResponse), \
+             patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
+
+            mock_engine = AsyncMock()
+            mock_engine.generate_response.return_value = LlmResponse(content="Luz encendida.")
+            mock_factory.return_value = mock_engine
+
+            entity = NexusMcpConversationEntity(mock_hass, mock_entry)
+
+            user_input = MagicMock()
+            user_input.text = "enciende la luz"
+            user_input.conversation_id = "conv_lang_test"
+            user_input.language = "en"  # HA passed 'en', but utterance is Spanish!
+
+            await entity.async_process(user_input)
+
+            # Check that generate_response received the Spanish language directive
+            _, kwargs = mock_engine.generate_response.call_args
+            prompt = kwargs.get("system_prompt", "")
+            self.assertIn("CRITICAL LANGUAGE DIRECTIVE (MANDATORY - HIGHEST PRIORITY)", prompt)
+            self.assertIn("Spanish (Español)", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

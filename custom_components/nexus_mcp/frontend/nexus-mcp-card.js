@@ -1393,6 +1393,9 @@ class NexusMcpCard extends HTMLElement {
     const sendBtn = this.shadowRoot.getElementById("btn-send");
     if (sendBtn) sendBtn.disabled = true;
 
+    const userLang = this._hass?.locale?.language || this._hass?.language || (this._isSpanish() ? "es" : "en");
+
+    let reply = "";
     try {
       const callWithTimeout = (promise, ms = 45000) =>
         Promise.race([
@@ -1410,7 +1413,6 @@ class NexusMcpCard extends HTMLElement {
           ),
         ]);
 
-      let reply = "";
       if (imageToSend) {
         // Direct call via custom multimodal WebSocket nexus_mcp/chat
         const payload = {
@@ -1419,6 +1421,7 @@ class NexusMcpCard extends HTMLElement {
           image: imageToSend,
           agent_id: agentId,
           conversation_id: this._conversationId || undefined,
+          language: userLang,
         };
         const res = await callWithTimeout(this._hass.callWS(payload), 50000);
         reply =
@@ -1433,6 +1436,7 @@ class NexusMcpCard extends HTMLElement {
         const payload = {
           type: "conversation/process",
           text: messageText,
+          language: userLang,
         };
         if (agentId) {
           payload.agent_id = agentId;
@@ -1499,10 +1503,12 @@ class NexusMcpCard extends HTMLElement {
 
       // Send conversational reset command to active agent via WebSocket
       try {
+        const resetLang = this._hass?.locale?.language || this._hass?.language || (this._isSpanish() ? "es" : "en");
         await this._hass.callWS({
           type: "conversation/process",
           text: "nueva conversación",
           agent_id: agentId,
+          language: resetLang,
         });
       } catch (e) {
         console.debug("Could not send conversational reset:", e);

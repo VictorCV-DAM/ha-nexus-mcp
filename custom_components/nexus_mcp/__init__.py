@@ -156,6 +156,7 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                 vol.Optional("image"): str,
                 vol.Optional("agent_id"): str,
                 vol.Optional("conversation_id"): str,
+                vol.Optional("language"): str,
             }
         )
         @websocket_api.async_response
@@ -169,6 +170,7 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
             image = msg.get("image")
             agent_id = msg.get("agent_id")
             conversation_id = msg.get("conversation_id") or "nexus_chat"
+            language = msg.get("language")
 
             # Find matching conversation entity
             domain_entries = hass.data.get(DOMAIN, {})
@@ -197,6 +199,7 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                     text=text,
                     image_data=image,
                     conversation_id=conversation_id,
+                    language=language,
                 )
                 connection.send_result(
                     msg["id"],

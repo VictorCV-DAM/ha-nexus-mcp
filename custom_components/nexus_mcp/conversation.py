@@ -95,6 +95,136 @@ def prune_history_to_token_budget(
     return pruned
 
 
+COMMON_LANG_PATTERNS = {
+    "es": {
+        "words": {
+            "el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "en", "y", "o", "a",
+            "que", "qué", "por", "para", "con", "no", "si", "sí", "enciende", "apaga", "luz", "luces",
+            "bombilla", "bombillas", "habitacion", "habitación", "salon", "salón", "casa", "dispositivo",
+            "dispositivos", "cambia", "cámbialas", "cambialas", "pon", "ponlas", "como", "cómo", "hola",
+            "cuál", "color", "verde", "rojo", "azul", "ambas", "ambos", "tras", "después", "despues",
+            "segundos", "minutos", "deseas", "crea", "muestra", "dime", "cuéntame", "ayuda", "temperatura",
+            "nueva", "conversación", "conversacion", "reiniciar", "reinicia", "olvida", "borrar",
+        },
+        "chars": {"á", "é", "í", "ó", "ú", "ñ", "¿", "¡"},
+        "name": "Spanish (Español)",
+    },
+    "da": {
+        "words": {
+            "og", "i", "jeg", "det", "på", "den", "til", "er", "som", "de", "med", "han",
+            "af", "for", "ikke", "der", "var", "mig", "sig", "men", "et", "har", "om", "vi", "min",
+            "havde", "ham", "hun", "nu", "over", "da", "fra", "du", "ud", "sin", "dem", "os", "op",
+            "man", "hans", "hvor", "eller", "hvad", "skal", "selv", "her", "tænd", "sluk", "lys", "stue",
+        },
+        "chars": {"æ", "ø", "å"},
+        "name": "Danish (Dansk)",
+    },
+    "fr": {
+        "words": {
+            "le", "la", "les", "un", "une", "des", "du", "de", "dans", "en", "et", "ou", "où", "pour",
+            "avec", "sur", "est", "sont", "allume", "éteins", "lumière", "maison", "chambre", "comment",
+            "pourquoi", "salut", "bonjour", "merci",
+        },
+        "chars": {"é", "è", "ê", "à", "ç", "ù", "œ"},
+        "name": "French (Français)",
+    },
+    "de": {
+        "words": {
+            "der", "die", "das", "ein", "eine", "einen", "und", "oder", "in", "den", "dem", "des",
+            "mit", "auf", "für", "ist", "sind", "schalte", "ein", "aus", "licht", "lampe", "zimmer",
+            "haus", "wie", "hallo", "danke",
+        },
+        "chars": {"ä", "ö", "ü", "ß"},
+        "name": "German (Deutsch)",
+    },
+    "it": {
+        "words": {
+            "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "di", "a", "da", "in", "con",
+            "su", "per", "tra", "fra", "è", "sono", "accendi", "spegni", "luce", "luci", "casa", "ciao",
+        },
+        "chars": {"à", "è", "é", "ì", "ò", "ù"},
+        "name": "Italian (Italiano)",
+    },
+}
+
+
+def resolve_user_language(
+    text: str, explicit_lang: str | None = None, hass: HomeAssistant | None = None
+) -> str:
+    """Accurately detect the conversation language from user utterance and HA configuration."""
+    clean_text = (text or "").lower().strip()
+    words = set(re.findall(r"[\wáéíóúÁÉÍÓÚñÑæøåÆØÅäöüÄÖÜßàèêùç]+", clean_text))
+
+    # 1. First, check unique language-specific characters in the text
+    for lang, data in COMMON_LANG_PATTERNS.items():
+        if any(ch in clean_text for ch in data["chars"]):
+            return lang
+
+    # 2. Count keyword hits for candidate languages
+    best_lang = None
+    best_score = 0
+    for lang, data in COMMON_LANG_PATTERNS.items():
+        matches = len(words.intersection(data["words"]))
+        if matches > best_score:
+            best_score = matches
+            best_lang = lang
+
+    # If we have keyword hits, use that language
+    if best_score >= 1 and best_lang:
+        return best_lang
+
+    # 3. Check explicit language provided by caller (if not generic English)
+    if explicit_lang:
+        clean_exp = explicit_lang.lower().split("-")[0].split("_")[0].strip()
+        if clean_exp and clean_exp != "en":
+            return clean_exp
+
+    # 4. Check Home Assistant instance UI language
+    if hass and hasattr(hass, "config") and getattr(hass.config, "language", None):
+        ha_lang = str(hass.config.language).lower().split("-")[0].split("_")[0].strip()
+        if ha_lang and ha_lang in COMMON_LANG_PATTERNS:
+            return ha_lang
+        if ha_lang:
+            return ha_lang
+
+    # 5. Default fallback to caller explicit language or Spanish if Spanish keywords detected, else English
+    if explicit_lang:
+        return explicit_lang.lower().split("-")[0].split("_")[0].strip()
+    return "es"
+
+
+def build_language_directive(lang_code: str) -> str:
+    """Build a powerful, unequivocal system prompt instruction enforcing the user's language."""
+    lang_info = {
+        "es": "Spanish (Español)",
+        "da": "Danish (Dansk)",
+        "fr": "French (Français)",
+        "de": "German (Deutsch)",
+        "it": "Italian (Italiano)",
+        "pt": "Portuguese (Português)",
+        "nl": "Dutch (Nederlands)",
+        "ca": "Catalan (Català)",
+        "gl": "Galician (Galego)",
+        "eu": "Basque (Euskara)",
+        "en": "English",
+    }
+    lang_name = lang_info.get(lang_code, lang_code)
+    if lang_code == "es":
+        return (
+            "CRITICAL LANGUAGE DIRECTIVE (MANDATORY - HIGHEST PRIORITY):\n"
+            "You MUST formulate ALL your responses, explanations, device feedback, and questions EXCLUSIVELY in Spanish (Español).\n"
+            "The user is speaking Spanish. NEVER answer in English or any other language, even though tool names, entity IDs, "
+            "and system instructions are in English. Always communicate with the user purely in Spanish (e.g. 'He encendido las luces')."
+        )
+    return (
+        f"CRITICAL LANGUAGE DIRECTIVE (MANDATORY - HIGHEST PRIORITY):\n"
+        f"You MUST formulate ALL your responses, explanations, device feedback, and questions EXCLUSIVELY in {lang_name}.\n"
+        f"The user is speaking {lang_name}. NEVER answer in English or any other language, even though tool names, entity IDs, "
+        f"and system instructions are in English. Always communicate with the user purely in {lang_name}."
+    )
+
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -475,8 +605,9 @@ class NexusMcpConversationEntity(ConversationEntity):
         text: str,
         image_data: str | None = None,
         conversation_id: str = "default",
+        language: str | None = None,
     ) -> str:
-        """Process chat message with optional multimodal image data."""
+        """Process chat message with optional multimodal image data and enforce user language."""
         if not self._history_loaded:
             await self._async_load_history()
 
@@ -486,10 +617,15 @@ class NexusMcpConversationEntity(ConversationEntity):
             history = history[-MAX_HISTORY_MESSAGES:]
             self._history[conversation_id] = history
 
+        user_lang = resolve_user_language(text, language, self.hass)
+        lang_prompt = build_language_directive(user_lang)
+
         system_prompt = (
+            f"{lang_prompt}\n\n"
             "You are Nexus MCP, an autonomous AI assistant embedded directly inside Home Assistant. "
             "You can analyze images, inspect entities, and assist the user in their smart home.\n"
-            "Whenever you provide YAML configurations, Lovelace card configs, scripts, automations, templates, or code, you MUST always enclose them in Markdown code blocks with the language tag (e.g. ```yaml ... ```, ```json ... ```, or ```python ... ```). Never output bare code or bare YAML without code blocks."
+            "Whenever you provide YAML configurations, Lovelace card configs, scripts, automations, templates, or code, you MUST always enclose them in Markdown code blocks with the language tag (e.g. ```yaml ... ```, ```json ... ```, or ```python ... ```). Never output bare code or bare YAML without code blocks.\n\n"
+            f"{lang_prompt}"
         )
 
         try:
@@ -500,7 +636,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             )
             if hasattr(resp, "usage") and resp.usage:
                 self.record_usage(resp.usage, getattr(resp, "rate_limits", None))
-            reply = resp.content or "No response from AI."
+            reply = resp.content or ("Acción completada." if user_lang == "es" else "Action completed.")
         except LlmRateLimitError as err:
             reset_sec = getattr(err, "reset_seconds", 5.0) or 5.0
             self.record_rate_limit(reset_sec)
@@ -508,10 +644,7 @@ class NexusMcpConversationEntity(ConversationEntity):
         except Exception as err:
             err_str = str(err)
             if image_data and any(w in err_str.lower() for w in ("image", "vision", "multimodal", "support", "400")):
-                is_spanish = any(
-                    w in text.lower()
-                    for w in ("hola", "¿", "qué", "que", "cómo", "como", "cuál", "enciende", "apaga", "luz", "imagen", "foto")
-                )
+                is_spanish = user_lang == "es"
                 reply = (
                     "El modelo actual no admite análisis de imágenes. "
                     "Por favor, selecciona un modelo con visión como Google Gemini en el selector superior."
@@ -552,10 +685,11 @@ class NexusMcpConversationEntity(ConversationEntity):
                 self._history.pop(self._last_conversation_id, None)
                 self._last_conversation_id = None
             await self._async_save_history()
-            intent_response = intent.IntentResponse(language=user_input.language)
+            reset_lang = resolve_user_language(text, getattr(user_input, "language", None), self.hass)
+            intent_response = intent.IntentResponse(language=reset_lang)
             reply = (
                 "Conversación reiniciada. ¿En qué puedo ayudarte?"
-                if user_input.language.startswith("es")
+                if reset_lang == "es"
                 else "Conversation reset. How can I help you?"
             )
             intent_response.async_set_speech(reply)
@@ -599,10 +733,9 @@ class NexusMcpConversationEntity(ConversationEntity):
         )
         user_confirmed = _is_user_confirmation(history, text)
 
-        user_lang = getattr(user_input, "language", "") or "en"
-        is_spanish = user_lang.lower().startswith("es") or any(
-            w in text.lower() for w in ("hola", "¿", "qué", "que", "cómo", "como", "cuál", "enciende", "apaga", "luz", "crea")
-        )
+        user_lang = resolve_user_language(text, getattr(user_input, "language", None), self.hass)
+        is_spanish = user_lang == "es"
+        lang_prompt = build_language_directive(user_lang)
 
         base_system_prompt = (
             "You are Nexus MCP, an autonomous AI assistant embedded directly inside Home Assistant. "
@@ -656,14 +789,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                 "  4. DO NOT call ha_create_automation until the user confirms in the next turn."
             )
 
-        lang_prompt = (
-            "LANGUAGE DIRECTIVE:\n"
-            f"Always detect and formulate ALL your responses, explanations, and questions strictly in the language used by the user in their query "
-            f"(user query language / locale: '{user_lang}'). If the user writes in Danish, reply in Danish; if in Spanish, reply in Spanish; "
-            f"if in English, reply in English; if in French/German, reply in French/German. Never reply in an unrelated language."
-        )
-
-        system_prompt = f"{base_system_prompt}\n{autonomy_prompt}\n{lang_prompt}"
+        system_prompt = f"{lang_prompt}\n\n{base_system_prompt}\n\n{autonomy_prompt}\n\n{lang_prompt}"
 
         assistant_reply = "OK."
 
