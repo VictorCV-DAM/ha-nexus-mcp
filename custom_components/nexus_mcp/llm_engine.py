@@ -352,7 +352,7 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
         max_retries = 2
         for attempt in range(max_retries + 1):
             try:
-                timeout = aiohttp.ClientTimeout(total=45)
+                timeout = aiohttp.ClientTimeout(total=60)
                 async with self._session.post(url, json=payload, headers=headers, timeout=timeout) as resp:
                     if resp.status == 401:
                         raise LlmAuthError("Invalid API key or unauthorized access.")
@@ -363,16 +363,16 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                         if retry_after:
                             parsed_ra = parse_reset_duration(retry_after)
                             if parsed_ra > 0:
-                                delay = max(1.0, min(parsed_ra, 25.0))
+                                delay = max(1.0, min(parsed_ra, 12.0))
                         elif "x-ratelimit-reset-tokens" in resp.headers:
                             parsed_reset = parse_reset_duration(resp.headers.get("x-ratelimit-reset-tokens"))
                             if parsed_reset > 0:
-                                delay = max(1.0, min(parsed_reset + 0.5, 25.0))
+                                delay = max(1.0, min(parsed_reset + 0.5, 12.0))
                         elif "try again in" in error_body:
                             import re
                             m = re.search(r"try again in ([\d\.]+)s", error_body)
                             if m:
-                                delay = max(1.0, min(float(m.group(1)) + 0.5, 25.0))
+                                delay = max(1.0, min(float(m.group(1)) + 0.5, 12.0))
 
                         if attempt < max_retries:
                             # If rate limit was due to input token limits (ITPM), reduce history size on retry safely

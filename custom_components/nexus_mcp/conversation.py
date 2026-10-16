@@ -872,14 +872,23 @@ class NexusMcpConversationEntity(ConversationEntity):
 
         assistant_reply = "OK."
         executed_any_tool = False
-        force_tool_choice = None
+        user_is_action = any(
+            w in text.lower()
+            for w in (
+                "enciende", "apaga", "cambia", "prende", "pon", "ajusta",
+                "sube", "baja", "turn on", "turn off", "toggle", "switch",
+                "parpadea", "secuencia", "bombilla", "luz", "luces", "ventilador",
+                "taller", "comedor", "salon", "salón", "habitacion", "habitación",
+            )
+        )
+        force_tool_choice = "required" if user_is_action else None
         hallucination_retried = False
 
         try:
             # Multi-turn tool execution loop (up to 5 turns)
             for turn_idx in range(5):
                 response = await self._engine.generate_response(
-                    messages=prune_history_to_token_budget(history, max_tokens=2200),
+                    messages=prune_history_to_token_budget(history, max_tokens=1500),
                     tools=self._tools,
                     system_prompt=system_prompt,
                     tool_choice=force_tool_choice,
@@ -977,14 +986,6 @@ class NexusMcpConversationEntity(ConversationEntity):
                         "i've executed", "i have executed", "done! i've",
                     )
                 )
-                user_is_action = any(
-                    w in text.lower()
-                    for w in (
-                        "enciende", "apaga", "cambia", "prende", "pon", "ajusta",
-                        "sube", "baja", "turn on", "turn off", "toggle", "switch",
-                    )
-                )
-
                 if (claims_action or (user_is_action and turn_idx == 0)) and not executed_any_tool and not hallucination_retried:
                     _LOGGER.warning(
                         "Nexus MCP intercepted hallucinated action text without tool calls: '%s'. Forcing ha_call_service execution.",
