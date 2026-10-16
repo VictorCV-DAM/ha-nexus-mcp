@@ -1251,7 +1251,7 @@ class NexusMcpCard extends HTMLElement {
 
     let reply = "";
     try {
-      const callWithTimeout = (promise, ms = 90000) =>
+      const callWithTimeout = (promise, ms = 180000) =>
         Promise.race([
           promise,
           new Promise((_, reject) =>
@@ -1277,7 +1277,7 @@ class NexusMcpCard extends HTMLElement {
           conversation_id: this._conversationId || undefined,
           language: userLang,
         };
-        const res = await callWithTimeout(this._hass.callWS(payload), 90000);
+        const res = await callWithTimeout(this._hass.callWS(payload), 180000);
         reply =
           res?.response?.speech?.plain?.speech ||
           res?.response?.card?.text ||
@@ -1299,7 +1299,7 @@ class NexusMcpCard extends HTMLElement {
           payload.conversation_id = this._conversationId;
         }
 
-        const res = await callWithTimeout(this._hass.callWS(payload), 90000);
+        const res = await callWithTimeout(this._hass.callWS(payload), 180000);
         reply =
           res?.response?.speech?.plain?.speech ||
           res?.response?.card?.text ||
