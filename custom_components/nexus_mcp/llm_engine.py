@@ -439,6 +439,19 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                                 await asyncio.sleep(1.0)
                                 continue
 
+                        # If Groq rejected because tool_choice was required but model returned text
+                        if any(w in text.lower() for w in ("tool choice is required", "did not call a tool")):
+                            _LOGGER.warning(
+                                "Model answered with text instead of tool call under tool_choice='required' (attempt %d/%d). Retrying with tool_choice='auto'...",
+                                attempt + 1,
+                                max_retries + 1,
+                            )
+                            if attempt < max_retries:
+                                payload["tool_choice"] = "auto"
+                                payload["temperature"] = 0.0
+                                await asyncio.sleep(0.5)
+                                continue
+
                         # If Groq rejected due to Minijinja chat template rendering (missing user query, format mismatch)
                         if any(w in text.lower() for w in ("minijinja", "no user query", "template request")):
                             _LOGGER.warning(

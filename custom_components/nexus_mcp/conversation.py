@@ -813,18 +813,19 @@ class NexusMcpConversationEntity(ConversationEntity):
         is_spanish = user_lang == "es"
         lang_prompt = build_language_directive(user_lang)
 
+        model_identity = f"You are Nexus MCP, an autonomous AI assistant powered by '{self._model_name}' ({self._provider}) embedded directly inside Home Assistant.\n"
         base_system_prompt = (
-            "You are Nexus MCP, an autonomous AI assistant embedded directly inside Home Assistant. "
+            f"{model_identity}"
             "You have direct access to tools to search entities (ha_search_entities), read states (ha_get_entity_state), "
             "control devices (ha_call_service), and create/activate automations (ha_create_automation).\n"
             "CRITICAL DEVICE CONTROL MANDATE (PHYSICAL HARDWARE EXECUTION):\n"
             "- You CANNOT control physical hardware with text or words alone. The ONLY way devices turn on/off or change color in the real world is by invoking `ha_call_service` in a tool call.\n"
             "- ALWAYS prioritize immediate execution using `ha_call_service` when the user asks to turn on/off, toggle, "
             "dim, adjust, change colors, run sequences, or control devices/lights (even with multiple devices or short delays).\n"
-            "- MULTI-DEVICE & CHAINED COMMANDS: You can emit MULTIPLE `ha_call_service` calls in a SINGLE turn to control multiple entities or chain actions sequentially.\n"
-            "- TIMED WAITS & PAUSES: `ha_call_service` supports an optional 'delay' parameter in seconds (e.g. delay: 5 for 5 seconds). "
-            "If the user asks for pauses between actions (e.g. 'dejando 5s entre cada acción' or 'apaga tras 5 segundos'), emit all `ha_call_service` calls with their incremental delays (delay: 0, delay: 5, delay: 10, delay: 15). "
-            "NEVER create an automation for short delays or immediate sequence commands!\n"
+            "- SINGLE-TURN EXECUTION MANDATE FOR SEQUENCES AND TIMED ACTIONS:\n"
+            "  1. When turning on lights and changing color (e.g. 'enciende las bombillas y cámbialas a color púrpura'), combine them into a single `ha_call_service` with domain: 'light', service: 'turn_on', data: {'rgb_color': [128, 0, 128]}. Do NOT make a separate call or turn just to set the color!\n"
+            "  2. `ha_call_service` supports an optional 'delay' parameter in seconds (e.g. delay: 5 for 5 seconds).\n"
+            "  3. Emit ALL sequence steps as multiple tool calls in ONE SINGLE TURN (e.g., call 1: turn_on with rgb_color; call 2: turn_off with delay: 5). Do NOT wait across multiple turns to execute each step!\n"
             "- NEVER, UNDER ANY CIRCUMSTANCES, CLAIM THAT AN ACTION WAS PERFORMED (e.g., 'He encendido', 'Apagué', '¡Listo! He ejecutado la secuencia', 'Done!') UNLESS YOU ACTUALLY INVOKED `ha_call_service` IN A TOOL CALL! Describing actions with words without calling tools does NOT execute them.\n"
             "- Direct commands (`ha_call_service`), searching (`ha_search_entities`), and reading states (`ha_get_entity_state`) "
             "NEVER require confirmation and MUST be executed immediately without asking!\n"
@@ -864,7 +865,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                 "- If the user asks to create an automation:\n"
                 "  1. If needed, use ha_search_entities or ha_get_entity_state to find the correct entity IDs.\n"
                 "  2. Describe the exact automation you plan to create (trigger, condition, action, entity IDs).\n"
-                f"  3. Ask the user for explicit confirmation (for example: '{confirm_example}').\n"
+                "  3. Ask the user for explicit confirmation (for example: '{confirm_example}').\n"
                 "  4. DO NOT call ha_create_automation until the user confirms in the next turn."
             )
 
@@ -872,16 +873,7 @@ class NexusMcpConversationEntity(ConversationEntity):
 
         assistant_reply = "OK."
         executed_any_tool = False
-        user_is_action = any(
-            w in text.lower()
-            for w in (
-                "enciende", "apaga", "cambia", "prende", "pon", "ajusta",
-                "sube", "baja", "turn on", "turn off", "toggle", "switch",
-                "parpadea", "secuencia", "bombilla", "luz", "luces", "ventilador",
-                "taller", "comedor", "salon", "salón", "habitacion", "habitación",
-            )
-        )
-        force_tool_choice = "required" if user_is_action else None
+        force_tool_choice = None
         hallucination_retried = False
 
         try:
@@ -986,7 +978,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                         "i've executed", "i have executed", "done! i've",
                     )
                 )
-                if (claims_action or (user_is_action and turn_idx == 0)) and not executed_any_tool and not hallucination_retried:
+                if claims_action and not executed_any_tool and not hallucination_retried:
                     _LOGGER.warning(
                         "Nexus MCP intercepted hallucinated action text without tool calls: '%s'. Forcing ha_call_service execution.",
                         (response.content or "")[:120],
