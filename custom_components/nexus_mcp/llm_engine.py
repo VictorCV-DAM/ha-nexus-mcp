@@ -263,6 +263,19 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                 ]
             api_messages.append(msg_dict)
 
+        # Groq / Qwen Minijinja template compatibility guarantees:
+        # 1. At least one message with role="user" and non-empty content MUST exist.
+        # Otherwise Groq raises: "minijinja: rendering failed: raise_exception: No user query found in messages."
+        has_user_query = any(m.get("role") == "user" and bool(m.get("content")) for m in api_messages)
+        if not has_user_query:
+            first_non_sys = 1 if (api_messages and api_messages[0].get("role") == "system") else 0
+            api_messages.insert(first_non_sys, {"role": "user", "content": "Execute requested command."})
+
+        # 2. Conversation cannot start with role='tool'.
+        first_non_sys = 1 if (api_messages and api_messages[0].get("role") == "system") else 0
+        while first_non_sys < len(api_messages) and api_messages[first_non_sys].get("role") == "tool":
+            api_messages[first_non_sys]["role"] = "assistant"
+
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": api_messages,
@@ -535,6 +548,9 @@ class GeminiEngine(BaseLlmEngine):
                     contents[-1]["parts"].extend(parts)
                 else:
                     contents.append({"role": gemini_role, "parts": parts})
+
+        if not contents or not any(c.get("role") == "user" for c in contents):
+            contents.insert(0, {"role": "user", "parts": [{"text": "Execute requested command."}]})
 
         payload: dict[str, Any] = {"contents": contents}
 

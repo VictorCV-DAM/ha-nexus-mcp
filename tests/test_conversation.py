@@ -615,6 +615,88 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
             self.assertIn("CRITICAL LANGUAGE DIRECTIVE (MANDATORY - HIGHEST PRIORITY)", prompt)
             self.assertIn("Spanish (Español)", prompt)
 
+    def test_prune_history_preserves_active_user_and_tools(self) -> None:
+        """Verify prune_history_to_token_budget never drops the active user query or tool turn."""
+        from custom_components.nexus_mcp.conversation import prune_history_to_token_budget
+        from custom_components.nexus_mcp.llm_engine import ChatMessage, LlmToolCall
+
+        messages = [
+            ChatMessage(role="user", content="old message 1"),
+            ChatMessage(role="assistant", content="old assistant response 1"),
+            ChatMessage(role="user", content="old message 2"),
+            ChatMessage(role="assistant", content="old assistant response 2"),
+            # Active turn with 4 tool calls and responses
+            ChatMessage(role="user", content="enciende la bombilla izquierda y luego la derecha"),
+            ChatMessage(
+                role="assistant",
+                content="",
+                tool_calls=[
+                    LlmToolCall(call_id="call_1", name="ha_call_service", arguments={"domain": "light", "service": "turn_on"}),
+                    LlmToolCall(call_id="call_2", name="ha_call_service", arguments={"domain": "light", "service": "turn_on"}),
+                ],
+            ),
+            ChatMessage(role="tool", content='{"status": "success"}', tool_call_id="call_1", tool_name="ha_call_service"),
+            ChatMessage(role="tool", content='{"status": "success"}', tool_call_id="call_2", tool_name="ha_call_service"),
+        ]
+
+        # Prune with a very tight budget (e.g. 150 tokens) that would normally cut off messages
+        pruned = prune_history_to_token_budget(messages, max_tokens=150)
+
+        # Invariant 1: The active user message MUST be present
+        user_msgs = [m for m in pruned if m.role == "user"]
+        self.assertTrue(len(user_msgs) >= 1)
+        self.assertEqual(user_msgs[-1].content, "enciende la bombilla izquierda y luego la derecha")
+
+        # Invariant 2: Conversation must start with a user message
+        self.assertEqual(pruned[0].role, "user")
+
+        # Invariant 3: Tool messages still have their parent assistant message
+        has_assistant_with_tools = any(m.role == "assistant" and len(m.tool_calls) > 0 for m in pruned)
+        self.assertTrue(has_assistant_with_tools)
+
+    def test_openai_engine_guarantees_user_query_for_groq_minijinja(self) -> None:
+        """Verify OpenAiCompatibleEngine injects a user query if none exists to satisfy Groq minijinja."""
+        from custom_components.nexus_mcp.llm_engine import OpenAiCompatibleEngine, ChatMessage
+
+        engine = OpenAiCompatibleEngine(
+            session=MagicMock(),
+            base_url="https://api.groq.com/openai/v1",
+            model="qwen/qwen3.8-27b",
+            api_key="gsk-test",
+        )
+
+        # Test case: messages with only assistant or tool messages
+        messages = [
+            ChatMessage(role="assistant", content="Some response without user query"),
+        ]
+
+        # Intercept payload inside _session.post
+        captured_payloads = []
+        def fake_post(url, json=None, headers=None, timeout=None):
+            captured_payloads.append(json)
+            mock_resp = AsyncMock()
+            mock_resp.status = 200
+            mock_resp.json.return_value = {
+                "choices": [{"message": {"role": "assistant", "content": "Done"}}]
+            }
+            mock_ctx = AsyncMock()
+            mock_ctx.__aenter__.return_value = mock_resp
+            mock_ctx.__aexit__.return_value = None
+            return mock_ctx
+
+        engine._session.post = fake_post
+
+        import asyncio
+        asyncio.run(engine.generate_response(messages=messages, system_prompt="System prompt"))
+
+        self.assertTrue(len(captured_payloads) > 0)
+        payload = captured_payloads[0]
+        api_messages = payload["messages"]
+
+        # Invariant: There MUST be at least one user query with content
+        user_queries = [m for m in api_messages if m.get("role") == "user" and m.get("content")]
+        self.assertTrue(len(user_queries) >= 1)
+
 
 if __name__ == "__main__":
     unittest.main()

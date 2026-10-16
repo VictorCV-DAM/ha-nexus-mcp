@@ -76,23 +76,77 @@ def is_transient_error_message(content: str | None) -> bool:
 def prune_history_to_token_budget(
     messages: list[ChatMessage], max_tokens: int = 3500
 ) -> list[ChatMessage]:
-    """Ensure conversation history fits safely within the model's input token limits."""
+    """Ensure conversation history fits safely within the model's input token limits.
+
+    Guarantees:
+    1. The active turn (from the latest user message to the end, including tool calls and responses)
+       is NEVER pruned or separated, guaranteeing a valid 'user' query is ALWAYS present.
+    2. Older historical turns are pruned from oldest to newest if budget is exceeded.
+    3. The pruned message list always starts with a 'user' message (never starting with an orphan 'tool' or 'assistant').
+    """
     if not messages:
         return []
+
     # Strip any transient error messages from history
     cleaned = [m for m in messages if not is_transient_error_message(m.content)]
     if not cleaned:
         cleaned = list(messages)
-    # Always keep the latest message
-    pruned = [cleaned[-1]]
-    current_tokens = max(1, len(cleaned[-1].content or "") // 4) + 20
-    for msg in reversed(cleaned[:-1]):
-        msg_tokens = max(1, len(msg.content or "") // 4) + 20
-        if current_tokens + msg_tokens > max_tokens:
+
+    # 1. Identify the active turn: from the latest user message to the end
+    last_user_idx = -1
+    for idx in range(len(cleaned) - 1, -1, -1):
+        if cleaned[idx].role == "user":
+            last_user_idx = idx
             break
-        pruned.insert(0, msg)
-        current_tokens += msg_tokens
-    return pruned
+
+    if last_user_idx == -1:
+        # Fallback: No user message found in cleaned; use last message
+        active_turn = [cleaned[-1]]
+        older_messages = cleaned[:-1]
+    else:
+        active_turn = cleaned[last_user_idx:]
+        older_messages = cleaned[:last_user_idx]
+
+    def estimate_tokens(msg: ChatMessage) -> int:
+        content_len = len(msg.content or "")
+        tc_len = sum(len(tc.name) + len(json.dumps(tc.arguments, default=str)) for tc in msg.tool_calls) if msg.tool_calls else 0
+        return max(1, (content_len + tc_len) // 4) + 20
+
+    active_tokens = sum(estimate_tokens(m) for m in active_turn)
+
+    # If the active turn alone exceeds budget, trim tool responses inside active turn
+    # but NEVER drop the user message or the assistant tool_calls
+    if active_tokens > max_tokens:
+        for m in active_turn:
+            if m.role == "tool" and m.content and len(m.content) > 600:
+                m.content = m.content[:600] + "... [trimmed]"
+
+    # 2. Add older messages from newest to oldest as budget permits
+    pruned_older: list[ChatMessage] = []
+    budget_remaining = max_tokens - sum(estimate_tokens(m) for m in active_turn)
+
+    for msg in reversed(older_messages):
+        msg_tokens = estimate_tokens(msg)
+        if budget_remaining - msg_tokens < 0:
+            break
+        pruned_older.insert(0, msg)
+        budget_remaining -= msg_tokens
+
+    result = pruned_older + active_turn
+
+    # 3. Clean boundary: Ensure the conversation starts with a 'user' message
+    # Drop any leading 'tool' or 'assistant' messages from pruned older history
+    while result and result[0].role in ("tool", "assistant") and any(m.role == "user" for m in result):
+        result.pop(0)
+
+    # 4. Final guarantee: Ensure there is at least one non-empty 'user' message
+    if not any(m.role == "user" and bool(m.content) for m in result):
+        if last_user_idx != -1:
+            result.insert(0, cleaned[last_user_idx])
+        else:
+            result.insert(0, ChatMessage(role="user", content="Execute requested command."))
+
+    return result
 
 
 COMMON_LANG_PATTERNS = {
