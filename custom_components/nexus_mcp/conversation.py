@@ -362,8 +362,9 @@ async def async_setup_entry(
     async_add_entities([entity])
 
 
-def _is_user_confirmation(history: list[ChatMessage], current_text: str) -> bool:
-    """Check if the user's latest utterance is a confirmation to a previous proposal."""
+def _is_user_confirmation(history: list[ChatMessage], current_text: str) -> str | None:
+    """Check if the user's latest utterance is a confirmation to a previous proposal.
+    Returns 'automation' if confirming an automation proposal, 'action' if confirming device action, or None."""
     affirmative_tokens = {
         "si", "sí", "adelante", "confirmo", "confirmado", "confirmar",
         "créala", "creala", "procede", "proceder", "hazlo", "dale",
@@ -375,30 +376,35 @@ def _is_user_confirmation(history: list[ChatMessage], current_text: str) -> bool
     cleaned_lower = current_text.lower().strip()
     words = re.findall(r"[\wáéíóúÁÉÍÓÚñÑ]+", cleaned_lower)
     if not words:
-        return False
+        return None
 
     # If the user explicitly says "no" without affirmative words, it's not a confirmation
     if "no" in words and "si" not in words and "sí" not in words and "yes" not in words:
-        return False
+        return None
 
     is_affirmative = any(w in affirmative_tokens for w in words) or cleaned_lower in affirmative_tokens
     if not is_affirmative:
-        return False
+        return None
 
     # Check if a previous assistant message asked for confirmation or proposed an automation
-    confirmation_cues = (
-        "confirm", "automatización", "automatizacion", "automation",
-        "¿deseas", "deseas que", "quieres que", "¿procedo", "proceda",
-        "¿creo", "crear", "procede", "¿te parece", "ha_create_automation",
+    automation_cues = (
+        "automatización", "automatizacion", "automation", "ha_create_automation",
+        "crear la automatización", "crear automatizacion", "create this automation",
+    )
+    action_cues = (
+        "confirm", "¿deseas", "deseas que", "quieres que", "¿procedo", "proceda",
+        "¿apago", "¿enciendo", "¿cambio", "¿te parece",
         "would you like", "should i", "do you want me to", "proceed",
     )
     for msg in reversed(history):
         if msg.role == "assistant" and msg.content:
             content_lower = msg.content.lower()
-            if any(cue in content_lower for cue in confirmation_cues):
-                return True
+            if any(cue in content_lower for cue in automation_cues):
+                return "automation"
+            if any(cue in content_lower for cue in action_cues):
+                return "action"
             break
-    return False
+    return None
 
 
 class NexusMcpConversationEntity(ConversationEntity):
@@ -856,7 +862,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                 self.entry.data.get(CONF_AUTONOMOUS_MODE, DEFAULT_AUTONOMOUS_MODE),
             )
         )
-        user_confirmed = _is_user_confirmation(history, text)
+        confirmation_type = _is_user_confirmation(history, text)
         is_action_request = bool(ACTION_COMMAND_REGEX.search(text))
 
         # Check if the user is giving an affirmative continuation (e.g. 'dale', 'vale', 'adelante', 'hazlo', 'procede', 'ok')
@@ -876,7 +882,15 @@ class NexusMcpConversationEntity(ConversationEntity):
             )
             if has_pending_action:
                 is_action_request = True
-                user_confirmed = True
+                if not confirmation_type:
+                    has_auto_cue = any(
+                        m.role == "assistant" and any(k in (m.content or "").lower() for k in ("automatiz", "automation"))
+                        for m in history[-2:]
+                    )
+                    confirmation_type = "automation" if has_auto_cue else "action"
+
+        user_confirmed_automation = confirmation_type == "automation"
+        user_confirmed_action = confirmation_type == "action"
 
         user_lang = resolve_user_language(text, getattr(user_input, "language", None), self.hass)
         is_spanish = user_lang == "es"
@@ -929,12 +943,19 @@ class NexusMcpConversationEntity(ConversationEntity):
                 "You have full permission to execute actions and create automations directly without asking for confirmation. "
                 "Execute the requested service or create the automation directly using your tools."
             )
-        elif user_confirmed:
+        elif user_confirmed_automation:
             autonomy_prompt = (
-                "AUTONOMOUS MODE: DISABLED, BUT USER HAS CONFIRMED.\n"
+                "AUTONOMOUS MODE: DISABLED, BUT USER HAS CONFIRMED AUTOMATION.\n"
                 "The user has explicitly confirmed the creation of the proposed automation. "
                 "You MUST now proceed to create the automation using the ha_create_automation tool directly. "
                 "Once created, inform the user that it has been successfully created and activated."
+            )
+        elif user_confirmed_action:
+            autonomy_prompt = (
+                "AUTONOMOUS MODE: DISABLED, BUT USER HAS CONFIRMED DEVICE ACTION.\n"
+                "The user has confirmed your previous question to control physical devices. "
+                "You MUST now execute the requested action IMMEDIATELY using the ha_call_service tool directly. "
+                "DO NOT call ha_create_automation. Control the devices requested using ha_call_service now."
             )
         else:
             confirm_example = (
@@ -1009,7 +1030,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                         if (
                             tc.name == "ha_create_automation"
                             and not autonomous_mode
-                            and not user_confirmed
+                            and not user_confirmed_automation
                         ):
                             _LOGGER.info(
                                 "Intercepted ha_create_automation: Autonomous Mode is OFF and user has not confirmed yet."

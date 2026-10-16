@@ -435,13 +435,28 @@ async def execute_builtin_tool(
         if "entity_id" in arguments and "entity_id" not in target:
             target["entity_id"] = arguments["entity_id"]
 
+        if isinstance(domain, str):
+            domain = domain.strip().rstrip('\\').rstrip('"').rstrip("'").strip()
+        if isinstance(service, str):
+            service = service.strip().rstrip('\\').rstrip('"').rstrip("'").strip()
+
+        target_eid = target.get("entity_id")
+        if isinstance(target_eid, str):
+            target_eid = target_eid.strip().rstrip('\\').rstrip('"').rstrip("'").strip()
+            target["entity_id"] = target_eid
+        elif isinstance(target_eid, list):
+            target["entity_id"] = [
+                e.strip().rstrip('\\').rstrip('"').rstrip("'").strip()
+                for e in target_eid if isinstance(e, str)
+            ]
+            target_eid = target["entity_id"]
+
         if "." in service and not domain:
             domain, service = service.split(".", 1)
         elif "." in domain and not service:
             domain, service = domain.split(".", 1)
 
         # Automatic domain resolution if missing
-        target_eid = target.get("entity_id")
         target_eids = [target_eid] if isinstance(target_eid, str) else (target_eid if isinstance(target_eid, list) else [])
         first_target_domain = target_eids[0].split(".")[0] if (target_eids and "." in target_eids[0]) else None
 
