@@ -590,6 +590,18 @@ class NexusMcpConversationEntity(ConversationEntity):
                     raw_history = data.get("history", {})
                     self._last_conversation_id = data.get("last_conversation_id")
                     stored_telemetry = data.get("telemetry")
+
+                    # If the user changed the AI model, do not inherit old conversations from the previous model
+                    stored_model = stored_telemetry.get("model") if isinstance(stored_telemetry, dict) else None
+                    current_model = self._model_name
+                    if stored_model and current_model and stored_model != current_model:
+                        _LOGGER.info(
+                            "Nexus MCP model changed from '%s' to '%s'; resetting conversation history.",
+                            stored_model,
+                            current_model,
+                        )
+                        raw_history = {}
+                        self._last_conversation_id = None
                     if isinstance(stored_telemetry, dict):
                         import datetime
                         today_str = datetime.date.today().isoformat()
@@ -826,23 +838,6 @@ class NexusMcpConversationEntity(ConversationEntity):
                 response=intent_response,
                 conversation_id=conversation_id,
             )
-
-        # Automatic continuity: If starting a new session (unknown conversation_id),
-        # inherit recent context from the previous conversation so the user can
-        # seamlessly resume where they left off!
-        if conversation_id not in self._history:
-            if self._last_conversation_id and self._last_conversation_id in self._history:
-                prev_history = self._history[self._last_conversation_id]
-                if prev_history:
-                    # Seed with up to last 4 messages from previous conversation pruned to 2000 tokens
-                    seeded = prune_history_to_token_budget(prev_history, max_tokens=2000)[-4:]
-                    self._history[conversation_id] = list(seeded)
-                    _LOGGER.debug(
-                        "Nexus MCP resumed context from previous conversation [%s] (%d messages) into [%s]",
-                        self._last_conversation_id,
-                        len(self._history[conversation_id]),
-                        conversation_id,
-                    )
 
         history = self._history.setdefault(conversation_id, [])
         initial_history_len = len(history)

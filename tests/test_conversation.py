@@ -445,11 +445,11 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIn("Automatización creada directamente", result.response.speech_text)
 
-    async def test_conversation_continuity_resumes_context(self) -> None:
-        """Test that a new conversation session automatically inherits recent context from the previous session."""
+    async def test_conversation_session_isolation(self) -> None:
+        """Test that distinct conversation sessions remain cleanly isolated without cross-session bleeding."""
         mock_hass = MagicMock()
         mock_entry = MagicMock()
-        mock_entry.entry_id = "test_entry_continuity"
+        mock_entry.entry_id = "test_entry_isolation"
         mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
 
         with patch("custom_components.nexus_mcp.conversation.create_llm_engine") as mock_factory, \
@@ -457,7 +457,7 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
              patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
 
             mock_engine = AsyncMock()
-            mock_engine.generate_response.return_value = LlmResponse(content="Entendido, temperatura guardada.")
+            mock_engine.generate_response.return_value = LlmResponse(content="Hola, ¿en qué puedo ayudarte?")
             mock_factory.return_value = mock_engine
 
             entity = NexusMcpConversationEntity(mock_hass, mock_entry)
@@ -471,20 +471,18 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(entity._last_conversation_id, "session_A")
 
-            # Turn 2 starts in a brand new session_B (e.g. user closed dialog and reopened Assist)
+            # Turn 2 starts in a brand new session_B (e.g. user refreshed the chat or started fresh)
             input_2 = MagicMock()
-            input_2.text = "¿Cuál era la temperatura?"
+            input_2.text = "hi"
             input_2.conversation_id = "session_B"
             input_2.language = "es"
             await entity.async_process(input_2)
 
-            # Verify session_B contains the inherited messages from session_A + the new user message
+            # Verify session_B is cleanly isolated: exactly 1 user + 1 assistant message, without inheriting session_A
             history_b = entity._history["session_B"]
-            # session_A had 1 user + 1 assistant = 2 messages. session_B now has 2 inherited + 1 user + 1 assistant = 4 messages
-            self.assertEqual(len(history_b), 4)
-            self.assertEqual(history_b[0].content, "La temperatura deseada es 21 grados")
-            self.assertEqual(history_b[1].content, "Entendido, temperatura guardada.")
-            self.assertEqual(history_b[2].content, "¿Cuál era la temperatura?")
+            self.assertEqual(len(history_b), 2)
+            self.assertEqual(history_b[0].content, "hi")
+            self.assertEqual(history_b[1].content, "Hola, ¿en qué puedo ayudarte?")
 
     async def test_conversation_reset_command(self) -> None:
         """Test explicit conversation reset clears memory."""
