@@ -1,17 +1,17 @@
 <p align="center">
-  <img src="images/banner.png" alt="Nexus MCP Banner" width="100%">
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/banner.png" alt="Nexus MCP Banner" width="100%">
 </p>
 
 <div align="center">
-  <img src="images/icon.png" width="130" height="130" alt="Nexus MCP Icon" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/icon.png" width="130" height="130" alt="Nexus MCP Icon" />
   <h1>Nexus MCP for Home Assistant</h1>
 
   [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
   [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1.0%20%E2%80%94%202026.9.4%2B-41BDF5.svg?logo=home-assistant)](https://www.home-assistant.io/)
   [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
-  [![Tests](https://img.shields.io/badge/Tests-50%2F50%20Passing-brightgreen.svg)](tests/)
+  [![Tests](https://img.shields.io/badge/Tests-50%2F50%20Passing-brightgreen.svg)](https://github.com/VictorCV-DAM/ha-nexus-mcp/tree/main/tests)
   [![Downloads](https://img.shields.io/github/downloads/VictorCV-DAM/ha-nexus-mcp/total.svg?color=brightgreen)](https://github.com/VictorCV-DAM/ha-nexus-mcp/releases)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/VictorCV-DAM/ha-nexus-mcp/blob/main/LICENSE)
   
   [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange?logo=buy-me-a-coffee)](https://buymeacoffee.com/VictorCV)
   [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue?logo=paypal)](https://paypal.me/victorcava)
@@ -68,46 +68,46 @@ Nexus MCP is engineered to be ultra-lightweight, with **zero external Python pac
 Ask your smart home in plain natural language (voice or text). Nexus MCP searches entities, designs the automation, explains what it understood, and asks for your confirmation before writing changes:
 
 <p align="center">
-  <img src="images/12_chat_search_explain.png" width="48%" align="middle" style="vertical-align: middle;" alt="Entity Search & Plan Explanation" />
-  <img src="images/13_chat_confirm_create.png" width="48%" align="middle" style="vertical-align: middle;" alt="Confirmation & Automation Creation" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/12_chat_search_explain.png" width="48%" align="middle" style="vertical-align: middle;" alt="Entity Search & Plan Explanation" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/13_chat_confirm_create.png" width="48%" align="middle" style="vertical-align: middle;" alt="Confirmation & Automation Creation" />
 </p>
 
 ### ⚙️ Live Automation & Real-Time Traces
 The created automation is immediately visible, editable in the Home Assistant visual editor, and running with live execution traces:
 
 <p align="center">
-  <img src="images/15_automation_visual.png" width="48%" align="middle" style="vertical-align: middle;" alt="Created Automation in Home Assistant UI" />
-  <img src="images/16_automation_traces.png" width="48%" align="middle" style="vertical-align: middle;" alt="Live Automation Traces" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/15_automation_visual.png" width="48%" align="middle" style="vertical-align: middle;" alt="Created Automation in Home Assistant UI" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/16_automation_traces.png" width="48%" align="middle" style="vertical-align: middle;" alt="Live Automation Traces" />
 </p>
 
 ### 🎙️ Home Assistant Assist Pipeline Integration
 Select Nexus MCP directly as your active Conversation Agent in any Assist pipeline with local Whisper speech-to-text and Edge TTS:
 
 <p align="center">
-  <img src="images/17_assist_pipeline.png" width="60%" align="middle" style="vertical-align: middle;" alt="Assist Pipeline with Nexus MCP" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/17_assist_pipeline.png" width="60%" align="middle" style="vertical-align: middle;" alt="Assist Pipeline with Nexus MCP" />
 </p>
 
 ### 🧩 1-Click Click & Install Setup Across 5 AI Brains
 Seamlessly connect free cloud providers or local models with automatic discovery *(Groq, Gemini, and Qwen are 100% verified in production; Ollama Local and Custom OpenAI are implemented under standard specs but marked as experimental pending community testing due to local hardware/resource constraints)*:
 
 <p align="center">
-  <img src="images/01_select_brand.png" width="31%" align="middle" style="vertical-align: middle;" alt="Select Nexus MCP" />
-  <img src="images/02_select_provider.png" width="31%" align="middle" style="vertical-align: middle;" alt="Select AI Provider" />
-  <img src="images/04_config_groq.png" width="31%" align="middle" style="vertical-align: middle;" alt="Groq Cloud 120B Setup" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/01_select_brand.png" width="31%" align="middle" style="vertical-align: middle;" alt="Select Nexus MCP" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/02_select_provider.png" width="31%" align="middle" style="vertical-align: middle;" alt="Select AI Provider" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/04_config_groq.png" width="31%" align="middle" style="vertical-align: middle;" alt="Groq Cloud 120B Setup" />
 </p>
 <p align="center">
-  <img src="images/03_config_gemini.png" width="31%" align="middle" style="vertical-align: middle;" alt="Google Gemini Setup" />
-  <img src="images/05_config_qwen.png" width="31%" align="middle" style="vertical-align: middle;" alt="Qwen Cloud Setup" />
-  <img src="images/06_config_ollama.png" width="31%" align="middle" style="vertical-align: middle;" alt="Ollama Local Setup" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/03_config_gemini.png" width="31%" align="middle" style="vertical-align: middle;" alt="Google Gemini Setup" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/05_config_qwen.png" width="31%" align="middle" style="vertical-align: middle;" alt="Qwen Cloud Setup" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/06_config_ollama.png" width="31%" align="middle" style="vertical-align: middle;" alt="Ollama Local Setup" />
 </p>
 
 ### 🛡️ Autonomous Mode & Hot-Reconfiguration
 Toggle between autonomous execution or interactive confirmation anytime via Settings without restarting Home Assistant:
 
 <p align="center">
-  <img src="images/08_config_mcp_uncheck_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Unchecked" />
-  <img src="images/09_config_mcp_check_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Checked" />
-  <img src="images/10_options_reconfigure_v4.png" width="31%" align="middle" style="vertical-align: middle;" alt="Options Flow Reconfigure" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/08_config_mcp_uncheck_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Unchecked" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/09_config_mcp_check_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Checked" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/10_options_reconfigure_v4.png" width="31%" align="middle" style="vertical-align: middle;" alt="Options Flow Reconfigure" />
 </p>
 
 ### 💬 Plug & Play Lovelace Card (Visual Card Picker)
@@ -128,9 +128,9 @@ title: Nexus MCP Intercom
 Interact visually with your smart home using vision-capable AI models (e.g. `qwen/qwen3.8-27b`, Google Gemini Flash, or local vision models):
 
 <p align="center">
-  <img src="images/18_card_image_paste.png" width="31%" align="middle" style="vertical-align: middle;" alt="Clipboard Image Paste Ctrl+V" />
-  <img src="images/19_card_vision_analysis.png" width="31%" align="middle" style="vertical-align: middle;" alt="Multimodal Real-Time Vision Analysis" />
-  <img src="images/20_card_text_selection.png" width="31%" align="middle" style="vertical-align: middle;" alt="1-Click Copy and Manual Text Selection" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/18_card_image_paste.png" width="31%" align="middle" style="vertical-align: middle;" alt="Clipboard Image Paste Ctrl+V" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/19_card_vision_analysis.png" width="31%" align="middle" style="vertical-align: middle;" alt="Multimodal Real-Time Vision Analysis" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/20_card_text_selection.png" width="31%" align="middle" style="vertical-align: middle;" alt="1-Click Copy and Manual Text Selection" />
 </p>
 
 * **🖼️ Instant Clipboard Paste (`Ctrl + V`) & File Attach (`📎`)**: Take a screenshot with `Win + Shift + S` or copy an image anywhere on the web, and paste it directly into the chat. You can also click the paperclip icon (`📎`) to upload an image from disk. Includes instant thumbnail preview with a removal button (`✕`).
