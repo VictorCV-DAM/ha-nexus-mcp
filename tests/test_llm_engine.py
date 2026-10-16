@@ -321,6 +321,54 @@ class TestLlmEngine(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsInstance(custom_eng, OpenAiCompatibleEngine)
 
+    def test_sanitize_openai_api_messages(self) -> None:
+        """Test sanitization ensures valid user query, merges consecutive users, and fixes orphan tools."""
+        from custom_components.nexus_mcp.llm_engine import (
+            sanitize_openai_api_messages,
+            prune_api_messages_for_budget,
+        )
+
+        # 1. No user query -> auto-inject user query
+        msgs = [{"role": "system", "content": "Sys prompt"}]
+        sanitized = sanitize_openai_api_messages(msgs)
+        self.assertEqual(len(sanitized), 2)
+        self.assertEqual(sanitized[1]["role"], "user")
+
+        # 2. Consecutive users -> merged
+        msgs = [
+            {"role": "user", "content": "Hello"},
+            {"role": "user", "content": "World"},
+        ]
+        sanitized = sanitize_openai_api_messages(msgs)
+        self.assertEqual(len(sanitized), 1)
+        self.assertEqual(sanitized[0]["content"], "Hello\n\nWorld")
+
+        # 3. Orphan tool -> converted to assistant
+        msgs = [
+            {"role": "tool", "content": "results", "tool_call_id": "orphan_call"}
+        ]
+        sanitized = sanitize_openai_api_messages(msgs)
+        self.assertEqual(sanitized[0]["role"], "user")  # injected user first
+        self.assertEqual(sanitized[1]["role"], "assistant")
+
+        # 4. Budget pruning preserves active user query and tool calls
+        msgs = [
+            {"role": "system", "content": "System"},
+            {"role": "user", "content": "Old query"},
+            {"role": "assistant", "content": "Old answer"},
+            {"role": "user", "content": "Active command"},
+            {
+                "role": "assistant",
+                "tool_calls": [{"id": "c1", "function": {"name": "f", "arguments": "{}"}}],
+            },
+            {"role": "tool", "tool_call_id": "c1", "content": "x" * 500},
+        ]
+        pruned = prune_api_messages_for_budget(msgs)
+        roles = [m["role"] for m in pruned]
+        self.assertIn("user", roles)
+        self.assertEqual(pruned[1]["content"], "Active command")
+        self.assertTrue(pruned[-1]["content"].endswith("... [trimmed]"))
+
 
 if __name__ == "__main__":
     unittest.main()

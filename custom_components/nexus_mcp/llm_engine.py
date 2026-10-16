@@ -141,6 +141,98 @@ class BaseLlmEngine(ABC):
         """Generate response and handle tool calls."""
 
 
+def sanitize_openai_api_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Sanitize and validate an OpenAI-compatible messages list to prevent API or template errors.
+
+    Guarantees:
+    1. System messages are placed at the beginning.
+    2. Every message with role 'tool' MUST be preceded by an 'assistant' message with a matching tool_call_id.
+       Orphaned or unlinked tool results are converted to assistant messages.
+    3. The first non-system message CANNOT be role 'tool'.
+    4. At least one non-empty 'user' message exists in the conversation.
+    5. Consecutive user messages are merged into a single user message with linebreaks to maintain
+       strict alternating chat template structure.
+    """
+    if not messages:
+        return [{"role": "user", "content": "Execute requested command."}]
+
+    sanitized: list[dict[str, Any]] = []
+
+    # 1. Process messages and link tools
+    for msg in messages:
+        role = msg.get("role")
+        if role == "tool":
+            tool_id = msg.get("tool_call_id")
+            prev_has_tool_call = False
+            if tool_id and sanitized:
+                for prev in reversed(sanitized):
+                    if prev.get("role") == "assistant":
+                        calls = prev.get("tool_calls", [])
+                        if any(tc.get("id") == tool_id for tc in calls):
+                            prev_has_tool_call = True
+                        break
+                    elif prev.get("role") != "tool":
+                        break
+            if not tool_id or not prev_has_tool_call:
+                # Convert orphan tool to assistant text note to prevent HTTP 400
+                sanitized.append({
+                    "role": "assistant",
+                    "content": f"[Tool Result] {msg.get('content', '')}",
+                })
+                continue
+            sanitized.append(dict(msg))
+            continue
+
+        if role == "user":
+            # If the previous message was also a user message, merge contents to keep turn alternation
+            if sanitized and sanitized[-1].get("role") == "user":
+                prev_text = sanitized[-1].get("content") or ""
+                curr_text = msg.get("content") or ""
+                if isinstance(prev_text, str) and isinstance(curr_text, str):
+                    sanitized[-1]["content"] = f"{prev_text}\n\n{curr_text}".strip()
+                    continue
+
+        sanitized.append(dict(msg))
+
+    # 2. Ensure first non-system message is never 'tool'
+    first_non_sys = 1 if (sanitized and sanitized[0].get("role") == "system") else 0
+    while first_non_sys < len(sanitized) and sanitized[first_non_sys].get("role") == "tool":
+        sanitized[first_non_sys]["role"] = "assistant"
+
+    # 3. Ensure at least one message with role="user" and non-empty content exists
+    has_user_query = any(m.get("role") == "user" and bool(m.get("content")) for m in sanitized)
+    if not has_user_query:
+        sanitized.insert(first_non_sys, {"role": "user", "content": "Execute requested command."})
+
+    return sanitized
+
+
+def prune_api_messages_for_budget(api_messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Prune API messages to fit tighter token limits without ever dropping the user query or active tool calls."""
+    sys_msgs = [m for m in api_messages if m.get("role") == "system"]
+    other_msgs = [m for m in api_messages if m.get("role") != "system"]
+
+    # Find the last user message
+    last_user_idx = -1
+    for idx in range(len(other_msgs) - 1, -1, -1):
+        if other_msgs[idx].get("role") == "user":
+            last_user_idx = idx
+            break
+
+    if last_user_idx != -1:
+        # Keep everything from the latest user message onwards (active turn)
+        active_msgs = [dict(m) for m in other_msgs[last_user_idx:]]
+    else:
+        active_msgs = [dict(m) for m in other_msgs]
+
+    # Truncate large tool contents inside active turn to save 80-90% tokens
+    for m in active_msgs:
+        if m.get("role") == "tool" and isinstance(m.get("content"), str) and len(m["content"]) > 300:
+            m["content"] = m["content"][:300] + "... [trimmed]"
+
+    return sanitize_openai_api_messages(sys_msgs + active_msgs)
+
+
 class OpenAiCompatibleEngine(BaseLlmEngine):
     """Engine for Ollama (Qwen 2.5 Coder), OpenAI, DashScope, and Groq."""
 
@@ -201,6 +293,7 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._api_key}",
             "User-Agent": "HomeAssistant-NexusMCP/1.0",
+            "Accept-Encoding": "gzip, deflate",
         }
 
         # Convert standardized messages to OpenAI format
@@ -210,27 +303,6 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
 
         for msg in messages:
             if msg.role == "tool":
-                # OpenAI/Groq strict requirement: role 'tool' MUST have tool_call_id AND
-                # must match a tool_call in the preceding assistant message.
-                prev_has_tool_call = False
-                if msg.tool_call_id and api_messages:
-                    for prev_msg in reversed(api_messages):
-                        if prev_msg.get("role") == "assistant":
-                            prev_calls = prev_msg.get("tool_calls", [])
-                            if any(tc.get("id") == msg.tool_call_id for tc in prev_calls):
-                                prev_has_tool_call = True
-                            break
-                        elif prev_msg.get("role") != "tool":
-                            break
-
-                if not msg.tool_call_id or not prev_has_tool_call:
-                    # Convert orphaned or unlinked tool result to assistant text note to prevent HTTP 400
-                    api_messages.append({
-                        "role": "assistant",
-                        "content": f"[Tool: {msg.tool_name or 'info'}] {msg.content or ''}",
-                    })
-                    continue
-
                 api_messages.append({
                     "role": "tool",
                     "content": msg.content or "",
@@ -263,18 +335,8 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                 ]
             api_messages.append(msg_dict)
 
-        # Groq / Qwen Minijinja template compatibility guarantees:
-        # 1. At least one message with role="user" and non-empty content MUST exist.
-        # Otherwise Groq raises: "minijinja: rendering failed: raise_exception: No user query found in messages."
-        has_user_query = any(m.get("role") == "user" and bool(m.get("content")) for m in api_messages)
-        if not has_user_query:
-            first_non_sys = 1 if (api_messages and api_messages[0].get("role") == "system") else 0
-            api_messages.insert(first_non_sys, {"role": "user", "content": "Execute requested command."})
-
-        # 2. Conversation cannot start with role='tool'.
-        first_non_sys = 1 if (api_messages and api_messages[0].get("role") == "system") else 0
-        while first_non_sys < len(api_messages) and api_messages[first_non_sys].get("role") == "tool":
-            api_messages[first_non_sys]["role"] = "assistant"
+        # Sanitize messages to guarantee strict OpenAI & Minijinja template compatibility
+        api_messages = sanitize_openai_api_messages(api_messages)
 
         payload: dict[str, Any] = {
             "model": self._model,
@@ -313,12 +375,10 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                                 delay = max(1.0, min(float(m.group(1)) + 0.5, 25.0))
 
                         if attempt < max_retries:
-                            # If rate limit was due to input token limits (ITPM), reduce history size on retry
+                            # If rate limit was due to input token limits (ITPM), reduce history size on retry safely
                             err_lower = error_body.lower()
                             if ("itpm" in err_lower or "input tokens" in err_lower or "tokens per minute" in err_lower) and len(payload.get("messages", [])) > 2:
-                                sys_msgs = [m for m in payload["messages"] if m.get("role") == "system"]
-                                other_msgs = [m for m in payload["messages"] if m.get("role") != "system"]
-                                payload["messages"] = sys_msgs + other_msgs[-2:]
+                                payload["messages"] = prune_api_messages_for_budget(payload["messages"])
                                 _LOGGER.info(
                                     "HTTP 429 ITPM limit on %s. Pruned payload messages to %d items for retry in %.1fs.",
                                     self._model,
@@ -345,17 +405,14 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                     if resp.status == 413:
                         error_body = await resp.text()
                         _LOGGER.warning(
-                            "HTTP 413 Request too large for %s (attempt %d/%d): %s. Aggressively trimming history to latest message...",
+                            "HTTP 413 Request too large for %s (attempt %d/%d): %s. Aggressively trimming history...",
                             self._model,
                             attempt + 1,
                             max_retries + 1,
                             error_body,
                         )
                         if attempt < max_retries and len(payload.get("messages", [])) > 2:
-                            sys_msgs = [m for m in payload["messages"] if m.get("role") == "system"]
-                            other_msgs = [m for m in payload["messages"] if m.get("role") != "system"]
-                            # Keep only system prompt and the user's latest query so it easily fits within the model's limits
-                            payload["messages"] = sys_msgs + other_msgs[-1:]
+                            payload["messages"] = prune_api_messages_for_budget(payload["messages"])
                             await asyncio.sleep(0.5)
                             continue
 
@@ -378,8 +435,23 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                             )
                             if attempt < max_retries:
                                 payload["temperature"] = 0.0
+                                payload["messages"] = sanitize_openai_api_messages(payload["messages"])
                                 await asyncio.sleep(1.0)
                                 continue
+
+                        # If Groq rejected due to Minijinja chat template rendering (missing user query, format mismatch)
+                        if any(w in text.lower() for w in ("minijinja", "no user query", "template request")):
+                            _LOGGER.warning(
+                                "Groq Minijinja template error (attempt %d/%d): %s. Sanitizing messages and re-injecting active query...",
+                                attempt + 1,
+                                max_retries + 1,
+                                text,
+                            )
+                            if attempt < max_retries:
+                                payload["messages"] = sanitize_openai_api_messages(payload["messages"])
+                                await asyncio.sleep(1.0)
+                                continue
+
                         raise LlmError(f"HTTP 400 Bad Request from {url}: {text}")
 
                     if resp.status != 200:

@@ -68,8 +68,11 @@ def is_transient_error_message(content: str | None) -> bool:
         or c_lower.startswith("límite de peticiones")
         or c_lower.startswith("rate limit reached")
         or c_lower.startswith("request too large")
+        or c_lower.startswith("[error:")
+        or "[error:" in c_lower
         or "http 413" in c_lower
         or "http 429" in c_lower
+        or "http 400" in c_lower
     )
 
 
@@ -83,6 +86,7 @@ def prune_history_to_token_budget(
        is NEVER pruned or separated, guaranteeing a valid 'user' query is ALWAYS present.
     2. Older historical turns are pruned from oldest to newest if budget is exceeded.
     3. The pruned message list always starts with a 'user' message (never starting with an orphan 'tool' or 'assistant').
+    4. Consecutive user messages are merged into a single user message to maintain valid dialogue alternation.
     """
     if not messages:
         return []
@@ -91,6 +95,19 @@ def prune_history_to_token_budget(
     cleaned = [m for m in messages if not is_transient_error_message(m.content)]
     if not cleaned:
         cleaned = list(messages)
+
+    # Merge consecutive user messages to maintain valid turn alternation
+    merged: list[ChatMessage] = []
+    for m in cleaned:
+        if m.role == "user" and merged and merged[-1].role == "user":
+            prev_txt = merged[-1].content or ""
+            curr_txt = m.content or ""
+            merged[-1].content = f"{prev_txt}\n\n{curr_txt}".strip()
+            if m.image_data and not merged[-1].image_data:
+                merged[-1].image_data = m.image_data
+        else:
+            merged.append(m)
+    cleaned = merged
 
     # 1. Identify the active turn: from the latest user message to the end
     last_user_idx = -1
@@ -692,6 +709,8 @@ class NexusMcpConversationEntity(ConversationEntity):
                 self.record_usage(resp.usage, getattr(resp, "rate_limits", None))
             reply = resp.content or ("Acción completada." if user_lang == "es" else "Action completed.")
         except LlmRateLimitError as err:
+            if history and history[-1].role == "user":
+                history.pop()
             reset_sec = getattr(err, "reset_seconds", 5.0) or 5.0
             self.record_rate_limit(reset_sec)
             raise err
@@ -709,6 +728,8 @@ class NexusMcpConversationEntity(ConversationEntity):
                     )
                 )
             else:
+                if history and history[-1].role == "user":
+                    history.pop()
                 raise err
 
         history.append(ChatMessage(role="assistant", content=reply))
@@ -770,6 +791,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                     )
 
         history = self._history.setdefault(conversation_id, [])
+        initial_history_len = len(history)
         history.append(ChatMessage(role="user", content=text))
 
         # Trim history to keep it lightweight
@@ -970,6 +992,8 @@ class NexusMcpConversationEntity(ConversationEntity):
                     )
                     hallucination_retried = True
                     force_tool_choice = "required"
+                    if response.content:
+                        history.append(ChatMessage(role="assistant", content=response.content))
                     history.append(
                         ChatMessage(
                             role="user",
@@ -1039,13 +1063,18 @@ class NexusMcpConversationEntity(ConversationEntity):
             )
 
         # Only store assistant reply if not a transient error message to prevent recursion/history bloat
-        if not is_transient_error_message(assistant_reply):
+        if is_transient_error_message(assistant_reply):
+            # If an error occurred, revert history to clean state before this request
+            del history[initial_history_len:]
+        else:
+            # Clean up any temporary internal hallucination error retry messages before saving
+            cleaned_history = [
+                m for m in history if not (m.role == "user" and m.content and m.content.startswith("[ERROR:"))
+            ]
+            self._history[conversation_id] = cleaned_history
+            history = cleaned_history
             if not history or history[-1].role != "assistant":
                 history.append(ChatMessage(role="assistant", content=assistant_reply))
-        else:
-            # If an error occurred, pop the failed user message so the next attempt starts clean
-            if history and history[-1].role == "user":
-                history.pop()
 
         self._last_conversation_id = conversation_id
         await self._async_save_history()

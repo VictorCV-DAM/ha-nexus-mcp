@@ -48,7 +48,7 @@ def get_builtin_tools() -> list[McpTool]:
                         "description": "Optional domain filter (e.g. 'light', 'switch', 'sensor', 'climate').",
                     },
                 },
-                "required": ["query"],
+                "required": [],
             },
         ),
         McpTool(
@@ -73,11 +73,11 @@ def get_builtin_tools() -> list[McpTool]:
                 "properties": {
                     "domain": {
                         "type": "string",
-                        "description": "Service domain (e.g. 'light', 'switch', 'homeassistant').",
+                        "description": "Optional service domain (e.g. 'light', 'switch', 'homeassistant'). If omitted, service can be 'domain.service' (e.g. 'light.turn_on').",
                     },
                     "service": {
                         "type": "string",
-                        "description": "Service name (e.g. 'turn_on', 'turn_off', 'toggle').",
+                        "description": "Service name (e.g. 'turn_on', 'turn_off', 'toggle', or full 'light.turn_on').",
                     },
                     "target": {
                         "type": "object",
@@ -92,7 +92,7 @@ def get_builtin_tools() -> list[McpTool]:
                         "description": "Optional delay in seconds before executing this action (e.g. 5 for 'after 5 seconds').",
                     },
                 },
-                "required": ["domain", "service"],
+                "required": ["service"],
             },
         ),
         McpTool(
@@ -229,7 +229,7 @@ async def execute_builtin_tool(
     _LOGGER.info("Executing built-in HA tool '%s' with arguments: %s", name, arguments)
 
     if name == "ha_search_entities":
-        query = (arguments.get("query") or "").lower().strip()
+        query = (arguments.get("query") or arguments.get("q") or "").lower().strip()
         domain_filter = (arguments.get("domain") or "").lower().strip()
 
         all_states = list(hass.states.async_all())
@@ -322,8 +322,13 @@ async def execute_builtin_tool(
         }
 
     if name == "ha_call_service":
-        domain = arguments.get("domain", "")
-        service = arguments.get("service", "")
+        domain = str(arguments.get("domain") or "").strip()
+        service = str(arguments.get("service") or arguments.get("action") or "").strip()
+        if "." in service and not domain:
+            domain, service = service.split(".", 1)
+        elif "." in domain and not service:
+            domain, service = domain.split(".", 1)
+
         target = arguments.get("target") or {}
         data = arguments.get("data") or {}
         try:
