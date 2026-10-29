@@ -72,7 +72,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     # Register extra JS URL so Home Assistant frontend loads the card automatically
     if add_extra_js_url:
         try:
-            add_extra_js_url(hass, f"{url_path}?v=1.4.2")
+            add_extra_js_url(hass, f"{url_path}?v=1.4.3")
         except Exception as err:
             _LOGGER.debug("Could not add extra JS URL: %s", err)
 
@@ -90,13 +90,13 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
                 if r.get("url", "").startswith(url_path):
                     frontend_added = True
                     # If version parameter differs, update existing resource to bust browser cache
-                    if r.get("url") != f"{url_path}?v=1.4.2":
+                    if r.get("url") != f"{url_path}?v=1.4.3":
                         res_id = r.get("id")
                         if res_id and getattr(resources, "async_update_item", None):
                             try:
                                 await resources.async_update_item(res_id, {
                                     "res_type": r.get("type", "module"),
-                                    "url": f"{url_path}?v=1.4.2",
+                                    "url": f"{url_path}?v=1.4.3",
                                 })
                             except Exception:
                                 pass
@@ -106,12 +106,12 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
                 if getattr(resources, "async_create_item", None):
                     await resources.async_create_item({
                         "res_type": "module",
-                        "url": f"{url_path}?v=1.4.2",
+                        "url": f"{url_path}?v=1.4.3",
                     })
                 elif getattr(resources, "data", None) and getattr(resources.data, "append", None):
                     resources.data.append({
                         "type": "module",
-                        "url": f"{url_path}?v=1.4.2",
+                        "url": f"{url_path}?v=1.4.3",
                     })
     except Exception as err:
         _LOGGER.debug("Could not auto-register Lovelace resource: %s", err)

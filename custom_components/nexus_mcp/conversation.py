@@ -192,16 +192,28 @@ def prune_history_to_token_budget(
             if m.role == "tool" and m.content and len(m.content) > 600:
                 m.content = m.content[:600] + "... [trimmed]"
 
-    # 2. Add older messages from newest to oldest as budget permits
+    # 2. Add older historical turns from newest to oldest as atomic blocks
+    # Group older_messages into atomic turns: each turn starts with 'user'
+    older_turns: list[list[ChatMessage]] = []
+    current_turn: list[ChatMessage] = []
+    for msg in older_messages:
+        if msg.role == 'user' and current_turn:
+            older_turns.append(current_turn)
+            current_turn = [msg]
+        else:
+            current_turn.append(msg)
+    if current_turn:
+        older_turns.append(current_turn)
+
     pruned_older: list[ChatMessage] = []
     budget_remaining = max_tokens - sum(estimate_tokens(m) for m in active_turn)
 
-    for msg in reversed(older_messages):
-        msg_tokens = estimate_tokens(msg)
-        if budget_remaining - msg_tokens < 0:
+    for turn in reversed(older_turns):
+        turn_tokens = sum(estimate_tokens(m) for m in turn)
+        if budget_remaining - turn_tokens < 0:
             break
-        pruned_older.insert(0, msg)
-        budget_remaining -= msg_tokens
+        pruned_older = turn + pruned_older
+        budget_remaining -= turn_tokens
 
     result = pruned_older + active_turn
 
@@ -488,7 +500,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             "name": f"Nexus MCP ({self._model_name})",
             "manufacturer": "Nexus MCP",
             "model": self._model_name,
-            "sw_version": "1.4.2",
+            "sw_version": "1.4.3",
         }
 
     @property

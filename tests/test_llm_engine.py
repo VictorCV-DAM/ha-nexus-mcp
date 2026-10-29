@@ -26,6 +26,7 @@ from custom_components.nexus_mcp.llm_engine import (
     GeminiEngine,
     OpenAiCompatibleEngine,
     create_llm_engine,
+    sanitize_gemini_contents,
 )
 from custom_components.nexus_mcp.mcp_client import McpTool
 
@@ -287,6 +288,76 @@ class TestLlmEngine(unittest.IsolatedAsyncioTestCase):
         user_turn = contents[2]
         self.assertEqual(user_turn["role"], "user")
         self.assertEqual(user_turn["parts"][0]["functionResponse"]["name"], "ha_call_service")
+
+    def test_sanitize_gemini_contents_peters_flow(self) -> None:
+        """Test sanitize_gemini_contents preserves valid multi-turn tool flow and synchronizes ID."""
+        peters_payload = [
+            {"role": "user", "parts": [{"text": "Find fuga switches"}]},
+            {"role": "model", "parts": [{"functionCall": {"name": "ha_search_entities", "args": {"query": "fuga"}, "id": "call_1"}, "thoughtSignature": "skip_thought_signature_validator"}]},
+            {"role": "user", "parts": [{"functionResponse": {"name": "ha_search_entities", "response": {"result": {"results": [{"entity_id": "switch.fuga_1"}]}}}}]},
+            {"role": "model", "parts": [{"text": "Er det en af disse Fuga-enheder?\n- fuga_1\n- fuga_2"}]},
+            {"role": "user", "parts": [{"text": "ja, fuga_1. hvad er forskel på autom for button1 og button2?"}]}
+        ]
+        res = sanitize_gemini_contents(peters_payload)
+        self.assertEqual(len(res), 5)
+        self.assertNotIn("thoughtSignature", res[1]["parts"][0])
+        self.assertEqual(res[2]["parts"][0]["functionResponse"].get("id"), "call_1")
+        self.assertEqual(res[-1]["role"], "user")
+
+    def test_sanitize_gemini_contents_orphan_fc(self) -> None:
+        """Test that an unanswered functionCall is downgraded to text so it never breaks alternation."""
+        orphan_fc = [
+            {"role": "user", "parts": [{"text": "Find fuga switches"}]},
+            {"role": "model", "parts": [{"functionCall": {"name": "ha_search_entities", "args": {"query": "fuga"}}}]},
+            {"role": "user", "parts": [{"text": "actually never mind, turn on the light"}]}
+        ]
+        res = sanitize_gemini_contents(orphan_fc)
+        self.assertEqual(len(res), 3)
+        self.assertFalse(any("functionCall" in p for c in res for p in c["parts"]))
+        self.assertIn("ha_search_entities", res[1]["parts"][0].get("text", ""))
+
+    def test_sanitize_gemini_contents_orphan_fr(self) -> None:
+        """Test that an orphan functionResponse without preceding functionCall is downgraded to text."""
+        orphan_fr = [
+            {"role": "user", "parts": [{"functionResponse": {"name": "ha_search_entities", "response": {"result": "ok"}}}]},
+            {"role": "model", "parts": [{"text": "Understood."}]},
+            {"role": "user", "parts": [{"text": "Thanks!"}]}
+        ]
+        res = sanitize_gemini_contents(orphan_fr)
+        self.assertEqual(len(res), 3)
+        self.assertFalse(any("functionResponse" in p for c in res for p in c["parts"]))
+        self.assertIn("ha_search_entities", res[0]["parts"][0].get("text", ""))
+
+    def test_sanitize_gemini_contents_mixed_user_turn(self) -> None:
+        """Test that a user turn containing both functionResponse and user query is safely separated."""
+        mixed_turn = [
+            {"role": "user", "parts": [{"text": "Search"}]},
+            {"role": "model", "parts": [{"functionCall": {"name": "ha_search_entities", "args": {"query": "fuga"}}}]},
+            {"role": "user", "parts": [
+                {"functionResponse": {"name": "ha_search_entities", "response": {"result": "ok"}}},
+                {"text": "What is the difference between button1 and button2?"}
+            ]}
+        ]
+        res = sanitize_gemini_contents(mixed_turn)
+        self.assertEqual(len(res), 5)
+        self.assertEqual(res[0]["role"], "user")
+        self.assertEqual(res[1]["role"], "model")
+        self.assertEqual(res[2]["role"], "user")
+        self.assertIn("functionResponse", res[2]["parts"][0])
+        self.assertEqual(res[3]["role"], "model")
+        self.assertEqual(res[4]["role"], "user")
+        self.assertIn("difference", res[4]["parts"][0].get("text", ""))
+
+    def test_sanitize_gemini_contents_boundaries(self) -> None:
+        """Test that leading model turns are stripped and trailing model turns are followed by user prompt."""
+        bad_bounds = [
+            {"role": "model", "parts": [{"text": "Hello!"}]},
+            {"role": "user", "parts": [{"text": "Hi!"}]},
+            {"role": "model", "parts": [{"text": "How can I help?"}]}
+        ]
+        res = sanitize_gemini_contents(bad_bounds)
+        self.assertEqual(res[0]["role"], "user")
+        self.assertEqual(res[-1]["role"], "user")
 
     def test_factory_creation(self) -> None:
         """Test create_llm_engine factory for all providers."""

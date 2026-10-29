@@ -735,6 +735,171 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
         )
 
 
+def sanitize_gemini_contents(contents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Sanitize and validate Gemini contents list to strictly obey Google Gemini API invariants.
+
+    Invariants enforced:
+    1. Contents must not be empty and must start with role 'user'.
+    2. Roles must be strictly 'user' or 'model'.
+    3. Separate mixed user turns containing both functionResponse and regular user text
+       with an intervening model turn so functionResponse is always processed in its own turn.
+    4. Consecutive turns with the same role are merged.
+    5. Function call / Function response validity:
+       - Every 'model' turn with 'functionCall' parts MUST be immediately followed by a 'user' turn
+         containing matching 'functionResponse' parts.
+       - If a 'model' turn has a 'functionCall' that is NOT followed by a matching 'functionResponse'
+         (e.g. pruned history, dropped tool result, or user interruption), the orphaned 'functionCall'
+         is safely downgraded to a regular model text part (e.g. "[Executed tool name]").
+       - If a 'user' turn has a 'functionResponse' that is NOT immediately preceded by a 'model' turn
+         with a matching 'functionCall', the orphaned 'functionResponse' is safely downgraded to a
+         regular user text part (e.g. "[Tool result for name]").
+       - Any 'functionResponse' part in a 'user' turn has its 'name' and 'id' synchronized with
+         the preceding 'functionCall'.
+       - Removes bogus placeholder 'thoughtSignature' strings (e.g. 'skip_thought_signature_validator')
+         while preserving valid opaque signatures.
+    6. The final turn must be role 'user' (generateContent input payload MUST end with user turn).
+    """
+    if not contents:
+        return [{"role": "user", "parts": [{"text": "Execute requested command."}]}]
+
+    # Step 1: Pre-process parts inside each turn (strip invalid placeholder thought signatures)
+    cleaned_contents: list[dict[str, Any]] = []
+    for item in contents:
+        role = item.get("role", "user")
+        if role not in ("user", "model"):
+            role = "user"
+        raw_parts = item.get("parts", [])
+        clean_parts: list[dict[str, Any]] = []
+        for p in raw_parts:
+            if not isinstance(p, dict):
+                continue
+            p_copy = dict(p)
+            # Remove invalid / placeholder thoughtSignature
+            if p_copy.get("thoughtSignature") in ("skip_thought_signature_validator", ""):
+                p_copy.pop("thoughtSignature", None)
+            clean_parts.append(p_copy)
+        if clean_parts:
+            cleaned_contents.append({"role": role, "parts": clean_parts})
+
+    if not cleaned_contents:
+        return [{"role": "user", "parts": [{"text": "Execute requested command."}]}]
+
+    # Step 2: Separate mixed user turns containing both functionResponse and regular user text
+    separated_contents: list[dict[str, Any]] = []
+    for turn in cleaned_contents:
+        if turn["role"] == "user":
+            fr_parts = [p for p in turn["parts"] if "functionResponse" in p]
+            other_parts = [p for p in turn["parts"] if "functionResponse" not in p]
+            if fr_parts and other_parts:
+                separated_contents.append({"role": "user", "parts": fr_parts})
+                separated_contents.append({"role": "model", "parts": [{"text": "OK"}]})
+                separated_contents.append({"role": "user", "parts": other_parts})
+                continue
+        separated_contents.append(turn)
+
+    # Step 3: Merge consecutive same-role turns (except if separating functionResponse from normal text)
+    merged: list[dict[str, Any]] = []
+    for turn in separated_contents:
+        if merged and merged[-1]["role"] == turn["role"]:
+            prev_has_fr = any("functionResponse" in p for p in merged[-1]["parts"])
+            curr_has_text = any("functionResponse" not in p for p in turn["parts"])
+            if merged[-1]["role"] == "user" and prev_has_fr and curr_has_text:
+                merged.append({"role": "model", "parts": [{"text": "OK"}]})
+                merged.append(turn)
+            else:
+                merged[-1]["parts"].extend(turn["parts"])
+        else:
+            merged.append(turn)
+
+    # Step 4: Validate and pair functionCall <-> functionResponse turns
+    i = 0
+    while i < len(merged):
+        turn = merged[i]
+        role = turn["role"]
+
+        if role == "model":
+            fc_parts = [p for p in turn["parts"] if "functionCall" in p]
+            if fc_parts:
+                next_turn = merged[i + 1] if i + 1 < len(merged) else None
+                has_matching_response = False
+                if next_turn and next_turn.get("role") == "user":
+                    fr_parts = [p for p in next_turn.get("parts", []) if "functionResponse" in p]
+                    if fr_parts:
+                        fc_names = [p["functionCall"].get("name") for p in fc_parts]
+                        fr_names = [p["functionResponse"].get("name") for p in fr_parts]
+                        if any(n in fr_names for n in fc_names):
+                            has_matching_response = True
+                            for fc_p in fc_parts:
+                                fc_data = fc_p["functionCall"]
+                                fc_id = fc_data.get("id")
+                                fc_name = fc_data.get("name")
+                                if fc_id:
+                                    for fr_p in fr_parts:
+                                        fr_data = fr_p["functionResponse"]
+                                        if fr_data.get("name") == fc_name and not fr_data.get("id"):
+                                            fr_data["id"] = fc_id
+
+                if not has_matching_response:
+                    new_parts: list[dict[str, Any]] = []
+                    for p in turn["parts"]:
+                        if "functionCall" in p:
+                            fc = p["functionCall"]
+                            name = fc.get("name", "tool")
+                            args = json.dumps(fc.get("args", {}), default=str)
+                            new_parts.append({"text": f"[Executed tool {name} with arguments: {args}]"})
+                        else:
+                            new_parts.append(p)
+                    turn["parts"] = new_parts
+
+        elif role == "user":
+            fr_parts = [p for p in turn["parts"] if "functionResponse" in p]
+            if fr_parts:
+                prev_turn = merged[i - 1] if i > 0 else None
+                has_matching_call = False
+                if prev_turn and prev_turn.get("role") == "model":
+                    fc_parts = [p for p in prev_turn.get("parts", []) if "functionCall" in p]
+                    if fc_parts:
+                        fc_names = [p["functionCall"].get("name") for p in fc_parts]
+                        fr_names = [p["functionResponse"].get("name") for p in fr_parts]
+                        if any(n in fc_names for n in fr_names):
+                            has_matching_call = True
+
+                if not has_matching_call:
+                    new_parts: list[dict[str, Any]] = []
+                    for p in turn["parts"]:
+                        if "functionResponse" in p:
+                            fr = p["functionResponse"]
+                            name = fr.get("name", "tool")
+                            res = json.dumps(fr.get("response", {}), default=str)
+                            new_parts.append({"text": f"[Tool result for {name}: {res}]"})
+                        else:
+                            new_parts.append(p)
+                    turn["parts"] = new_parts
+
+        i += 1
+
+    # Step 5: Clean passes after downgrades: merge consecutive same-role turns
+    final_contents: list[dict[str, Any]] = []
+    for turn in merged:
+        if final_contents and final_contents[-1]["role"] == turn["role"]:
+            final_contents[-1]["parts"].extend(turn["parts"])
+        else:
+            final_contents.append(turn)
+
+    # Step 6: Ensure starts with 'user'
+    while final_contents and final_contents[0]["role"] != "user":
+        final_contents.pop(0)
+
+    if not final_contents:
+        final_contents = [{"role": "user", "parts": [{"text": "Execute requested command."}]}]
+
+    # Step 7: Ensure ends with 'user' (generateContent input MUST end with user turn)
+    if final_contents[-1]["role"] == "model":
+        final_contents.append({"role": "user", "parts": [{"text": "Continue."}]})
+
+    return final_contents
+
+
 class GeminiEngine(BaseLlmEngine):
     """Engine for Google Gemini Free Tier using direct REST calls."""
 
@@ -802,12 +967,11 @@ class GeminiEngine(BaseLlmEngine):
                     if tc.call_id and not tc.call_id.startswith("gemini_call_"):
                         fc_data["id"] = tc.call_id
 
-                    # Gemini 3 requires thoughtSignature on functionCall parts in multi-turn history.
-                    sig = tc.thought_signature or "skip_thought_signature_validator"
                     fc_part: dict[str, Any] = {
                         "functionCall": fc_data,
-                        "thoughtSignature": sig,
                     }
+                    if tc.thought_signature and tc.thought_signature != "skip_thought_signature_validator":
+                        fc_part["thoughtSignature"] = tc.thought_signature
                     parts.append(fc_part)
 
             if msg.role == "tool":
@@ -818,14 +982,14 @@ class GeminiEngine(BaseLlmEngine):
                     resp_dict = {"output": msg.content}
 
                 func_name = msg.tool_name or msg.tool_call_id or "tool_result"
-                parts.append(
-                    {
-                        "functionResponse": {
-                            "name": func_name,
-                            "response": {"result": resp_dict},
-                        }
-                    }
-                )
+                fr_data: dict[str, Any] = {
+                    "name": func_name,
+                    "response": {"result": resp_dict},
+                }
+                if msg.tool_call_id and not msg.tool_call_id.startswith("gemini_call_"):
+                    fr_data["id"] = msg.tool_call_id
+
+                parts.append({"functionResponse": fr_data})
 
             gemini_role = "user" if msg.role in ("user", "tool") else "model"
             if parts:
@@ -834,8 +998,8 @@ class GeminiEngine(BaseLlmEngine):
                 else:
                     contents.append({"role": gemini_role, "parts": parts})
 
-        if not contents or not any(c.get("role") == "user" for c in contents):
-            contents.insert(0, {"role": "user", "parts": [{"text": "Execute requested command."}]})
+        # Sanitize Gemini contents to strictly guarantee sequence invariants
+        contents = sanitize_gemini_contents(contents)
 
         payload: dict[str, Any] = {"contents": contents}
 
