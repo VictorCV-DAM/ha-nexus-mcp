@@ -585,6 +585,14 @@ class NexusMcpCard extends HTMLElement {
           align-items: center;
           gap: 6px;
         }
+        .bubble-automation-footer {
+          margin-top: 14px;
+          padding-top: 10px;
+          border-top: 1px dashed var(--divider-color, rgba(255, 255, 255, 0.15));
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
         .code-save-auto-btn {
           background: linear-gradient(135deg, #1976d2 0%, #0288d1 100%);
           border: none;
@@ -592,20 +600,27 @@ class NexusMcpCard extends HTMLElement {
           cursor: pointer;
           display: inline-flex;
           align-items: center;
-          gap: 4px;
-          font-size: 0.72rem;
+          justify-content: center;
+          gap: 8px;
+          font-size: 0.88rem;
           font-weight: 600;
-          padding: 3px 8px;
-          border-radius: 4px;
+          padding: 10px 16px;
+          border-radius: 8px;
           transition: all 0.2s ease;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+          width: 100%;
+          box-sizing: border-box;
         }
         .code-save-auto-btn:hover:not(:disabled) {
           filter: brightness(1.15);
           transform: translateY(-1px);
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+        }
+        .code-save-auto-btn:active:not(:disabled) {
+          transform: translateY(0);
         }
         .code-save-auto-btn ha-icon {
-          --mdc-icon-size: 13px;
+          --mdc-icon-size: 18px;
         }
         .code-save-auto-btn.saved {
           background: #2e7d32 !important;
@@ -1100,6 +1115,7 @@ class NexusMcpCard extends HTMLElement {
     text = text.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
 
     // 6. Reinsert formatted code boxes (using split/join to safely preserve all code content without $ escaping issues)
+    const detectedAutomations = [];
     codeBlocks.forEach((block, i) => {
       const placeholder = `__NEXUS_CODE_BLOCK_${i}__`;
       const cleanCode = block.code.trim();
@@ -1118,19 +1134,15 @@ class NexusMcpCard extends HTMLElement {
       const hasAction = cleanCode.includes("action:") || cleanCode.includes("actions:") || cleanCode.includes("service:");
       const isAutomation = isYaml && hasTrigger && hasAction;
 
-      const installBtnHtml = isAutomation
-        ? `<button class="code-save-auto-btn" data-code="${dataCode}" title="${isEs ? "Crear y activar automatización en Home Assistant" : "Create and activate automation in Home Assistant"}">
-            <ha-icon icon="mdi:flash"></ha-icon>
-            <span class="btn-text">${isEs ? "⚡ Crear automatización" : "⚡ Create automation"}</span>
-          </button>`
-        : "";
+      if (isAutomation) {
+        detectedAutomations.push(cleanCode);
+      }
 
       const boxHtml = `
         <div class="code-block-container">
           <div class="code-header">
             <span class="code-lang">${langLabel}</span>
             <div class="code-actions">
-              ${installBtnHtml}
               <button class="code-copy-btn" data-code="${dataCode}" title="${copyLabel}">
                 <ha-icon icon="mdi:content-copy"></ha-icon>
                 <span class="copy-text">${copyLabel}</span>
@@ -1142,6 +1154,25 @@ class NexusMcpCard extends HTMLElement {
       `;
       text = text.split(placeholder).join(boxHtml);
     });
+
+    if (detectedAutomations.length > 0) {
+      const isEs = this._isSpanish();
+      let footerHtml = `<div class="bubble-automation-footer">`;
+      detectedAutomations.forEach((autoCode, idx) => {
+        const autoDataCode = encodeURIComponent(autoCode);
+        const btnLabel = detectedAutomations.length > 1
+          ? (isEs ? `⚡ Crear y Activar Automatización #${idx + 1} en Home Assistant` : `⚡ Create and Activate Automation #${idx + 1} in Home Assistant`)
+          : (isEs ? "⚡ Crear y Activar Automatización en Home Assistant" : "⚡ Create and Activate Automation in Home Assistant");
+        footerHtml += `
+          <button class="code-save-auto-btn" data-code="${autoDataCode}" title="${btnLabel}">
+            <ha-icon icon="mdi:lightning-bolt"></ha-icon>
+            <span class="btn-text">${btnLabel}</span>
+          </button>
+        `;
+      });
+      footerHtml += `</div>`;
+      text += footerHtml;
+    }
 
     return text;
   }
@@ -1261,7 +1292,7 @@ class NexusMcpCard extends HTMLElement {
           await this._hass.callApi("POST", `config/automation/config/${autoId}`, payload);
 
           btn.classList.add("saved");
-          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Automatización activa!" : "Automation active!"}</span>`;
+          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Automatización creada y activa!" : "Automation active!"}</span>`;
         } catch (err) {
           console.error("Nexus MCP Card: Failed to create automation:", err);
           btn.disabled = false;
