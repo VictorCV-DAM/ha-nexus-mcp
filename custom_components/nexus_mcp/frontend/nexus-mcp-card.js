@@ -674,7 +674,15 @@ class NexusMcpCard extends HTMLElement {
           transform: translateY(0);
         }
         .code-save-auto-btn ha-icon {
-          --mdc-icon-size: 18px;
+          --mdc-icon-size: 20px;
+          color: #ffca28;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .code-save-auto-btn.saved ha-icon,
+        .code-save-auto-btn.error ha-icon {
+          color: #ffffff;
         }
         .code-save-auto-btn.saved {
           background: #2e7d32 !important;
@@ -1234,8 +1242,8 @@ class NexusMcpCard extends HTMLElement {
       detectedAutomations.forEach((autoCode, idx) => {
         const autoDataCode = encodeURIComponent(autoCode);
         const btnLabel = detectedAutomations.length > 1
-          ? (isEs ? `⚡ Crear y Activar Automatización #${idx + 1} en Home Assistant` : `⚡ Create and Activate Automation #${idx + 1} in Home Assistant`)
-          : (isEs ? "⚡ Crear y Activar Automatización en Home Assistant" : "⚡ Create and Activate Automation in Home Assistant");
+          ? (isEs ? `Crear y Activar Automatización #${idx + 1} en Home Assistant` : `Create and Activate Automation #${idx + 1} in Home Assistant`)
+          : (isEs ? "Crear y Activar Automatización en Home Assistant" : "Create and Activate Automation in Home Assistant");
         footerHtml += `
           <button class="code-save-auto-btn" data-code="${autoDataCode}" title="${btnLabel}">
             <ha-icon icon="mdi:lightning-bolt"></ha-icon>
