@@ -110,6 +110,10 @@ async def execute_builtin_tool(
     """Execute a built-in Home Assistant tool."""
     _LOGGER.info("Executing built-in HA tool '%s' with arguments: %s", name, arguments)
 
+    # Normalize name if a model prefixes it with a namespace (e.g. 'default_api:ha_get_entity_state')
+    if ":" in name:
+        name = name.split(":")[-1]
+
     if name == "ha_search_entities":
         import re
         query = (arguments.get("query") or arguments.get("q") or "").lower().strip()

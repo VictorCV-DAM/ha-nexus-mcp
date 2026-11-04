@@ -827,16 +827,24 @@ def sanitize_gemini_contents(contents: list[dict[str, Any]]) -> list[dict[str, A
                     if fr_parts:
                         fc_names = [p["functionCall"].get("name") for p in fc_parts]
                         fr_names = [p["functionResponse"].get("name") for p in fr_parts]
-                        if any(n in fr_names for n in fc_names):
+
+                        def _names_match(a: str | None, b: str | None) -> bool:
+                            if not a or not b:
+                                return False
+                            return a == b or a.endswith(f":{b}") or b.endswith(f":{a}")
+
+                        if any(_names_match(fc_n, fr_n) for fc_n in fc_names for fr_n in fr_names):
                             has_matching_response = True
                             for fc_p in fc_parts:
                                 fc_data = fc_p["functionCall"]
                                 fc_id = fc_data.get("id")
                                 fc_name = fc_data.get("name")
-                                if fc_id:
-                                    for fr_p in fr_parts:
-                                        fr_data = fr_p["functionResponse"]
-                                        if fr_data.get("name") == fc_name and not fr_data.get("id"):
+                                for fr_p in fr_parts:
+                                    fr_data = fr_p["functionResponse"]
+                                    if _names_match(fc_name, fr_data.get("name")):
+                                        # Strict alignment for Gemini API: synchronize name and id
+                                        fr_data["name"] = fc_name
+                                        if fc_id and not fr_data.get("id"):
                                             fr_data["id"] = fc_id
 
                 if not has_matching_response:

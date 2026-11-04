@@ -359,6 +359,28 @@ class TestLlmEngine(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res[0]["role"], "user")
         self.assertEqual(res[-1]["role"], "user")
 
+    def test_sanitize_gemini_namespaced_tool_match(self) -> None:
+        """Test that namespaced tool responses (e.g. default_api:ha_get_entity_state) synchronize properly."""
+        contents = [
+            {"role": "user", "parts": [{"text": "Dime el estado"}]},
+            {
+                "role": "model",
+                "parts": [
+                    {"functionCall": {"name": "ha_get_entity_state", "args": {"entity_id": "light.sala"}}}
+                ],
+            },
+            {
+                "role": "user",
+                "parts": [
+                    {"functionResponse": {"name": "default_api:ha_get_entity_state", "response": {"result": {"state": "on"}}}}
+                ],
+            },
+        ]
+        sanitized = sanitize_gemini_contents(contents)
+        self.assertEqual(len(sanitized), 3)
+        self.assertEqual(sanitized[1]["parts"][0]["functionCall"]["name"], "ha_get_entity_state")
+        self.assertEqual(sanitized[2]["parts"][0]["functionResponse"]["name"], "ha_get_entity_state")
+
     def test_factory_creation(self) -> None:
         """Test create_llm_engine factory for all providers."""
         mock_session = MagicMock()
