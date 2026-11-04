@@ -1112,13 +1112,11 @@ class NexusMcpCard extends HTMLElement {
       const copyLabel = isEs ? "Copiar código" : "Copy code";
       const dataCode = encodeURIComponent(cleanCode);
 
-      const isYaml = langLabel === "yaml" || langLabel === "yml";
-      const hasAutomationKeys =
-        cleanCode.includes("trigger:") ||
-        cleanCode.includes("triggers:") ||
-        cleanCode.includes("action:") ||
-        cleanCode.includes("actions:");
-      const isAutomation = isYaml && hasAutomationKeys;
+      const normLang = (langLabel || "").toLowerCase();
+      const isYaml = !normLang || normLang === "yaml" || normLang === "yml" || normLang === "ha" || normLang === "homeassistant";
+      const hasTrigger = cleanCode.includes("trigger:") || cleanCode.includes("triggers:") || cleanCode.includes("platform:");
+      const hasAction = cleanCode.includes("action:") || cleanCode.includes("actions:") || cleanCode.includes("service:");
+      const isAutomation = isYaml && hasTrigger && hasAction;
 
       const installBtnHtml = isAutomation
         ? `<button class="code-save-auto-btn" data-code="${dataCode}" title="${isEs ? "Crear y activar automatización en Home Assistant" : "Create and activate automation in Home Assistant"}">
