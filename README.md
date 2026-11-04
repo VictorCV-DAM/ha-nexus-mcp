@@ -100,13 +100,11 @@ Seamlessly connect free cloud providers or local models with automatic discovery
   <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/06_config_ollama.png" width="31%" align="middle" style="vertical-align: middle;" alt="Ollama Local Setup" />
 </p>
 
-### 🛡️ Autonomous Mode & Hot-Reconfiguration
-Toggle between autonomous execution or interactive confirmation anytime via Settings without restarting Home Assistant:
+### 🛡️ Autonomous Mode & Hot-Reconfiguration (Options Flow)
+Switch AI models, update API credentials, or toggle Autonomous Mode on the fly without restarting Home Assistant anytime via **Settings > Devices & Services > Nexus MCP > Configure (⚙️)**:
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/08_config_mcp_uncheck_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Unchecked" />
-  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/09_config_mcp_check_v2.png" width="31%" align="middle" style="vertical-align: middle;" alt="Autonomous Mode Checked" />
-  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/10_options_reconfigure_v4.png" width="31%" align="middle" style="vertical-align: middle;" alt="Options Flow Reconfigure" />
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/10_options_reconfigure_v4.png" width="55%" align="middle" style="vertical-align: middle;" alt="Options Flow Reconfigure" />
 </p>
 
 ### 💬 Plug & Play Lovelace Card (Visual Card Picker)
