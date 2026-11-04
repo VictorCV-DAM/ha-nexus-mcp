@@ -1,62 +1,31 @@
-"""Unit tests for Nexus MCP built-in tools and automation sanitizer."""
+"""Unit tests for Nexus MCP built-in tools and permission enforcement."""
+import datetime
+import json
 import sys
 import unittest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-if "homeassistant" not in sys.modules:
-    ha_mock = MagicMock()
-    sys.modules["homeassistant"] = ha_mock
-    sys.modules["homeassistant.core"] = ha_mock
+for mod in [
+    "homeassistant",
+    "homeassistant.core",
+    "homeassistant.config_entries",
+    "homeassistant.exceptions",
+    "homeassistant.helpers",
+    "homeassistant.helpers.config_validation",
+    "homeassistant.helpers.aiohttp_client",
+    "homeassistant.helpers.entity_platform",
+    "homeassistant.helpers.intent",
+    "homeassistant.components",
+    "homeassistant.components.conversation",
+    "homeassistant.components.homeassistant",
+    "homeassistant.components.homeassistant.exposed_entities",
+]:
+    if mod not in sys.modules:
+        sys.modules[mod] = MagicMock()
 
-from custom_components.nexus_mcp.tools import sanitize_automation_entry
 
-
-class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
-    """Test Home Assistant automation sanitizer and tools."""
-
-    def test_sanitize_time_pattern_and_domain_action(self) -> None:
-        """Verify malformed pattern and domain actions are normalized."""
-        raw = {
-            "alias": "Reiniciar bombilla izquierda cada 5s",
-            "trigger": [{"pattern": "00:00:05", "trigger": "time_pattern"}],
-            "action": [
-                {
-                    "domain": "button",
-                    "service": "press",
-                    "target": {"entity_id": "button.bulb_rgbcw_6930e7_reiniciar"},
-                }
-            ],
-            "mode": "single",
-        }
-
-        sanitized = sanitize_automation_entry(raw)
-        trg = sanitized["trigger"][0]
-        self.assertEqual(trg["platform"], "time_pattern")
-        self.assertNotIn("pattern", trg)
-        self.assertEqual(trg["seconds"], "/5")
-
-        act = sanitized["action"][0]
-        self.assertNotIn("domain", act)
-        self.assertEqual(act["service"], "button.press")
-        self.assertEqual(
-            act["target"]["entity_id"], "button.bulb_rgbcw_6930e7_reiniciar"
-        )
-
-    def test_sanitize_single_dict_inputs(self) -> None:
-        """Verify single dict inputs for trigger and action are converted to lists."""
-        raw = {
-            "alias": "Test Single Dict",
-            "trigger": {"platform": "time_pattern", "seconds": "5"},
-            "action": {"domain": "light", "service": "turn_on", "entity_id": "light.desk"},
-        }
-
-        sanitized = sanitize_automation_entry(raw)
-        self.assertIsInstance(sanitized["trigger"], list)
-        self.assertEqual(sanitized["trigger"][0]["seconds"], "/5")
-        self.assertIsInstance(sanitized["action"], list)
-        self.assertEqual(sanitized["action"][0]["service"], "light.turn_on")
-        self.assertEqual(sanitized["action"][0]["target"]["entity_id"], "light.desk")
-
+class TestBuiltinTools(unittest.IsolatedAsyncioTestCase):
+    """Test Home Assistant built-in tools, exposed entity filtering, and service calls."""
 
     async def test_ha_search_entities_flexible(self) -> None:
         """Verify ha_search_entities handles plurals, broad queries, and domain summaries."""
@@ -91,10 +60,50 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
         self.assertIn("hint", res_none)
         self.assertIn("light", res_none["hint"])
 
+    async def test_ha_search_entities_respects_exposed_entities(self) -> None:
+        """Verify ha_search_entities filters out entities not exposed to conversation."""
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        mock_hass = MagicMock()
+        state_exposed = MagicMock()
+        state_exposed.entity_id = "light.exposed_light"
+        state_exposed.state = "on"
+        state_exposed.attributes = {"friendly_name": "Exposed Light"}
+
+        state_hidden = MagicMock()
+        state_hidden.entity_id = "light.hidden_light"
+        state_hidden.state = "off"
+        state_hidden.attributes = {"friendly_name": "Hidden Light"}
+
+        mock_hass.states.async_all.return_value = [state_exposed, state_hidden]
+
+        def fake_should_expose(hass, assistant, entity_id):
+            return entity_id == "light.exposed_light"
+
+        with patch("custom_components.nexus_mcp.tools.async_should_expose", side_effect=fake_should_expose):
+            res = await execute_builtin_tool(mock_hass, "ha_search_entities", {"query": "light"})
+            self.assertEqual(res["count"], 1)
+            self.assertEqual(res["results"][0]["entity_id"], "light.exposed_light")
+
+    async def test_ha_get_entity_state_unexposed_entity_denied(self) -> None:
+        """Verify ha_get_entity_state denies access to unexposed entities."""
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        mock_hass = MagicMock()
+        state_hidden = MagicMock()
+        state_hidden.entity_id = "lock.front_door"
+        state_hidden.state = "locked"
+        state_hidden.attributes = {"friendly_name": "Front Door"}
+        mock_hass.states.get.return_value = state_hidden
+
+        with patch("custom_components.nexus_mcp.tools.async_should_expose", return_value=False):
+            res = await execute_builtin_tool(
+                mock_hass, "ha_get_entity_state", {"entity_id": "lock.front_door"}
+            )
+            self.assertIn("not exposed", res["error"])
+
     async def test_ha_get_entity_state_datetime_serialization(self) -> None:
         """Verify ha_get_entity_state serializes datetime and date objects safely."""
-        import datetime
-        import json
         from custom_components.nexus_mcp.tools import execute_builtin_tool
 
         mock_hass = MagicMock()
@@ -110,22 +119,23 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
         }
         mock_hass.states.get.return_value = state_sun
 
-        res = await execute_builtin_tool(
-            mock_hass, "ha_get_entity_state", {"entity_id": "sun.sun"}
-        )
-        self.assertEqual(res["entity_id"], "sun.sun")
-        self.assertEqual(res["attributes"]["next_rising"], "2026-10-15T20:45:00")
+        with patch("custom_components.nexus_mcp.tools.async_should_expose", return_value=True):
+            res = await execute_builtin_tool(
+                mock_hass, "ha_get_entity_state", {"entity_id": "sun.sun"}
+            )
+            self.assertEqual(res["entity_id"], "sun.sun")
+            self.assertEqual(res["attributes"]["next_rising"], "2026-10-15T20:45:00")
 
-        # Must serialize cleanly with standard json.dumps
-        serialized = json.dumps(res)
-        self.assertIn("2026-10-15T20:45:00", serialized)
+            serialized = json.dumps(res)
+            self.assertIn("2026-10-15T20:45:00", serialized)
 
     async def test_ha_call_service_immediate(self) -> None:
-        """Verify ha_call_service executes immediately when delay is 0."""
+        """Verify ha_call_service executes immediately when delay is 0 and passes context."""
         from custom_components.nexus_mcp.tools import execute_builtin_tool
 
         mock_hass = MagicMock()
         mock_hass.services.async_call = AsyncMock()
+        mock_context = MagicMock()
 
         res = await execute_builtin_tool(
             mock_hass,
@@ -136,6 +146,7 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
                 "target": {"entity_id": "light.living_room"},
                 "data": {"rgb_color": [0, 255, 0]},
             },
+            context=mock_context,
         )
         self.assertEqual(res["status"], "success")
         mock_hass.services.async_call.assert_awaited_once_with(
@@ -143,7 +154,34 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
             "turn_on",
             {"entity_id": "light.living_room", "rgb_color": [0, 255, 0]},
             blocking=True,
+            context=mock_context,
         )
+
+    async def test_ha_call_service_admin_protection(self) -> None:
+        """Verify ha_call_service blocks admin services for non-admin users."""
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        mock_hass = MagicMock()
+        mock_hass.services.async_call = AsyncMock()
+
+        non_admin_context = MagicMock()
+        non_admin_context.user_id = "user_123"
+        mock_user = MagicMock()
+        mock_user.is_admin = False
+        mock_hass.auth.async_get_user = AsyncMock(return_value=mock_user)
+
+        res = await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {
+                "domain": "homeassistant",
+                "service": "restart",
+            },
+            context=non_admin_context,
+        )
+        self.assertEqual(res["status"], "error")
+        self.assertIn("requires administrator privileges", res["message"])
+        mock_hass.services.async_call.assert_not_called()
 
     async def test_ha_call_service_with_delay(self) -> None:
         """Verify ha_call_service schedules execution when delay is provided."""
@@ -173,7 +211,6 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
         self.assertIn("scheduled to execute in 5.0 seconds", res["message"])
         self.assertEqual(len(created_tasks), 1)
 
-
     async def test_ha_search_entities_light_switch_fallback_and_ranking(self) -> None:
         """Verify ha_search_entities finds smart plug switches when searching for lights and ranks properly."""
         from custom_components.nexus_mcp.tools import execute_builtin_tool
@@ -196,8 +233,6 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
 
         mock_hass.states.async_all.return_value = [state_bar_light, state_workshop_plug, state_left_bulb]
 
-        # 1. Searching for 'luz del taller' with domain='light' should match switch.luz_taller_enchufe_1
-        # and rank it ABOVE light.barra_de_luz
         res_taller = await execute_builtin_tool(
             mock_hass,
             "ha_search_entities",
@@ -206,7 +241,6 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(res_taller["count"] >= 1)
         self.assertEqual(res_taller["results"][0]["entity_id"], "switch.luz_taller_enchufe_1")
 
-        # 2. Searching for 'bombilla izquierda'
         res_bulb = await execute_builtin_tool(
             mock_hass,
             "ha_search_entities",
@@ -221,7 +255,6 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
         mock_hass = MagicMock()
         mock_hass.services.async_call = AsyncMock()
 
-        # 1. Missing domain with turn_on and target switch.luz_taller_enchufe_1 -> routes to switch or homeassistant
         await execute_builtin_tool(
             mock_hass,
             "ha_call_service",
@@ -232,9 +265,9 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
             "turn_on",
             {"entity_id": "switch.luz_taller_enchufe_1"},
             blocking=True,
+            context=None,
         )
 
-        # 2. Calling domain 'light' on switch.luz_taller_enchufe_1 -> automatically redirects to 'homeassistant'
         await execute_builtin_tool(
             mock_hass,
             "ha_call_service",
@@ -245,9 +278,9 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
             "turn_on",
             {"entity_id": "switch.luz_taller_enchufe_1"},
             blocking=True,
+            context=None,
         )
 
-        # 3. Handling service_data from Ollama local model format
         await execute_builtin_tool(
             mock_hass,
             "ha_call_service",
@@ -261,9 +294,9 @@ class TestToolsSanitizer(unittest.IsolatedAsyncioTestCase):
             "turn_on",
             {"entity_id": "light.bombilla_izquierda", "brightness": 200},
             blocking=True,
+            context=None,
         )
 
 
 if __name__ == "__main__":
     unittest.main()
-

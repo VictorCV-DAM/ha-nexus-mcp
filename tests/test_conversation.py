@@ -280,16 +280,26 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
         ]
         self.assertFalse(_is_user_confirmation(general_history, "sí"))
 
-    async def test_autonomous_mode_disabled_intercepts_automation(self) -> None:
-        """Test that ha_create_automation is intercepted when autonomous mode is OFF and unconfirmed."""
-        from custom_components.nexus_mcp.const import CONF_AUTONOMOUS_MODE
-        from custom_components.nexus_mcp.llm_engine import LlmToolCall
-
+    async def test_automation_request_proposes_yaml_in_markdown(self) -> None:
+        """Test that automations are proposed as YAML code blocks without writing user files."""
         mock_hass = MagicMock()
         mock_entry = MagicMock()
-        mock_entry.entry_id = "test_entry_auto_off"
+        mock_entry.entry_id = "test_entry_yaml_auto"
         mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
-        mock_entry.options = {CONF_AUTONOMOUS_MODE: False}
+        mock_entry.options = {}
+
+        yaml_content = (
+            "```yaml\n"
+            "alias: 'Luz Salón Nocturna'\n"
+            "trigger:\n"
+            "  - platform: time\n"
+            "    at: '23:00:00'\n"
+            "action:\n"
+            "  - service: light.turn_off\n"
+            "    target:\n"
+            "      entity_id: light.salon\n"
+            "```"
+        )
 
         with patch("custom_components.nexus_mcp.conversation.create_llm_engine") as mock_factory, \
              patch("custom_components.nexus_mcp.conversation.execute_builtin_tool") as mock_exec_tool, \
@@ -297,51 +307,34 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
              patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
 
             mock_engine = AsyncMock()
-            # Turn 1: Model tries to call ha_create_automation directly
-            # Turn 2: After seeing intercepted confirmation_required tool result, model asks for confirmation
-            mock_engine.generate_response.side_effect = [
-                LlmResponse(
-                    content=None,
-                    tool_calls=[
-                        LlmToolCall(
-                            call_id="call_auto_1",
-                            name="ha_create_automation",
-                            arguments={"alias": "Luz Salón", "trigger": [], "action": []},
-                        )
-                    ],
-                ),
-                LlmResponse(
-                    content=(
-                        "He preparado la automatización para encender la luz del salón. "
-                        "¿Deseas que proceda a crearla? Responde 'sí' para confirmar."
-                    )
-                ),
-            ]
+            mock_engine.generate_response.return_value = LlmResponse(
+                content=f"Aquí tienes la automatización propuesta:\n\n{yaml_content}\n\nPuedes pegarla en el editor YAML de Home Assistant."
+            )
             mock_factory.return_value = mock_engine
 
             entity = NexusMcpConversationEntity(mock_hass, mock_entry)
 
             user_input = MagicMock()
-            user_input.text = "Crea una automatización para encender la luz del salón"
-            user_input.conversation_id = "conv_interception"
+            user_input.text = "Crea una automatización para apagar la luz del salón a las 23:00"
+            user_input.conversation_id = "conv_yaml_auto"
             user_input.language = "es"
 
             result = await entity.async_process(user_input)
 
-            # execute_builtin_tool must NOT have been called because it was intercepted by guardrail
+            # No tool should be called to write automations.yaml
             mock_exec_tool.assert_not_called()
-            self.assertIn("¿Deseas que proceda a crearla?", result.response.speech_text)
+            self.assertIn("```yaml", result.response.speech_text)
+            self.assertIn("light.turn_off", result.response.speech_text)
 
-    async def test_autonomous_mode_disabled_with_user_confirmation(self) -> None:
-        """Test that ha_create_automation is executed once the user confirms."""
-        from custom_components.nexus_mcp.const import CONF_AUTONOMOUS_MODE
+    async def test_tool_call_passes_user_context(self) -> None:
+        """Test that execute_builtin_tool receives the user_input context for permission enforcement."""
         from custom_components.nexus_mcp.llm_engine import LlmToolCall
 
         mock_hass = MagicMock()
         mock_entry = MagicMock()
-        mock_entry.entry_id = "test_entry_confirmed"
+        mock_entry.entry_id = "test_entry_ctx"
         mock_entry.data = {CONF_LLM_PROVIDER: PROVIDER_GEMINI_FREE, "api_key": "fake"}
-        mock_entry.options = {CONF_AUTONOMOUS_MODE: False}
+        mock_entry.options = {}
 
         with patch("custom_components.nexus_mcp.conversation.create_llm_engine") as mock_factory, \
              patch("custom_components.nexus_mcp.conversation.execute_builtin_tool") as mock_exec_tool, \
@@ -349,54 +342,43 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
              patch("custom_components.nexus_mcp.conversation.ConversationResult", side_effect=FakeConversationResult):
 
             mock_engine = AsyncMock()
-            # Turn 1: Model asks for confirmation
-            mock_engine.generate_response.return_value = LlmResponse(
-                content="¿Deseas que proceda a crear la automatización del salón? Responde 'sí'."
-            )
-            mock_factory.return_value = mock_engine
-            mock_exec_tool.return_value = {"status": "success", "entity_id": "automation.luz_salon"}
-
-            entity = NexusMcpConversationEntity(mock_hass, mock_entry)
-
-            # Turn 1: Initial request
-            user_input_1 = MagicMock()
-            user_input_1.text = "Crea una automatización para el salón"
-            user_input_1.conversation_id = "conv_conf_flow"
-            user_input_1.language = "es"
-            await entity.async_process(user_input_1)
-
-            # Turn 2: User confirms with "Sí, adelante"
             mock_engine.generate_response.side_effect = [
                 LlmResponse(
                     content=None,
                     tool_calls=[
                         LlmToolCall(
-                            call_id="call_auto_2",
-                            name="ha_create_automation",
-                            arguments={"alias": "Luz Salón", "trigger": [], "action": []},
+                            call_id="call_ctx_1",
+                            name="ha_call_service",
+                            arguments={"domain": "light", "service": "turn_on", "target": {"entity_id": "light.desk"}},
                         )
                     ],
                 ),
-                LlmResponse(content="Automatización creada y activada correctamente."),
+                LlmResponse(content="Luz encendida."),
             ]
+            mock_factory.return_value = mock_engine
+            mock_exec_tool.return_value = {"status": "success"}
 
-            user_input_2 = MagicMock()
-            user_input_2.text = "Sí, adelante"
-            user_input_2.conversation_id = "conv_conf_flow"
-            user_input_2.language = "es"
+            entity = NexusMcpConversationEntity(mock_hass, mock_entry)
 
-            result = await entity.async_process(user_input_2)
+            user_input = MagicMock()
+            user_input.text = "Enciende la luz del escritorio"
+            user_input.conversation_id = "conv_ctx"
+            user_input.language = "es"
+            user_input.context = MagicMock()
+            user_input.context.user_id = "test_user_id"
 
-            # Now execute_builtin_tool MUST have been called for ha_create_automation
+            result = await entity.async_process(user_input)
+
             mock_exec_tool.assert_called_once_with(
                 mock_hass,
-                "ha_create_automation",
-                {"alias": "Luz Salón", "trigger": [], "action": []},
+                "ha_call_service",
+                {"domain": "light", "service": "turn_on", "target": {"entity_id": "light.desk"}},
+                context=user_input.context,
             )
-            self.assertIn("Automatización creada", result.response.speech_text)
+            self.assertIn("Luz encendida", result.response.speech_text)
 
-    async def test_autonomous_mode_enabled_executes_immediately(self) -> None:
-        """Test that ha_create_automation executes immediately when autonomous mode is ON."""
+    async def test_autonomous_mode_enabled_executes_service_immediately(self) -> None:
+        """Test that device actions execute immediately when autonomous mode is ON."""
         from custom_components.nexus_mcp.const import CONF_AUTONOMOUS_MODE
         from custom_components.nexus_mcp.llm_engine import LlmToolCall
 
@@ -418,32 +400,33 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
                     tool_calls=[
                         LlmToolCall(
                             call_id="call_auto_direct",
-                            name="ha_create_automation",
-                            arguments={"alias": "Direct Auto", "trigger": [], "action": []},
+                            name="ha_call_service",
+                            arguments={"domain": "switch", "service": "turn_off", "target": {"entity_id": "switch.heater"}},
                         )
                     ],
                 ),
-                LlmResponse(content="Automatización creada directamente."),
+                LlmResponse(content="Calefactor apagado."),
             ]
             mock_factory.return_value = mock_engine
-            mock_exec_tool.return_value = {"status": "success", "entity_id": "automation.direct_auto"}
+            mock_exec_tool.return_value = {"status": "success"}
 
             entity = NexusMcpConversationEntity(mock_hass, mock_entry)
 
             user_input = MagicMock()
-            user_input.text = "Crea una automatización para apagar todo a las 23:00"
+            user_input.text = "Apaga el calefactor"
             user_input.conversation_id = "conv_auto_direct"
             user_input.language = "es"
+            user_input.context = MagicMock()
 
             result = await entity.async_process(user_input)
 
-            # execute_builtin_tool was called immediately without asking
             mock_exec_tool.assert_called_once_with(
                 mock_hass,
-                "ha_create_automation",
-                {"alias": "Direct Auto", "trigger": [], "action": []},
+                "ha_call_service",
+                {"domain": "switch", "service": "turn_off", "target": {"entity_id": "switch.heater"}},
+                context=user_input.context,
             )
-            self.assertIn("Automatización creada directamente", result.response.speech_text)
+            self.assertIn("Calefactor apagado", result.response.speech_text)
 
     async def test_conversation_session_isolation(self) -> None:
         """Test that distinct conversation sessions remain cleanly isolated without cross-session bleeding."""

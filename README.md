@@ -20,7 +20,7 @@
 
 <p align="center">
   <strong>The Ultra-Lightweight Click & Install Agentic Intercom for Home Assistant</strong><br>
-  Connect Home Assistant with cutting-edge AI models (Groq Cloud, Google Gemini, Qwen Cloud, Ollama Local) and the Model Context Protocol (ha-mcp) with native Tool Calling and 100% free tiers.
+  Connect Home Assistant with cutting-edge AI models (Groq Cloud, Google Gemini, Qwen Cloud, Ollama Local) with native Tool Calling, exposed entity security, and 100% free tiers.
 </p>
 
 ---
@@ -55,7 +55,6 @@ Nexus MCP is engineered to be ultra-lightweight, with **zero external Python pac
 | **Home Assistant Core (Python venv)** | `2024.1.0` | Python `3.11` / `3.12+` | ✅ Fully Supported |
 | **HACS (Community Store)** | `1.30.0+` | `v2.0+` | ✅ 1-Click Fast Install |
 | **Voice Assist Pipeline** | Core Assist | Web, Mobile App & ESPHome Satellites | ✅ Fully Supported |
-| **Model Context Protocol (`ha-mcp`)** | Standard SSE / HTTP | `homeassistant-ai/ha-mcp` | ✅ Local Auto-Discovery |
 
 > [!NOTE]
 > Nexus MCP runs entirely on Home Assistant's native event loop using the shared `aiohttp` client session. It does not load heavy local libraries into memory, ensuring zero impact on your Home Assistant startup time, memory footprint, or CPU usage.
@@ -146,13 +145,12 @@ Interact visually with your smart home using vision-capable AI models (e.g. `qwe
 
 * **⚡ Native Home Assistant Voice & Chat (`ConversationEntity`)**:
   Registers seamlessly as an official Home Assistant Assist agent. Talk to your home via web dashboard, mobile app, or ESPHome / Assist voice satellites.
-* **🛠️ Native Tool Calling & Automation Creator**:
-  Equipped with built-in Home Assistant tools:
-  * `ha_search_entities`: Semantic discovery of entities and device IDs.
-  * `ha_get_entity_state`: State and attribute inspection.
-  * `ha_call_service`: Real-time execution of any Home Assistant service (`light.turn_on`, `switch.toggle`, `climate.set_temperature`, etc.).
-  * `ha_create_automation`: Dynamic generation and hot-reload of Home Assistant automations (`automations.yaml`), with automatic schema sanitization for time patterns and service actions.
-  * **🛡️ Autonomous Mode & Interactive Confirmation**: When Autonomous Mode is disabled (default), Nexus MCP will tell you what it understood, describe the exact planned automation (triggers, conditions, actions, entity IDs), and ask for your confirmation before creating it. If Autonomous Mode is enabled, it creates automations immediately without asking.
+* **🛠️ Native Tool Calling & Smart Assistance**:
+  Equipped with built-in Home Assistant tools adhering to Assist exposed entity permissions:
+  * `ha_search_entities`: Semantic discovery of exposed entities and device IDs.
+  * `ha_get_entity_state`: State and attribute inspection for exposed entities.
+  * `ha_call_service`: Real-time execution of Home Assistant services (`light.turn_on`, `switch.toggle`, `climate.set_temperature`, etc.) running with caller user context and permission enforcement.
+  * **YAML Automation Generation**: When requested to create or propose automations, Nexus MCP outputs clean, validated YAML configurations in Markdown code blocks ready to paste directly into Home Assistant's UI Automation Editor.
   * **🔄 Persistent Memory, Continuity & 10 Dedicated Telemetry Sensors**: Conversations are stored on disk via Home Assistant's native storage (`.storage`), ensuring chat history survives restarts and integration reloads. When starting a new session or reopening Assist, Nexus MCP automatically inherits the recent context from your previous conversation so you can seamlessly continue where you left off. Nexus MCP also exposes 10 dedicated sensors (Tokens Used, Requests Remaining, Quota %, TPM/RPM Limits, Window Wait, Rate Limit Cooldown, Conversation History) with ready-to-use formatted Markdown for your Dashboards, plus the `nexus_mcp.clear_history` action. Saying *"Nueva conversación"*, *"Reset"*, or *"Clear history"* instantly resets memory on demand.
 * **🌐 100% Free & Fast Cloud Providers**:
   * **Groq Cloud (Recommended in Europe & Worldwide)**:
@@ -180,8 +178,8 @@ Interact visually with your smart home using vision-capable AI models (e.g. `qwe
 * **⚙️ Full In-App Options Flow**:
   * Update API keys, switch models, adjust endpoints, or toggle autonomous mode anytime via **Settings > Devices & Services > Nexus MCP > Configure (⚙️)** without reinstalling.
   * All configuration screens feature clickable direct links to API key dashboards and model documentation.
-* **🔌 Native MCP Bridge**:
-  * Auto-discovers and connects to [`ha-mcp`](https://github.com/homeassistant-ai/ha-mcp) via Server-Sent Events (SSE) or HTTP.
+* **🔌 Assist Tool Calling & Security**:
+  * Native tool calling adhering strictly to Home Assistant's `async_should_expose` policies and user context security.
 * **🪶 Zero CPU & RAM Overhead**:
   * Built entirely on non-blocking `aiohttp` calls on Home Assistant's event loop. No background threads, no memory leaks.
 
@@ -214,10 +212,9 @@ Interact visually with your smart home using vision-capable AI models (e.g. `qwe
 │   │ NEXUS MCP INTERCOM (Custom Component)                        │     │
 │   │                                                              │     │
 │   │  • Official Conversation Entity (Assist / Voice / Web).      │     │
-│   │  • Built-in Tools: Entity Search, States, Services, Auto.    │     │
-│   │  • Automatic Schema Sanitizer for Automations YAML.          │     │
+│   │  • Built-in Tools: Entity Search, States, Services.          │     │
+│   │  • Security: respects Assist exposed entities & user context.│     │
 │   │  • Exponential Backoff & Auto-Retries on HTTP 429/503.       │     │
-│   │  • Auto-Discovered SSE/HTTP Connection to HA-MCP Server.     │     │
 │   └──────────────────────────────────────────────────────────────┘     │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -264,7 +261,6 @@ When setting up or reconfiguring Nexus MCP, clickable links are provided right i
 * **Groq Cloud**: Get your free key at [Groq Console](https://console.groq.com/keys) and check the [Official Model Catalog](https://console.groq.com/docs/models).
 * **Qwen Cloud**: Get your key at [Alibaba Cloud Model Studio](https://modelstudio.console.alibabacloud.com/).
 * **OpenRouter**: Get your key at [OpenRouter](https://openrouter.ai/keys) (explore [Free Models](https://openrouter.ai/models?max_price=0)).
-* **HA-MCP**: Discover or install the server from [homeassistant-ai/ha-mcp](https://github.com/homeassistant-ai/ha-mcp).
 
 ---
 

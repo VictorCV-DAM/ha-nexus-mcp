@@ -31,15 +31,12 @@ except (ImportError, AttributeError):
 from .const import (
     CONF_AUTONOMOUS_MODE,
     CONF_LLM_PROVIDER,
-    CONF_MCP_SERVER_URL,
     CONF_MODEL,
     DEFAULT_AUTONOMOUS_MODE,
-    DEFAULT_MCP_SERVER_URL,
     DOMAIN,
     PROVIDER_OLLAMA_LOCAL,
     get_model_specs,
 )
-from .discovery import async_autodiscover_ha_mcp_url
 from .llm_engine import ChatMessage, GeminiEngine, LlmAuthError, LlmRateLimitError, create_llm_engine
 from .tools import execute_builtin_tool, get_builtin_tools
 
@@ -473,13 +470,6 @@ class NexusMcpConversationEntity(ConversationEntity):
         # Built-in Home Assistant tools
         self._tools = get_builtin_tools()
 
-        # Resolve MCP Server URL: configured or auto-discovered
-        mcp_url = merged_config.get(CONF_MCP_SERVER_URL)
-        if not mcp_url or mcp_url == DEFAULT_MCP_SERVER_URL:
-            discovered = async_autodiscover_ha_mcp_url(hass)
-            if discovered:
-                mcp_url = discovered
-        self._mcp_url = mcp_url
 
         # Initialize lightweight engine using shared HA aiohttp session
         session = async_get_clientsession(hass)
@@ -500,7 +490,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             "name": f"Nexus MCP ({self._model_name})",
             "manufacturer": "Nexus MCP",
             "model": self._model_name,
-            "sw_version": "1.4.3",
+            "sw_version": "1.5.0",
         }
 
     @property
@@ -761,6 +751,7 @@ class NexusMcpConversationEntity(ConversationEntity):
         image_data: str | None = None,
         conversation_id: str = "default",
         language: str | None = None,
+        context: Any = None,
     ) -> str:
         """Process chat message with optional multimodal image data and enforce user language."""
         if not self._history_loaded:
@@ -875,7 +866,15 @@ class NexusMcpConversationEntity(ConversationEntity):
             )
         )
         confirmation_type = _is_user_confirmation(history, text)
-        is_action_request = bool(ACTION_COMMAND_REGEX.search(text))
+        is_explicit_automation_request = any(
+            w in text.lower()
+            for w in (
+                "automatiza", "automatizacion", "automatización", "automation",
+                "crea una automatización", "crear automatizacion", "crea la regla",
+                "programa una", "schedule",
+            )
+        )
+        is_action_request = bool(ACTION_COMMAND_REGEX.search(text)) and not is_explicit_automation_request
 
         # Check if the user is giving an affirmative continuation (e.g. 'dale', 'vale', 'adelante', 'hazlo', 'procede', 'ok')
         clean_text_lower = text.lower().strip()
@@ -912,7 +911,7 @@ class NexusMcpConversationEntity(ConversationEntity):
         base_system_prompt = (
             f"{model_identity}"
             "You have direct access to tools to search entities (ha_search_entities), read states (ha_get_entity_state), "
-            "control devices (ha_call_service), and create/activate automations (ha_create_automation).\n"
+            "and control devices (ha_call_service).\n"
             "CRITICAL DEVICE CONTROL MANDATE (PHYSICAL HARDWARE EXECUTION):\n"
             "- You CANNOT control physical hardware with text or words alone. The ONLY way devices turn on/off or change color in the real world is by invoking `ha_call_service` in a tool call.\n"
             "- ALWAYS prioritize immediate execution using `ha_call_service` when the user asks to turn on/off, toggle, "
@@ -931,13 +930,12 @@ class NexusMcpConversationEntity(ConversationEntity):
             "  In Home Assistant, lights are frequently controlled via smart plugs or relays in the 'switch' domain (e.g. `switch.luz_taller_enchufe_1`). When searching for or controlling lights or lamps, if an entity is not found under `light`, check the `switch` domain as well. `ha_call_service` with service 'turn_on' works seamlessly for both switches and lights.\n"
             "- Direct commands (`ha_call_service`), searching (`ha_search_entities`), and reading states (`ha_get_entity_state`) "
             "NEVER require confirmation and MUST be executed immediately without asking!\n"
-            "- NEVER call `ha_create_automation` unless the user explicitly requests a persistent or recurring automation "
-            "(e.g., using words like 'crea una automatización', 'automatiza', 'todos los días a las...', or 'cuando ocurra X haz Y').\n"
-            "Rules for creating automations with ha_create_automation (ONLY when explicitly requested):\n"
-            "1. In 'trigger', for time intervals use: [{'platform': 'time_pattern', 'seconds': '/5'}]. Never use 'pattern'.\n"
-            "2. In 'action', call services using: [{'service': 'domain.service_name', 'target': {'entity_id': '...'}}]. Never use 'domain' as a separate key.\n"
-            "3. Tool argument formatting: You must provide strictly valid JSON in all tool arguments. Never include unescaped characters, backticks, conversational filler, or malformed tags inside tool calls.\n"
-            "4. Code & YAML formatting: Whenever you provide YAML configurations, Lovelace card configs, scripts, automations, templates, or code, you MUST always enclose them in Markdown code blocks with the language tag (e.g. ```yaml ... ```, ```json ... ```, or ```python ... ```). Never output bare code or bare YAML without code blocks.\n"
+            "- CREATING AUTOMATIONS:\n"
+            "  When the user asks to create or write an automation (e.g., 'crea una automatización', 'automatiza', 'todos los días a las...', 'cuando ocurra X haz Y'):\n"
+            "  You MUST return the complete proposed automation inside a Markdown YAML code block (```yaml ... ```) "
+            "  with id, alias, trigger, condition (if any), and action, so the user can easily copy and paste it into the Home Assistant UI automation editor.\n"
+            "- YAML & CODE FORMATTING MANDATE:\n"
+            "  Whenever you provide YAML configurations, Lovelace card configs, scripts, automations, templates, or code, you MUST always enclose them in Markdown code blocks with the language tag (e.g. ```yaml ... ```, ```json ... ```, or ```python ... ```). Never output bare code or bare YAML without code blocks.\n"
         )
 
         if self._provider == PROVIDER_OLLAMA_LOCAL:
@@ -952,41 +950,22 @@ class NexusMcpConversationEntity(ConversationEntity):
         if autonomous_mode:
             autonomy_prompt = (
                 "AUTONOMOUS MODE: ENABLED.\n"
-                "You have full permission to execute actions and create automations directly without asking for confirmation. "
-                "Execute the requested service or create the automation directly using your tools."
-            )
-        elif user_confirmed_automation:
-            autonomy_prompt = (
-                "AUTONOMOUS MODE: DISABLED, BUT USER HAS CONFIRMED AUTOMATION.\n"
-                "The user has explicitly confirmed the creation of the proposed automation. "
-                "You MUST now proceed to create the automation using the ha_create_automation tool directly. "
-                "Once created, inform the user that it has been successfully created and activated."
+                "You have full permission to execute device actions directly without asking for confirmation. "
+                "Execute the requested service directly using your tools."
             )
         elif user_confirmed_action:
             autonomy_prompt = (
                 "AUTONOMOUS MODE: DISABLED, BUT USER HAS CONFIRMED DEVICE ACTION.\n"
                 "The user has confirmed your previous question to control physical devices. "
-                "You MUST now execute the requested action IMMEDIATELY using the ha_call_service tool directly. "
-                "DO NOT call ha_create_automation. Control the devices requested using ha_call_service now."
+                "You MUST now execute the requested action IMMEDIATELY using the ha_call_service tool directly."
             )
         else:
-            confirm_example = (
-                "¿Deseas que proceda a crear esta automatización? Responde 'sí' para confirmar."
-                if is_spanish
-                else "Would you like me to proceed with creating this automation? Reply 'yes' to confirm (in user's language)."
-            )
             autonomy_prompt = (
-                "CONFIRMATION POLICY FOR AUTOMATIONS:\n"
+                "CONFIRMATION POLICY:\n"
                 "- Device control (`ha_call_service`), searching (`ha_search_entities`), and reading states (`ha_get_entity_state`) "
                 "NEVER require confirmation and MUST be executed immediately without asking!\n"
-                "- Confirmation is ONLY required when the user explicitly asked to create a persistent automation with `ha_create_automation`.\n"
-                "- If the user asks to create an automation:\n"
-                "  1. If needed, use ha_search_entities or ha_get_entity_state to find the correct entity IDs.\n"
-                "  2. Describe the exact automation you plan to create (trigger, condition, action, entity IDs).\n"
-                "  3. Ask the user for explicit confirmation (for example: '{confirm_example}').\n"
-                "  4. DO NOT call ha_create_automation until the user confirms in the next turn."
+                "- When the user asks to create an automation, provide the full YAML definition in a markdown code block so they can add it via the UI."
             )
-
         system_prompt = f"{lang_prompt}\n\n{base_system_prompt}\n\n{autonomy_prompt}\n\n{lang_prompt}"
 
         assistant_reply = "OK."
@@ -1039,56 +1018,9 @@ class NexusMcpConversationEntity(ConversationEntity):
 
                     # Execute each requested tool
                     for tc in response.tool_calls:
-                        if (
-                            tc.name == "ha_create_automation"
-                            and not autonomous_mode
-                            and not user_confirmed_automation
-                        ):
-                            _LOGGER.info(
-                                "Intercepted ha_create_automation: Autonomous Mode is OFF and user has not confirmed yet."
-                            )
-                            is_explicit_automation_request = any(
-                                w in text.lower()
-                                for w in (
-                                    "automatiza", "automatizacion", "automatización", "automation",
-                                    "crea una automatización", "crear automatizacion", "crea la regla",
-                                    "programa una", "schedule", "todos los días a las", "todas las mañanas",
-                                )
-                            )
-                            if not is_explicit_automation_request:
-                                intercept_err = (
-                                    "El usuario NO ha pedido crear una automatización persistente, sino controlar dispositivos directamente. "
-                                    "NO utilices ha_create_automation. Ejecuta la acción inmediatamente usando ha_call_service "
-                                    "(puedes usar el parámetro 'delay' en segundos si hay esperas temporales, por ejemplo delay: 5 para apagar tras 5s)."
-                                    if is_spanish
-                                    else (
-                                        "The user did NOT request to create a persistent automation; they asked for direct device control. "
-                                        "DO NOT use ha_create_automation. Execute the action immediately using ha_call_service "
-                                        "(use the 'delay' parameter in seconds for timed waits, e.g. delay: 5 to turn off after 5s)."
-                                    )
-                                )
-                            else:
-                                intercept_err = (
-                                    "El modo autónomo está desactivado. No debes crear la automatización todavía. "
-                                    "Explica al usuario lo que has entendido, describe la automatización exacta (disparador, condición, acción, entidades) "
-                                    "y pide explícitamente su confirmación (por ejemplo: '¿Deseas que proceda a crear esta automatización? Responde \"sí\" para confirmar.'). "
-                                    "NO vuelvas a llamar a ha_create_automation hasta que el usuario confirme en el siguiente turno."
-                                    if is_spanish
-                                    else (
-                                        "Autonomous Mode is disabled. You must NOT create the automation yet. "
-                                        "Tell the user what you understood, describe the exact automation (trigger, condition, action, entities), "
-                                        "and explicitly ask for their confirmation (e.g. 'Would you like me to proceed with creating this automation? Reply \"yes\" to confirm.'). "
-                                        "DO NOT call ha_create_automation again until the user confirms in the next turn."
-                                    )
-                                )
-                            tool_result = {
-                                "status": "confirmation_required",
-                                "error": intercept_err,
-                            }
-                        else:
-                            tool_result = await execute_builtin_tool(
-                                self.hass, tc.name, tc.arguments
-                            )
+                        tool_result = await execute_builtin_tool(
+                            self.hass, tc.name, tc.arguments, context=user_input.context
+                        )
 
                         history.append(
                             ChatMessage(
@@ -1151,7 +1083,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                     if extracted_terms and self.hass:
                         for term in extracted_terms:
                             try:
-                                s_res = await execute_builtin_tool(self.hass, "ha_search_entities", {"query": term})
+                                s_res = await execute_builtin_tool(self.hass, "ha_search_entities", {"query": term}, context=user_input.context)
                                 matches = s_res.get("results") or s_res.get("matches") or []
                                 if matches:
                                     for m in matches[:3]:

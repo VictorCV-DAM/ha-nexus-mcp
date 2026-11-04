@@ -114,7 +114,6 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
             CONF_API_KEY: "gsk_test123",
             CONF_MODEL: "qwen/qwen3.8-27b",
             CONF_BASE_URL: "https://api.groq.com/openai/v1",
-            CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
             CONF_AUTONOMOUS_MODE: False,
         }
         mock_entry.options = {}
@@ -131,7 +130,6 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
         self.assertIn("groq_models_url", placeholders)
         self.assertIn("qwen_api_url", placeholders)
         self.assertIn("openrouter_api_url", placeholders)
-        self.assertIn("ha_mcp_repo_url", placeholders)
 
     async def test_step_groq_has_models_link(self) -> None:
         """Verify step_groq provides links to Groq console and official models catalog."""
@@ -146,21 +144,16 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
         self.assertIn("groq_models_url", placeholders)
         self.assertEqual(placeholders["groq_models_url"], "https://console.groq.com/docs/models")
 
-    async def test_step_mcp_server_creates_entry_with_model_in_title(self) -> None:
-        """Verify async_step_mcp_server sets model in entry title."""
+    async def test_step_groq_creates_entry_with_model_in_title(self) -> None:
+        """Verify async_step_groq creates entry directly with model in entry title."""
         flow = NexusMcpConfigFlow()
         flow.hass = MagicMock()
         flow._provider = PROVIDER_GROQ_FREE
-        flow._llm_data = {
-            CONF_LLM_PROVIDER: PROVIDER_GROQ_FREE,
-            CONF_API_KEY: "gsk_test",
-            CONF_MODEL: "llama-3.3-70b-versatile",
-        }
-        result = await flow.async_step_mcp_server(
-            {CONF_MCP_SERVER_URL: "http://127.0.0.1:9584", CONF_AUTONOMOUS_MODE: False}
+        result = await flow.async_step_groq(
+            {CONF_API_KEY: "gsk_test", CONF_MODEL: "openai/gpt-oss-120b"}
         )
         self.assertEqual(result["type"], "create_entry")
-        self.assertEqual(result["title"], "Nexus MCP (llama-3.3-70b-versatile)")
+        self.assertEqual(result["title"], "Nexus MCP (openai/gpt-oss-120b)")
 
     async def test_options_flow_updates_entry_title_on_model_change(self) -> None:
         """Verify OptionsFlow updates the entry title when model is modified."""
@@ -171,7 +164,6 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
             CONF_API_KEY: "gsk_test",
             CONF_MODEL: "old-model",
             CONF_BASE_URL: "https://api.groq.com/openai/v1",
-            CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
             CONF_AUTONOMOUS_MODE: False,
         }
         mock_entry.options = {}
@@ -182,7 +174,6 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
         await options_flow.async_step_init(
             {
                 CONF_MODEL: "openai/gpt-oss-120b",
-                CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
                 CONF_AUTONOMOUS_MODE: True,
             }
         )
@@ -199,7 +190,6 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
             CONF_API_KEY: "gsk_test",
             CONF_MODEL: "openai/gpt-oss-120b",
             CONF_BASE_URL: "https://api.groq.com/openai/v1",
-            CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
             CONF_AUTONOMOUS_MODE: False,
         }
         mock_entry.options = {CONF_AUTONOMOUS_MODE: False}
@@ -210,7 +200,6 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
         result = await options_flow.async_step_init(
             {
                 CONF_MODEL: "openai/gpt-oss-120b",
-                CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
                 CONF_AUTONOMOUS_MODE: True,
             }
         )
@@ -231,28 +220,7 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.1)
         mock_hass.config_entries.async_reload.assert_called_once_with("test_entry_reload_id")
 
-    async def test_reconfigure_flow_success(self) -> None:
-        """Verify reconfigure flow finishes using async_update_reload_and_abort."""
-        flow = NexusMcpConfigFlow()
-        flow.hass = MagicMock()
-        flow.source = "reconfigure"
-        mock_reconfigure_entry = MagicMock()
-        mock_reconfigure_entry.entry_id = "reconfig_123"
-        flow._get_reconfigure_entry = MagicMock(return_value=mock_reconfigure_entry)
-        flow.async_update_reload_and_abort = MagicMock(return_value={"type": "abort", "reason": "reconfigure_successful"})
 
-        flow._provider = "ollama_local"
-        flow._llm_data = {
-            CONF_LLM_PROVIDER: "ollama_local",
-            CONF_MODEL: "qwen2.5-coder:7b",
-            CONF_BASE_URL: "http://localhost:11434/v1",
-        }
-
-        result = await flow.async_step_mcp_server(
-            {CONF_MCP_SERVER_URL: "http://127.0.0.1:9584", CONF_AUTONOMOUS_MODE: False}
-        )
-        flow.async_update_reload_and_abort.assert_called_once()
-        self.assertEqual(result["type"], "abort")
 
     async def test_options_flow_ollama_local_modification(self) -> None:
         """Verify OptionsFlow for Ollama local updates model and base_url cleanly."""
@@ -262,7 +230,6 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
             CONF_LLM_PROVIDER: "ollama_local",
             CONF_MODEL: "gemma-4-E4B",
             CONF_BASE_URL: "http://localhost:11434/v1",
-            CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
             CONF_AUTONOMOUS_MODE: False,
         }
         mock_entry.options = {}
@@ -275,7 +242,6 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
                 CONF_LLM_PROVIDER: "ollama_local",
                 CONF_MODEL: "qwen2.5-coder:7b",
                 CONF_BASE_URL: "http://192.168.1.100:11434/v1",
-                CONF_MCP_SERVER_URL: "http://127.0.0.1:9584",
                 CONF_AUTONOMOUS_MODE: True,
             }
         )

@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.4.3)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.5.0)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -12,6 +12,16 @@ if (!window.customCards.some((c) => c.type === "nexus-mcp-card")) {
     preview: true,
     documentationURL: "https://github.com/VictorCV-DAM/ha-nexus-mcp",
   });
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 class NexusMcpCard extends HTMLElement {
@@ -1020,7 +1030,7 @@ class NexusMcpCard extends HTMLElement {
       const isSelected = ag.id === this._selectedAgent ? "selected" : "";
       const hasVision = this._agentHasVision(ag.id);
       const prefix = hasVision ? "👁️ " : "";
-      html += `<option value="${ag.id}" ${isSelected}>${prefix}${ag.name}</option>`;
+      html += `<option value="${escapeHtml(ag.id)}" ${isSelected}>${prefix}${escapeHtml(ag.name)}</option>`;
     }
     select.innerHTML = html;
   }
@@ -1106,7 +1116,7 @@ class NexusMcpCard extends HTMLElement {
     let html = "";
     this._messages.forEach((msg, idx) => {
       const isUser = msg.role === "user";
-      const label = isUser ? (isEs ? "🧑 Tú" : "🧑 You") : "🤖 " + (msg.agent_name || (isEs ? "IA" : "AI"));
+      const label = isUser ? (isEs ? "🧑 Tú" : "🧑 You") : "🤖 " + escapeHtml(msg.agent_name || (isEs ? "IA" : "AI"));
       const formattedContent = this._formatContent(msg.content || "");
       const imageHtml = msg.image
         ? `<img class="bubble-image" src="${msg.image}" alt="${isEs ? "Imagen adjunta" : "Attached image"}" />`
@@ -1236,7 +1246,7 @@ class NexusMcpCard extends HTMLElement {
       waitingBubble.className = "message-bubble assistant waiting-bubble";
       waitingBubble.innerHTML = `
         <div class="bubble-header">
-          <div class="bubble-label">🤖 ${agentName}</div>
+          <div class="bubble-label">🤖 ${escapeHtml(agentName)}</div>
         </div>
         <div class="bubble-content" style="font-style: italic; opacity: 0.7;">${imageToSend ? "Analizando imagen y pensando..." : "Pensando..."}</div>
       `;
@@ -1472,7 +1482,7 @@ class NexusMcpCardEditor extends HTMLElement {
     let optionsHtml = `<option value="">${autoLabel}</option>`;
     for (const ag of agents) {
       const isSel = this._config?.agent_id === ag.id ? "selected" : "";
-      optionsHtml += `<option value="${ag.id}" ${isSel}>${ag.name}</option>`;
+      optionsHtml += `<option value="${escapeHtml(ag.id)}" ${isSel}>${escapeHtml(ag.name)}</option>`;
     }
 
     const titleLabel = isEs ? "Título de la tarjeta" : "Card Title";
@@ -1491,7 +1501,7 @@ class NexusMcpCardEditor extends HTMLElement {
           <input
             type="text"
             id="cfg-title"
-            value="${(this._config && this._config.title) || "Nexus MCP Intercom"}"
+            value="${escapeHtml((this._config && this._config.title) || "Nexus MCP Intercom")}"
             style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, inherit); color: var(--primary-text-color, inherit);"
           />
         </label>
@@ -1571,7 +1581,7 @@ class NexusMcpCardEditor extends HTMLElement {
     let optionsHtml = `<option value="">${autoLabel}</option>`;
     for (const ag of agents) {
       const isSel = currentVal === ag.id ? "selected" : "";
-      optionsHtml += `<option value="${ag.id}" ${isSel}>${ag.name}</option>`;
+      optionsHtml += `<option value="${escapeHtml(ag.id)}" ${isSel}>${escapeHtml(ag.name)}</option>`;
     }
     agentSelect.innerHTML = optionsHtml;
     agentSelect.value = currentVal;
@@ -1581,7 +1591,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.4.3 Ready ",
+  "%c NEXUS MCP CARD %c v1.5.0 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );

@@ -1,16 +1,19 @@
 """Built-in Home Assistant tools for Nexus MCP.
 
-Allows the AI model to search entities, read states, execute services,
-and create automations directly in Home Assistant.
+Allows the AI model to search entities, read states, and execute services
+securely within Home Assistant following Assist exposed entity settings.
 """
 import datetime
 import logging
-import os
-import time
 from typing import Any
-import yaml
 
 from homeassistant.core import HomeAssistant
+
+try:
+    from homeassistant.components.homeassistant.exposed_entities import async_should_expose
+except ImportError:
+    def async_should_expose(hass: HomeAssistant, assistant: str, entity_id: str) -> bool:
+        return True
 
 from .mcp_client import McpTool
 
@@ -95,135 +98,14 @@ def get_builtin_tools() -> list[McpTool]:
                 "required": ["service"],
             },
         ),
-        McpTool(
-            name="ha_create_automation",
-            description="Create and immediately activate a new automation in Home Assistant. Saves directly to automations.yaml and reloads the automation engine.",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "alias": {
-                        "type": "string",
-                        "description": "Descriptive title for the automation.",
-                    },
-                    "description": {
-                        "type": "string",
-                        "description": "Optional description of what the automation does.",
-                    },
-                    "trigger": {
-                        "type": "array",
-                        "description": "List of triggers (e.g. time_pattern, state changes, numeric_state).",
-                        "items": {"type": "object"},
-                    },
-                    "condition": {
-                        "type": "array",
-                        "description": "Optional list of conditions that must be met.",
-                        "items": {"type": "object"},
-                    },
-                    "action": {
-                        "type": "array",
-                        "description": "List of actions to execute when triggered.",
-                        "items": {"type": "object"},
-                    },
-                    "mode": {
-                        "type": "string",
-                        "description": "Execution mode: 'single', 'restart', 'queued', or 'parallel'. Default is 'single'.",
-                    },
-                },
-                "required": ["alias", "trigger", "action"],
-            },
-        ),
     ]
 
 
-def sanitize_automation_entry(entry: dict[str, Any]) -> dict[str, Any]:
-    """Sanitize and normalize triggers and actions into valid Home Assistant syntax."""
-    # Ensure triggers is a list
-    raw_triggers = entry.get("trigger", [])
-    if isinstance(raw_triggers, dict):
-        raw_triggers = [raw_triggers]
-
-    sanitized_triggers = []
-    for trg in raw_triggers:
-        if not isinstance(trg, dict):
-            continue
-        t = dict(trg)
-
-        # Handle time_pattern triggers
-        is_time_pattern = (
-            t.get("trigger") == "time_pattern"
-            or t.get("platform") == "time_pattern"
-            or "pattern" in t
-            or "seconds" in t
-            or "minutes" in t
-            or "hours" in t
-        )
-        if is_time_pattern:
-            t["platform"] = "time_pattern"
-            t.pop("trigger", None)
-
-            # Fix 'pattern: 00:00:05' -> seconds: '/5'
-            if "pattern" in t:
-                pat = str(t.pop("pattern")).strip()
-                if ":" in pat:
-                    parts = [p.strip() for p in pat.split(":")]
-                    secs = parts[-1].lstrip("0") or "5"
-                    t["seconds"] = f"/{secs}"
-                else:
-                    t["seconds"] = f"/{pat}" if pat.isdigit() else pat
-
-            # Fix 'seconds: 5' where interval is intended
-            if "seconds" in t:
-                s = str(t["seconds"]).strip()
-                if s.isdigit():
-                    t["seconds"] = f"/{s}"
-
-        sanitized_triggers.append(t)
-    entry["trigger"] = sanitized_triggers
-
-    # Ensure actions is a list
-    raw_actions = entry.get("action", [])
-    if isinstance(raw_actions, dict):
-        raw_actions = [raw_actions]
-
-    sanitized_actions = []
-    for act in raw_actions:
-        if not isinstance(act, dict):
-            continue
-        a = dict(act)
-
-        # Fix domain: button, service: press -> service: button.press
-        if "domain" in a and "service" in a:
-            domain = str(a.pop("domain")).strip()
-            srv = str(a.get("service")).strip()
-            if "." not in srv:
-                a["service"] = f"{domain}.{srv}"
-
-        # If 'action' is used instead of 'service' or vice versa, ensure valid format
-        if "action" in a and "domain" in a:
-            domain = str(a.pop("domain")).strip()
-            act_name = str(a.get("action")).strip()
-            if "." not in act_name:
-                a["action"] = f"{domain}.{act_name}"
-
-        # Normalize target / entity_id
-        if "entity_id" in a and "target" not in a:
-            eid = a.pop("entity_id")
-            a["target"] = {"entity_id": eid}
-
-        sanitized_actions.append(a)
-    entry["action"] = sanitized_actions
-
-    # Ensure condition is a list
-    raw_conditions = entry.get("condition", [])
-    if isinstance(raw_conditions, dict):
-        raw_conditions = [raw_conditions]
-    entry["condition"] = raw_conditions
-
-    return entry
-
-
 async def execute_builtin_tool(
-    hass: HomeAssistant, name: str, arguments: dict[str, Any]
+    hass: HomeAssistant,
+    name: str,
+    arguments: dict[str, Any],
+    context: Any = None,
 ) -> dict[str, Any]:
     """Execute a built-in Home Assistant tool."""
     _LOGGER.info("Executing built-in HA tool '%s' with arguments: %s", name, arguments)
@@ -233,7 +115,10 @@ async def execute_builtin_tool(
         query = (arguments.get("query") or arguments.get("q") or "").lower().strip()
         domain_filter = (arguments.get("domain") or "").lower().strip()
 
-        all_states = list(hass.states.async_all())
+        all_states = [
+            s for s in hass.states.async_all()
+            if async_should_expose(hass, "conversation", s.entity_id)
+        ]
         total_count = len(all_states)
 
         # Count domains to provide helpful feedback to the LLM
@@ -399,6 +284,9 @@ async def execute_builtin_tool(
 
     if name == "ha_get_entity_state":
         entity_id = arguments.get("entity_id", "")
+        if not async_should_expose(hass, "conversation", entity_id):
+            return {"error": f"Entity '{entity_id}' is not exposed to Assist/Conversation."}
+
         state = hass.states.get(entity_id)
         if not state:
             return {"error": f"Entity '{entity_id}' not found in Home Assistant."}
@@ -472,6 +360,30 @@ async def execute_builtin_tool(
         if domain == "light" and first_target_domain == "switch":
             domain = "homeassistant"
 
+        # Check that target entities are exposed to conversation
+        for eid in target_eids:
+            if not async_should_expose(hass, "conversation", eid):
+                return {"error": f"Entity '{eid}' is not exposed to Assist/Conversation."}
+
+        # Guard administrative/destructive services to require admin privileges
+        ADMIN_ONLY_SERVICES = {
+            ("homeassistant", "restart"),
+            ("homeassistant", "stop"),
+            ("homeassistant", "reload_all"),
+            ("homeassistant", "save_persistent_states"),
+        }
+        if (domain, service) in ADMIN_ONLY_SERVICES or domain in ("hassio", "config"):
+            is_admin = False
+            if context and getattr(context, "user_id", None):
+                try:
+                    user = await hass.auth.async_get_user(context.user_id)
+                    if user and user.is_admin:
+                        is_admin = True
+                except Exception:
+                    pass
+            if not is_admin:
+                return {"status": "error", "message": f"Service '{domain}.{service}' requires administrator privileges."}
+
         try:
             delay = float(arguments.get("delay") or data.get("delay") or 0.0)
         except (ValueError, TypeError):
@@ -491,7 +403,7 @@ async def execute_builtin_tool(
                     try:
                         await asyncio.sleep(delay)
                         await hass.services.async_call(
-                            domain, service, call_data, blocking=False
+                            domain, service, call_data, blocking=False, context=context
                         )
                     except Exception as ex:
                         _LOGGER.error("Delayed service execution failed (%s.%s): %s", domain, service, ex)
@@ -504,7 +416,7 @@ async def execute_builtin_tool(
                 }
 
             await hass.services.async_call(
-                domain, service, call_data, blocking=True
+                domain, service, call_data, blocking=True, context=context
             )
             return {
                 "status": "success",
@@ -513,69 +425,5 @@ async def execute_builtin_tool(
         except Exception as err:
             _LOGGER.error("Error executing service %s.%s: %s", domain, service, err)
             return {"status": "error", "message": str(err)}
-
-    if name == "ha_create_automation":
-        alias = arguments.get("alias", "New Automation")
-        description = arguments.get("description", "")
-        trigger = arguments.get("trigger", [])
-        condition = arguments.get("condition", [])
-        action = arguments.get("action", [])
-        mode = arguments.get("mode", "single")
-
-        auto_id = str(int(time.time() * 1000))
-        raw_entry = {
-            "id": auto_id,
-            "alias": alias,
-            "description": description,
-            "trigger": trigger,
-            "condition": condition,
-            "action": action,
-            "mode": mode,
-        }
-        automation_entry = sanitize_automation_entry(raw_entry)
-
-        automations_path = hass.config.path("automations.yaml")
-
-        def _save_automation() -> None:
-            existing = []
-            if os.path.exists(automations_path):
-                with open(automations_path, "r", encoding="utf-8") as f:
-                    try:
-                        content = yaml.safe_load(f)
-                        if isinstance(content, list):
-                            existing = content
-                    except Exception as parse_err:
-                        _LOGGER.warning("Could not parse automations.yaml: %s", parse_err)
-                        existing = []
-
-            existing.append(automation_entry)
-
-            with open(automations_path, "w", encoding="utf-8") as f:
-                yaml.dump(
-                    existing,
-                    f,
-                    allow_unicode=True,
-                    sort_keys=False,
-                    default_flow_style=False,
-                )
-
-        # Write to file in executor thread to avoid blocking event loop
-        await hass.async_add_executor_job(_save_automation)
-
-        # Reload Home Assistant automations
-        try:
-            await hass.services.async_call("automation", "reload", blocking=True)
-            return {
-                "status": "success",
-                "automation_id": auto_id,
-                "alias": alias,
-                "message": f"Automation '{alias}' created and activated successfully in Home Assistant.",
-            }
-        except Exception as err:
-            _LOGGER.error("Failed to reload automations after save: %s", err)
-            return {
-                "status": "warning",
-                "message": f"Automation saved but failed to reload: {err}",
-            }
 
     return {"error": f"Unknown tool '{name}'."}

@@ -21,7 +21,6 @@ from .const import (
     CONF_API_KEY,
     CONF_MODEL,
     CONF_BASE_URL,
-    CONF_MCP_SERVER_URL,
     CONF_AUTONOMOUS_MODE,
     DEFAULT_GEMINI_MODEL,
     DEFAULT_GROQ_URL,
@@ -30,10 +29,8 @@ from .const import (
     DEFAULT_QWEN_MODEL,
     DEFAULT_OLLAMA_URL,
     DEFAULT_OLLAMA_MODEL,
-    DEFAULT_MCP_SERVER_URL,
     DEFAULT_AUTONOMOUS_MODE,
 )
-from .discovery import async_autodiscover_ha_mcp_url
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +44,17 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize the flow."""
         self._provider: str | None = None
         self._llm_data: dict[str, Any] = {}
+
+    def _create_nexus_entry(self) -> FlowResult:
+        """Create entry with configured LLM data."""
+        config_data = {
+            **self._llm_data,
+            CONF_AUTONOMOUS_MODE: DEFAULT_AUTONOMOUS_MODE,
+        }
+        model_name = config_data.get(CONF_MODEL) or self._provider
+        return self.async_create_entry(
+            title=f"Nexus MCP ({model_name})", data=config_data
+        )
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -94,12 +102,6 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-    async def async_step_reconfigure(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle reconfiguring an existing Nexus MCP entry."""
-        return await self.async_step_user()
-
     async def async_step_gemini(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -112,7 +114,7 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_API_KEY: user_input[CONF_API_KEY].strip(),
                 CONF_MODEL: user_input.get(CONF_MODEL, DEFAULT_GEMINI_MODEL).strip(),
             }
-            return await self.async_step_mcp_server()
+            return self._create_nexus_entry()
 
         schema = vol.Schema(
             {
@@ -153,7 +155,7 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_API_KEY: user_input[CONF_API_KEY].strip(),
                 CONF_MODEL: raw_model,
             }
-            return await self.async_step_mcp_server()
+            return self._create_nexus_entry()
 
         schema = vol.Schema(
             {
@@ -186,7 +188,7 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_API_KEY: user_input[CONF_API_KEY].strip(),
                 CONF_MODEL: user_input[CONF_MODEL].strip(),
             }
-            return await self.async_step_mcp_server()
+            return self._create_nexus_entry()
 
         schema = vol.Schema(
             {
@@ -217,7 +219,7 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_BASE_URL: user_input[CONF_BASE_URL],
                 CONF_MODEL: user_input[CONF_MODEL],
             }
-            return await self.async_step_mcp_server()
+            return self._create_nexus_entry()
 
         schema = vol.Schema(
             {
@@ -243,7 +245,7 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_API_KEY: user_input[CONF_API_KEY],
                 CONF_MODEL: user_input[CONF_MODEL],
             }
-            return await self.async_step_mcp_server()
+            return self._create_nexus_entry()
 
         schema = vol.Schema(
             {
@@ -261,70 +263,6 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "openrouter_api_url": "https://openrouter.ai/keys",
                 "openai_api_url": "https://platform.openai.com/api-keys",
                 "deepseek_api_url": "https://platform.deepseek.com/api_keys",
-            },
-        )
-
-    async def async_step_mcp_server(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Final step: Configure connection to ha-mcp server and autonomy."""
-        errors: dict[str, str] = {}
-
-        # Auto-discover HA-MCP Server URL if ha_mcp_tools is installed
-        detected_url = async_autodiscover_ha_mcp_url(self.hass)
-        default_url = detected_url or DEFAULT_MCP_SERVER_URL
-
-        if user_input is not None:
-            config_data = {
-                **self._llm_data,
-                CONF_MCP_SERVER_URL: user_input[CONF_MCP_SERVER_URL].strip(),
-                CONF_AUTONOMOUS_MODE: user_input[CONF_AUTONOMOUS_MODE],
-            }
-            model_name = config_data.get(CONF_MODEL) or self._provider
-            new_title = f"Nexus MCP ({model_name})"
-
-            is_reconfigure = (
-                getattr(self, "source", None) in (getattr(config_entries, "SOURCE_RECONFIGURE", "reconfigure"), "reconfigure")
-                or (isinstance(getattr(self, "context", None), dict) and self.context.get("source") in (getattr(config_entries, "SOURCE_RECONFIGURE", "reconfigure"), "reconfigure"))
-            )
-            if is_reconfigure:
-                reconfigure_entry = (
-                    self._get_reconfigure_entry()
-                    if hasattr(self, "_get_reconfigure_entry")
-                    else self.hass.config_entries.async_get_entry(self.context.get("entry_id"))
-                )
-                if hasattr(self, "async_update_reload_and_abort"):
-                    return self.async_update_reload_and_abort(
-                        reconfigure_entry,
-                        title=new_title,
-                        data=config_data,
-                    )
-                self.hass.config_entries.async_update_entry(
-                    reconfigure_entry, title=new_title, data=config_data
-                )
-                return self.async_abort(reason="reconfigure_successful")
-
-            return self.async_create_entry(
-                title=new_title, data=config_data
-            )
-
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_MCP_SERVER_URL, default=default_url
-                ): str,
-                vol.Required(
-                    CONF_AUTONOMOUS_MODE, default=DEFAULT_AUTONOMOUS_MODE
-                ): bool,
-            }
-        )
-
-        return self.async_show_form(
-            step_id="mcp_server",
-            data_schema=schema,
-            errors=errors,
-            description_placeholders={
-                "ha_mcp_repo_url": "https://github.com/homeassistant-ai/ha-mcp",
             },
         )
 
@@ -363,7 +301,7 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage options: allow updating credentials, tokens, models, and server URL."""
+        """Manage options: allow updating credentials, tokens, models, and autonomy."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -373,7 +311,6 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
                 CONF_API_KEY,
                 CONF_MODEL,
                 CONF_BASE_URL,
-                CONF_MCP_SERVER_URL,
                 CONF_AUTONOMOUS_MODE,
             ):
                 if k in user_input and user_input[k] is not None:
@@ -418,9 +355,6 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
         current_base_url = options.get(
             CONF_BASE_URL, data.get(CONF_BASE_URL, "") or ""
         )
-        current_mcp_url = options.get(
-            CONF_MCP_SERVER_URL, data.get(CONF_MCP_SERVER_URL, DEFAULT_MCP_SERVER_URL)
-        ) or DEFAULT_MCP_SERVER_URL
         current_autonomous = options.get(
             CONF_AUTONOMOUS_MODE,
             data.get(CONF_AUTONOMOUS_MODE, DEFAULT_AUTONOMOUS_MODE),
@@ -441,7 +375,6 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
             vol.Optional(CONF_API_KEY, default=current_api_key): str,
             vol.Optional(CONF_MODEL, default=current_model): str,
             vol.Optional(CONF_BASE_URL, default=current_base_url): str,
-            vol.Required(CONF_MCP_SERVER_URL, default=current_mcp_url): str,
             vol.Required(CONF_AUTONOMOUS_MODE, default=bool(current_autonomous)): bool,
         }
 
@@ -460,6 +393,5 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
                 "openrouter_api_url": "https://openrouter.ai/keys",
                 "openai_api_url": "https://platform.openai.com/api-keys",
                 "deepseek_api_url": "https://platform.deepseek.com/api_keys",
-                "ha_mcp_repo_url": "https://github.com/homeassistant-ai/ha-mcp",
             },
         )
