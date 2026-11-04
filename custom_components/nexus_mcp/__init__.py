@@ -72,7 +72,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     # Register extra JS URL so Home Assistant frontend loads the card automatically
     if add_extra_js_url:
         try:
-            add_extra_js_url(hass, f"{url_path}?v=1.5.0")
+            add_extra_js_url(hass, f"{url_path}?v=1.5.1")
         except Exception as err:
             _LOGGER.debug("Could not add extra JS URL: %s", err)
 
@@ -90,13 +90,13 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
                 if r.get("url", "").startswith(url_path):
                     frontend_added = True
                     # If version parameter differs, update existing resource to bust browser cache
-                    if r.get("url") != f"{url_path}?v=1.5.0":
+                    if r.get("url") != f"{url_path}?v=1.5.1":
                         res_id = r.get("id")
                         if res_id and getattr(resources, "async_update_item", None):
                             try:
                                 await resources.async_update_item(res_id, {
                                     "res_type": r.get("type", "module"),
-                                    "url": f"{url_path}?v=1.5.0",
+                                    "url": f"{url_path}?v=1.5.1",
                                 })
                             except Exception:
                                 pass
@@ -106,12 +106,12 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
                 if getattr(resources, "async_create_item", None):
                     await resources.async_create_item({
                         "res_type": "module",
-                        "url": f"{url_path}?v=1.5.0",
+                        "url": f"{url_path}?v=1.5.1",
                     })
                 elif getattr(resources, "data", None) and getattr(resources.data, "append", None):
                     resources.data.append({
                         "type": "module",
-                        "url": f"{url_path}?v=1.5.0",
+                        "url": f"{url_path}?v=1.5.1",
                     })
     except Exception as err:
         _LOGGER.debug("Could not auto-register Lovelace resource: %s", err)
@@ -282,6 +282,44 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                 },
             )
 
+        @websocket_api.websocket_command(
+            {
+                vol.Required("type"): "nexus_mcp/yaml_to_json",
+                vol.Required("yaml"): str,
+            }
+        )
+        @websocket_api.async_response
+        async def ws_handle_yaml_to_json(
+            hass: HomeAssistant,
+            connection: websocket_api.ActiveConnection,
+            msg: dict[str, Any],
+        ) -> None:
+            """Safely parse YAML to JSON data for the frontend card."""
+            try:
+                import time
+                import yaml
+
+                raw_yaml = msg["yaml"]
+                data = yaml.safe_load(raw_yaml)
+                if isinstance(data, list) and data:
+                    data = data[0]
+
+                if not isinstance(data, dict):
+                    connection.send_error(msg["id"], "invalid_format", "YAML must be a dictionary/mapping")
+                    return
+
+                # Normalize trigger, action, condition to lists if provided as dict
+                for key in ("trigger", "triggers", "action", "actions", "condition", "conditions"):
+                    if key in data and isinstance(data[key], dict):
+                        data[key] = [data[key]]
+
+                if not data.get("id"):
+                    data["id"] = f"nexus_{int(time.time() * 1000)}"
+
+                connection.send_result(msg["id"], {"data": data})
+            except Exception as err:
+                connection.send_error(msg["id"], "parse_error", str(err))
+
         try:
             websocket_api.async_register_command(hass, ws_handle_chat)
         except Exception as err:
@@ -290,6 +328,10 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
             websocket_api.async_register_command(hass, ws_handle_get_history)
         except Exception as err:
             _LOGGER.debug("Could not register nexus_mcp/get_history websocket command: %s", err)
+        try:
+            websocket_api.async_register_command(hass, ws_handle_yaml_to_json)
+        except Exception as err:
+            _LOGGER.debug("Could not register nexus_mcp/yaml_to_json websocket command: %s", err)
         domain_data["ws_registered"] = True
     except Exception as err:
         _LOGGER.debug("Could not register nexus_mcp websocket commands: %s", err)

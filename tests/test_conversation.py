@@ -17,8 +17,12 @@ if "homeassistant" not in sys.modules:
     sys.modules["homeassistant.helpers.intent"] = ha_mock
     sys.modules["homeassistant.components"] = ha_mock
     sys.modules["homeassistant.components.conversation"] = ha_mock
+    sys.modules["homeassistant.components.websocket_api"] = ha_mock
 else:
     ha_mock = sys.modules["homeassistant"]
+
+ha_mock.components.websocket_api.websocket_command = lambda schema: (lambda func: func)
+ha_mock.components.websocket_api.async_response = lambda func: func
 
 class FakeConversationEntity:
     pass
@@ -755,6 +759,38 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
         self.assertIn("taller", terms)
         self.assertIn("aire acondicionado", terms)
         self.assertIn("bombilla izquierda", terms)
+
+
+
+    async def test_ws_yaml_to_json_normalizes_automation(self) -> None:
+        """Test that nexus_mcp/yaml_to_json converts and normalizes YAML automations cleanly."""
+        from custom_components.nexus_mcp import _async_setup_websocket
+
+        ha_mock.websocket_api.websocket_command = lambda schema: (lambda func: func)
+        ha_mock.websocket_api.async_response = lambda func: func
+        handlers = {}
+        ha_mock.websocket_api.async_register_command = lambda hass, h: handlers.setdefault(getattr(h, "__name__", ""), h)
+
+        mock_hass = MagicMock()
+        mock_hass.data = {}
+        _async_setup_websocket(mock_hass)
+
+        handler = handlers.get("ws_handle_yaml_to_json")
+        self.assertIsNotNone(handler)
+
+        mock_conn = MagicMock()
+        msg = {
+            "id": 1,
+            "type": "nexus_mcp/yaml_to_json",
+            "yaml": "alias: Test Auto\ntrigger:\n  platform: sun\naction:\n  service: light.turn_on\n",
+        }
+        await handler(mock_hass, mock_conn, msg)
+        mock_conn.send_result.assert_called_once()
+        res = mock_conn.send_result.call_args[0][1]["data"]
+        self.assertEqual(res["alias"], "Test Auto")
+        self.assertIsInstance(res["trigger"], list)
+        self.assertIsInstance(res["action"], list)
+        self.assertTrue(res["id"].startswith("nexus_"))
 
 
 if __name__ == "__main__":

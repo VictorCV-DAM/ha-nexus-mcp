@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.5.0)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.5.1)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -580,8 +580,43 @@ class NexusMcpCard extends HTMLElement {
           font-weight: 600;
           letter-spacing: 0.5px;
         }
+        .code-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .code-save-auto-btn {
+          background: linear-gradient(135deg, #1976d2 0%, #0288d1 100%);
+          border: none;
+          color: #ffffff;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 0.72rem;
+          font-weight: 600;
+          padding: 3px 8px;
+          border-radius: 4px;
+          transition: all 0.2s ease;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+        .code-save-auto-btn:hover:not(:disabled) {
+          filter: brightness(1.15);
+          transform: translateY(-1px);
+        }
+        .code-save-auto-btn ha-icon {
+          --mdc-icon-size: 13px;
+        }
+        .code-save-auto-btn.saved {
+          background: #2e7d32 !important;
+          color: #ffffff !important;
+          cursor: default;
+        }
+        .code-save-auto-btn.error {
+          background: #c62828 !important;
+          color: #ffffff !important;
+        }
         .code-copy-btn {
-          background: transparent;
           border: none;
           color: var(--secondary-text-color, #bbb);
           cursor: pointer;
@@ -1077,14 +1112,32 @@ class NexusMcpCard extends HTMLElement {
       const copyLabel = isEs ? "Copiar código" : "Copy code";
       const dataCode = encodeURIComponent(cleanCode);
 
+      const isYaml = langLabel === "yaml" || langLabel === "yml";
+      const hasAutomationKeys =
+        cleanCode.includes("trigger:") ||
+        cleanCode.includes("triggers:") ||
+        cleanCode.includes("action:") ||
+        cleanCode.includes("actions:");
+      const isAutomation = isYaml && hasAutomationKeys;
+
+      const installBtnHtml = isAutomation
+        ? `<button class="code-save-auto-btn" data-code="${dataCode}" title="${isEs ? "Crear y activar automatización en Home Assistant" : "Create and activate automation in Home Assistant"}">
+            <ha-icon icon="mdi:flash"></ha-icon>
+            <span class="btn-text">${isEs ? "⚡ Crear automatización" : "⚡ Create automation"}</span>
+          </button>`
+        : "";
+
       const boxHtml = `
         <div class="code-block-container">
           <div class="code-header">
             <span class="code-lang">${langLabel}</span>
-            <button class="code-copy-btn" data-code="${dataCode}" title="${copyLabel}">
-              <ha-icon icon="mdi:content-copy"></ha-icon>
-              <span class="copy-text">${copyLabel}</span>
-            </button>
+            <div class="code-actions">
+              ${installBtnHtml}
+              <button class="code-copy-btn" data-code="${dataCode}" title="${copyLabel}">
+                <ha-icon icon="mdi:content-copy"></ha-icon>
+                <span class="copy-text">${copyLabel}</span>
+              </button>
+            </div>
           </div>
           <pre class="code-content"><code>${escapedCode}</code></pre>
         </div>
@@ -1177,6 +1230,46 @@ class NexusMcpCard extends HTMLElement {
           }, 1800);
         } catch (err) {
           console.error("Nexus MCP Card: Failed to copy text:", err);
+        }
+      };
+    });
+
+    // Attach create automation click events
+    const autoButtons = container.querySelectorAll(".code-save-auto-btn");
+    autoButtons.forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
+        if (!rawCode) return;
+        const isEs = this._isSpanish();
+
+        btn.disabled = true;
+        const textSpan = btn.querySelector(".btn-text");
+        if (textSpan) textSpan.textContent = isEs ? "Creando..." : "Creating...";
+
+        try {
+          const res = await this._hass.callWS({
+            type: "nexus_mcp/yaml_to_json",
+            yaml: rawCode,
+          });
+
+          if (!res || !res.data) {
+            throw new Error(isEs ? "Formato de automatización no válido" : "Invalid automation format");
+          }
+
+          const payload = res.data;
+          const autoId = payload.id || `nexus_${Date.now()}`;
+
+          await this._hass.callApi("POST", `config/automation/config/${autoId}`, payload);
+
+          btn.classList.add("saved");
+          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Automatización activa!" : "Automation active!"}</span>`;
+        } catch (err) {
+          console.error("Nexus MCP Card: Failed to create automation:", err);
+          btn.disabled = false;
+          btn.classList.add("error");
+          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al crear" : "Error creating");
+          btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
         }
       };
     });
@@ -1591,7 +1684,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.5.0 Ready ",
+  "%c NEXUS MCP CARD %c v1.5.1 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
