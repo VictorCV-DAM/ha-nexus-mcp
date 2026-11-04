@@ -34,6 +34,8 @@ class NexusMcpCard extends HTMLElement {
     this._conversationId = null;
     this._messages = [];
     this._isSending = false;
+    this._aborted = false;
+    this._queryCounter = 0;
     this._attachedImage = null;
   }
 
@@ -237,6 +239,54 @@ class NexusMcpCard extends HTMLElement {
     return lang.startsWith("es");
   }
 
+  _updateSendButtonState() {
+    if (!this.shadowRoot) return;
+    const sendBtn = this.shadowRoot.getElementById("btn-send");
+    if (!sendBtn) return;
+    const isEs = this._isSpanish();
+
+    if (this._isSending) {
+      sendBtn.disabled = false;
+      sendBtn.classList.add("btn-stop");
+      sendBtn.title = isEs ? "Detener consulta (Esc)" : "Stop query (Esc)";
+      sendBtn.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon>`;
+    } else {
+      sendBtn.disabled = false;
+      sendBtn.classList.remove("btn-stop");
+      sendBtn.title = isEs ? "Enviar" : "Send";
+      sendBtn.innerHTML = `<ha-icon icon="mdi:send"></ha-icon>`;
+    }
+  }
+
+  _stopGeneration() {
+    if (!this._isSending) return;
+    this._aborted = true;
+    this._isSending = false;
+
+    // Remove any waiting bubble in DOM
+    const container = this.shadowRoot?.getElementById("messages-container");
+    if (container) {
+      const waiting = container.querySelector(".waiting-bubble");
+      if (waiting) waiting.remove();
+    }
+
+    const isEs = this._isSpanish();
+    const agents = this._getAvailableAgents();
+    const currentAgent = agents.find((a) => a.id === this._selectedAgent);
+    const agentName = currentAgent ? currentAgent.name : "Nexus MCP";
+
+    this._messages.push({
+      role: "assistant",
+      agent_name: agentName,
+      content: isEs ? "⏹️ *Consulta detenida por el usuario.*" : "⏹️ *Query stopped by user.*",
+      timestamp: Date.now(),
+    });
+    this._saveHistoryForAgent(this._selectedAgent);
+
+    this._updateSendButtonState();
+    this._updateMessagesView(true);
+  }
+
   _updateTranslations() {
     if (!this.shadowRoot) return;
     const isEs = this._isSpanish();
@@ -250,7 +300,11 @@ class NexusMcpCard extends HTMLElement {
 
     const sendBtn = this.shadowRoot.getElementById("btn-send");
     if (sendBtn) {
-      sendBtn.title = isEs ? "Enviar" : "Send";
+      if (this._isSending) {
+        sendBtn.title = isEs ? "Detener consulta (Esc)" : "Stop query (Esc)";
+      } else {
+        sendBtn.title = isEs ? "Enviar" : "Send";
+      }
     }
 
     const resetBtn = this.shadowRoot.getElementById("btn-reset");
@@ -809,6 +863,16 @@ class NexusMcpCard extends HTMLElement {
           opacity: 0.5;
           cursor: not-allowed;
         }
+        .action-btn.btn-stop {
+          background: var(--error-color, #e53935) !important;
+          color: #ffffff !important;
+          animation: pulse-stop 1.2s infinite ease-in-out;
+        }
+        @keyframes pulse-stop {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.08); }
+          100% { transform: scale(1); }
+        }
       </style>
 
       <ha-card>
@@ -887,9 +951,13 @@ class NexusMcpCard extends HTMLElement {
 
       input.addEventListener("input", adjustHeight);
 
-      const handleSend = () => {
+      const handleSendOrStop = () => {
+        if (this._isSending) {
+          this._stopGeneration();
+          return;
+        }
         const text = input.value.trim();
-        if ((text || this._attachedImage) && !this._isSending) {
+        if (text || this._attachedImage) {
           this._sendMessage(text);
           input.value = "";
           input.style.height = "52px";
@@ -897,8 +965,13 @@ class NexusMcpCard extends HTMLElement {
         }
       };
 
-      sendBtn.onclick = handleSend;
+      sendBtn.onclick = handleSendOrStop;
       input.onkeydown = (e) => {
+        if (e.key === "Escape" && this._isSending) {
+          e.preventDefault();
+          this._stopGeneration();
+          return;
+        }
         if (e.key === "Enter") {
           if (e.ctrlKey || e.shiftKey) {
             // Newline on Ctrl+Enter or Shift+Enter
@@ -912,9 +985,9 @@ class NexusMcpCard extends HTMLElement {
               adjustHeight();
             }
           } else {
-            // Standard Enter sends message
+            // Standard Enter sends message or stops
             e.preventDefault();
-            handleSend();
+            handleSendOrStop();
           }
         }
       };
@@ -1340,6 +1413,9 @@ class NexusMcpCard extends HTMLElement {
   async _sendMessage(text) {
     if (!this._hass || (!text && !this._attachedImage) || this._isSending) return;
     this._isSending = true;
+    this._aborted = false;
+    const currentQueryId = ++this._queryCounter;
+    this._updateSendButtonState();
 
     const agentId = this._selectedAgent;
     const agents = this._getAvailableAgents();
@@ -1376,9 +1452,6 @@ class NexusMcpCard extends HTMLElement {
       this._scrollToBottom(true);
     }
 
-    const sendBtn = this.shadowRoot.getElementById("btn-send");
-    if (sendBtn) sendBtn.disabled = true;
-
     const userLang = this._hass?.locale?.language || this._hass?.language || (this._isSpanish() ? "es" : "en");
 
     let reply = "";
@@ -1410,6 +1483,7 @@ class NexusMcpCard extends HTMLElement {
           language: userLang,
         };
         const res = await callWithTimeout(this._hass.callWS(payload), 180000);
+        if (currentQueryId !== this._queryCounter || this._aborted) return;
         reply =
           res?.response?.speech?.plain?.speech ||
           res?.response?.card?.text ||
@@ -1432,6 +1506,7 @@ class NexusMcpCard extends HTMLElement {
         }
 
         const res = await callWithTimeout(this._hass.callWS(payload), 180000);
+        if (currentQueryId !== this._queryCounter || this._aborted) return;
         reply =
           res?.response?.speech?.plain?.speech ||
           res?.response?.card?.text ||
@@ -1442,6 +1517,8 @@ class NexusMcpCard extends HTMLElement {
         }
       }
 
+      if (currentQueryId !== this._queryCounter || this._aborted) return;
+
       // Add assistant response to history
       this._messages.push({
         role: "assistant",
@@ -1451,6 +1528,7 @@ class NexusMcpCard extends HTMLElement {
       });
       this._saveHistoryForAgent(agentId);
     } catch (err) {
+      if (currentQueryId !== this._queryCounter || this._aborted) return;
       console.error("Nexus MCP Card execution error:", err);
       this._messages.push({
         role: "assistant",
@@ -1460,9 +1538,11 @@ class NexusMcpCard extends HTMLElement {
       });
       this._saveHistoryForAgent(agentId);
     } finally {
-      this._isSending = false;
-      if (sendBtn) sendBtn.disabled = false;
-      this._updateMessagesView(true);
+      if (currentQueryId === this._queryCounter && !this._aborted) {
+        this._isSending = false;
+        this._updateSendButtonState();
+        this._updateMessagesView(true);
+      }
     }
   }
 
