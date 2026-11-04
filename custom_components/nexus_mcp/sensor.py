@@ -94,7 +94,7 @@ class NexusMcpHistorySensor(SensorEntity):
             "name": f"Nexus MCP ({model_name})",
             "manufacturer": "Nexus MCP",
             "model": model_name,
-            "sw_version": "1.5.0",
+            "sw_version": "1.5.1",
         }
 
     async def async_added_to_hass(self) -> None:
@@ -222,7 +222,7 @@ class NexusMcpBaseTelemetrySensor(SensorEntity):
             "name": f"Nexus MCP ({model_name})",
             "manufacturer": "Nexus MCP",
             "model": model_name,
-            "sw_version": "1.5.0",
+            "sw_version": "1.5.1",
         }
 
     async def async_added_to_hass(self) -> None:
