@@ -610,20 +610,6 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                             await asyncio.sleep(0.5)
                             continue
 
-                        # If Groq or OpenAI rejected with tool_use_failed, malformed JSON, or failed_generation
-                        if any(w in text.lower() for w in ("malformed", "tool_use_failed", "failed_generation", "invalid json")):
-                            _LOGGER.warning(
-                                "Model generated malformed tool call JSON (attempt %d/%d): %s. Retrying with deterministic temperature...",
-                                attempt + 1,
-                                max_retries + 1,
-                                text,
-                            )
-                            if attempt < max_retries:
-                                payload["temperature"] = 0.0
-                                payload["messages"] = sanitize_openai_api_messages(payload["messages"])
-                                await asyncio.sleep(1.0)
-                                continue
-
                         # If Groq rejected because tool_choice was required but model returned text
                         if any(w in text.lower() for w in ("tool choice is required", "did not call a tool")):
                             _LOGGER.warning(
@@ -635,6 +621,21 @@ class OpenAiCompatibleEngine(BaseLlmEngine):
                                 payload["tool_choice"] = "auto"
                                 payload["temperature"] = 0.0
                                 await asyncio.sleep(0.5)
+                                continue
+
+                        # If Groq or OpenAI rejected with tool_use_failed, malformed JSON, or failed_generation
+                        if any(w in text.lower() for w in ("malformed", "tool_use_failed", "failed_generation", "invalid json")):
+                            _LOGGER.warning(
+                                "Model generated malformed tool call JSON (attempt %d/%d): %s. Retrying with deterministic temperature...",
+                                attempt + 1,
+                                max_retries + 1,
+                                text,
+                            )
+                            if attempt < max_retries:
+                                payload["tool_choice"] = "auto"
+                                payload["temperature"] = 0.0
+                                payload["messages"] = sanitize_openai_api_messages(payload["messages"])
+                                await asyncio.sleep(1.0)
                                 continue
 
                         # If Groq rejected due to Minijinja chat template rendering (missing user query, format mismatch)
