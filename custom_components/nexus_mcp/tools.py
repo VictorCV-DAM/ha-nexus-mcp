@@ -316,12 +316,50 @@ async def execute_builtin_tool(
         data = dict(arguments.get("data") or {})
         service_data = arguments.get("service_data")
 
+        # Reject targets other than entity_id (area_id, device_id, floor_id, label_id)
+        # to ensure unexposed entities cannot be reached or bypassed.
+        FORBIDDEN_TARGET_KEYS = {"area_id", "device_id", "floor_id", "label_id"}
+        for source_name, source_dict in (
+            ("target", target),
+            ("data", data),
+            ("arguments", arguments),
+            ("service_data", service_data if isinstance(service_data, dict) else {}),
+        ):
+            for k in FORBIDDEN_TARGET_KEYS:
+                if k in source_dict:
+                    return {
+                        "error": f"Targeting by '{k}' is not permitted. Only exposed entities via 'entity_id' are supported."
+                    }
+
+        # Disallow any key in target other than entity_id
+        for k in target:
+            if k != "entity_id":
+                return {
+                    "error": f"Target parameter '{k}' is not supported. Only 'entity_id' is permitted."
+                }
+
         # Normalize entity_id and parameters from local LLM variations
+        # If entity_id was provided inside data, pop it and merge into target
+        if "entity_id" in data:
+            data_eid = data.pop("entity_id")
+            if "entity_id" not in target:
+                target["entity_id"] = data_eid
+            else:
+                curr = target["entity_id"] if isinstance(target["entity_id"], list) else [target["entity_id"]]
+                add = data_eid if isinstance(data_eid, list) else [data_eid]
+                target["entity_id"] = list(dict.fromkeys(curr + add))
+
         if isinstance(service_data, dict):
-            if "entity_id" in service_data and "entity_id" not in target:
-                target["entity_id"] = service_data["entity_id"]
+            if "entity_id" in service_data:
+                sd_eid = service_data.pop("entity_id")
+                if "entity_id" not in target:
+                    target["entity_id"] = sd_eid
+                else:
+                    curr = target["entity_id"] if isinstance(target["entity_id"], list) else [target["entity_id"]]
+                    add = sd_eid if isinstance(sd_eid, list) else [sd_eid]
+                    target["entity_id"] = list(dict.fromkeys(curr + add))
             for k, v in service_data.items():
-                if k != "entity_id" and k not in data:
+                if k not in data:
                     data[k] = v
 
         if "entity_id" in arguments and "entity_id" not in target:

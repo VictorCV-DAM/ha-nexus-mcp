@@ -298,5 +298,73 @@ class TestBuiltinTools(unittest.IsolatedAsyncioTestCase):
         )
 
 
+    async def test_ha_call_service_target_security_hardening(self) -> None:
+        """Verify ha_call_service rejects non-entity_id targets and enforces exposure on data['entity_id']."""
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        mock_hass = MagicMock()
+        mock_hass.services.async_call = AsyncMock()
+
+        # 1. Reject area_id in target
+        res_area = await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {"service": "light.turn_on", "target": {"area_id": "kitchen"}},
+        )
+        self.assertIn("error", res_area)
+        self.assertIn("area_id", res_area["error"])
+
+        # 2. Reject device_id in arguments
+        res_dev = await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {"service": "light.turn_on", "device_id": "dev_1234"},
+        )
+        self.assertIn("error", res_dev)
+        self.assertIn("device_id", res_dev["error"])
+
+        # 3. Reject floor_id and label_id
+        res_floor = await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {"service": "light.turn_on", "target": {"floor_id": "ground"}},
+        )
+        self.assertIn("error", res_floor)
+
+        # 4. Reject unknown target key
+        res_unknown = await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {"service": "light.turn_on", "target": {"custom_target": "val"}},
+        )
+        self.assertIn("error", res_unknown)
+
+        # 5. Extract entity_id from data and reject if not exposed
+        with patch("custom_components.nexus_mcp.tools.async_should_expose", return_value=False):
+            res_unexposed = await execute_builtin_tool(
+                mock_hass,
+                "ha_call_service",
+                {"service": "light.turn_on", "data": {"entity_id": "light.hidden_light"}},
+            )
+            self.assertIn("error", res_unexposed)
+            self.assertIn("not exposed", res_unexposed["error"])
+
+        # 6. Extract entity_id from data and succeed if exposed
+        with patch("custom_components.nexus_mcp.tools.async_should_expose", return_value=True):
+            res_ok = await execute_builtin_tool(
+                mock_hass,
+                "ha_call_service",
+                {"service": "light.turn_on", "data": {"entity_id": "light.safe_light", "brightness": 255}},
+            )
+            self.assertEqual(res_ok["status"], "success")
+            mock_hass.services.async_call.assert_awaited_with(
+                "light",
+                "turn_on",
+                {"entity_id": "light.safe_light", "brightness": 255},
+                blocking=True,
+                context=None,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

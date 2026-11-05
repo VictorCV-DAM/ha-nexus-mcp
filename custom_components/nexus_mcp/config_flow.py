@@ -79,13 +79,13 @@ class NexusMcpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(
                     CONF_LLM_PROVIDER, default=PROVIDER_GEMINI_FREE
                 ): vol.In(
-                    {
-                        PROVIDER_GEMINI_FREE: "Google Gemini (Free Tier / Gratis)",
-                        PROVIDER_GROQ_FREE: "Groq Cloud (Qwen / Llama - 100% Gratis en Europa, 14.400 req/día)",
-                        PROVIDER_QWEN_FREE: "Qwen Cloud / DashScope (Alibaba Model Studio)",
-                        PROVIDER_OLLAMA_LOCAL: "Ollama Local (Qwen 2.5 Coder / Gratis Local)",
-                        PROVIDER_CUSTOM_OPENAI: "OpenAI / OpenRouter / Custom BYOK",
-                    }
+                    [
+                        PROVIDER_GEMINI_FREE,
+                        PROVIDER_GROQ_FREE,
+                        PROVIDER_QWEN_FREE,
+                        PROVIDER_OLLAMA_LOCAL,
+                        PROVIDER_CUSTOM_OPENAI,
+                    ]
                 )
             }
         )
@@ -364,13 +364,13 @@ class NexusMcpOptionsFlow(_BaseOptionsFlow):
 
         fields: dict[Any, Any] = {
             vol.Optional(CONF_LLM_PROVIDER, default=provider): vol.In(
-                {
-                    PROVIDER_GEMINI_FREE: "Google Gemini (Free Tier / Gratis)",
-                    PROVIDER_GROQ_FREE: "Groq Cloud (Qwen / Llama - 100% Gratis en Europa, 14.400 req/día)",
-                    PROVIDER_QWEN_FREE: "Qwen Cloud / DashScope (Alibaba Model Studio)",
-                    PROVIDER_OLLAMA_LOCAL: "Ollama Local (Qwen 2.5 Coder / Gratis Local)",
-                    PROVIDER_CUSTOM_OPENAI: "OpenAI / OpenRouter / Custom BYOK",
-                }
+                [
+                    PROVIDER_GEMINI_FREE,
+                    PROVIDER_GROQ_FREE,
+                    PROVIDER_QWEN_FREE,
+                    PROVIDER_OLLAMA_LOCAL,
+                    PROVIDER_CUSTOM_OPENAI,
+                ]
             ),
             vol.Optional(CONF_API_KEY, default=current_api_key): str,
             vol.Optional(CONF_MODEL, default=current_model): str,

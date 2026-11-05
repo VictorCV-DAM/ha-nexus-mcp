@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.5.2)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.5.3)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -1369,6 +1369,7 @@ class NexusMcpCard extends HTMLElement {
 
           const payload = res.data;
           const autoId = payload.id || `nexus_${Date.now()}`;
+          payload.id = autoId;
 
           await this._hass.callApi("POST", `config/automation/config/${autoId}`, payload);
 
@@ -1801,7 +1802,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.5.2 Ready ",
+  "%c NEXUS MCP CARD %c v1.5.3 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );

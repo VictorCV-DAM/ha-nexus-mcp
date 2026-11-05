@@ -48,6 +48,7 @@ venv.bak/
 htmlcov/
 .tox/
 .nox/
+release_*.py
 
 # Home Assistant local test config
 config/

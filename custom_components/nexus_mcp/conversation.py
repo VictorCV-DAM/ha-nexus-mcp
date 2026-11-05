@@ -490,7 +490,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             "name": f"Nexus MCP ({self._model_name})",
             "manufacturer": "Nexus MCP",
             "model": self._model_name,
-            "sw_version": "1.5.2",
+            "sw_version": "1.5.3",
         }
 
     @property
@@ -933,7 +933,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             "- CREATING AUTOMATIONS:\n"
             "  When the user asks to create or write an automation (e.g., 'crea una automatización', 'automatiza', 'todos los días a las...', 'cuando ocurra X haz Y'):\n"
             "  You MUST return the complete proposed automation inside a Markdown YAML code block (```yaml ... ```) "
-            "  with id, alias, trigger, condition (if any), and action, so the user can easily copy and paste it into the Home Assistant UI automation editor.\n"
+            "  with alias, description, trigger, condition (if any), and action, so the user can easily review or import it into the Home Assistant automation editor.\n"
             "- YAML & CODE FORMATTING MANDATE:\n"
             "  Whenever you provide YAML configurations, Lovelace card configs, scripts, automations, templates, or code, you MUST always enclose them in Markdown code blocks with the language tag (e.g. ```yaml ... ```, ```json ... ```, or ```python ... ```). Never output bare code or bare YAML without code blocks.\n"
         )
@@ -1004,7 +1004,7 @@ class NexusMcpConversationEntity(ConversationEntity):
                 if response.tool_calls:
                     executed_any_tool = True
                     for tc in response.tool_calls:
-                        if tc.name in ("ha_call_service", "ha_create_automation"):
+                        if tc.name == "ha_call_service":
                             executed_action_service = True
 
                     # Record model's tool calls in history

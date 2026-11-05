@@ -253,5 +253,43 @@ class TestConfigFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_kwargs["data"][CONF_BASE_URL], "http://192.168.1.100:11434/v1")
 
 
+    async def test_async_setup_entry_normalizes_model_with_async_update_entry(self) -> None:
+        """Verify async_setup_entry normalizes models using hass.config_entries.async_update_entry instead of direct attribute assignment."""
+        from custom_components.nexus_mcp import async_setup_entry
+
+        mock_hass = MagicMock()
+        mock_hass.data = {}
+        mock_hass.config_entries.async_update_entry = MagicMock()
+        mock_hass.config_entries.async_forward_entry_setups = AsyncMock(return_value=True)
+
+        # Home Assistant ConfigEntry raises AttributeError if entry.data is assigned directly
+        class ImmutableDataEntry(MagicMock):
+            @property
+            def data(self):
+                return self._data
+            @data.setter
+            def data(self, val):
+                raise AttributeError("can't set attribute 'data'")
+
+        mock_entry_immutable = ImmutableDataEntry()
+        mock_entry_immutable.entry_id = "test_immutable_groq"
+        mock_entry_immutable.title = "Nexus MCP (llama-3.3-70b-versatile)"
+        mock_entry_immutable._data = {
+            CONF_LLM_PROVIDER: PROVIDER_GROQ_FREE,
+            CONF_API_KEY: "gsk_test",
+            CONF_MODEL: "llama-3.3-70b-versatile",
+            CONF_BASE_URL: "https://api.groq.com/openai/v1",
+        }
+        mock_entry_immutable.options = {}
+        mock_entry_immutable.async_on_unload = MagicMock()
+        mock_entry_immutable.add_update_listener = MagicMock()
+
+        res = await async_setup_entry(mock_hass, mock_entry_immutable)
+        self.assertTrue(res)
+        mock_hass.config_entries.async_update_entry.assert_called_once()
+        called_data = mock_hass.config_entries.async_update_entry.call_args[1]["data"]
+        self.assertEqual(called_data[CONF_MODEL], "qwen/qwen3.8-27b")
+
+
 if __name__ == "__main__":
     unittest.main()

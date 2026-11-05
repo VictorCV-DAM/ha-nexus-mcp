@@ -792,6 +792,32 @@ class TestConversationIntercom(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(res["action"], list)
         self.assertTrue(res["id"].startswith("nexus_"))
 
+    async def test_ws_yaml_to_json_always_generates_fresh_id_ignoring_model_id(self) -> None:
+        """Verify ws_handle_yaml_to_json generates a fresh id and ignores any existing id from the model."""
+        from custom_components.nexus_mcp import _async_setup_websocket
+
+        ha_mock.websocket_api.websocket_command = lambda schema: (lambda func: func)
+        ha_mock.websocket_api.async_response = lambda func: func
+        handlers = {}
+        ha_mock.websocket_api.async_register_command = lambda hass, h: handlers.setdefault(getattr(h, "__name__", ""), h)
+
+        mock_hass = MagicMock()
+        mock_hass.data = {}
+        _async_setup_websocket(mock_hass)
+
+        handler = handlers.get("ws_handle_yaml_to_json")
+        mock_conn = MagicMock()
+        msg = {
+            "id": 2,
+            "type": "nexus_mcp/yaml_to_json",
+            "yaml": "id: dangerous_existing_automation_12345\nalias: Overwrite Attempt\ntrigger: []\naction: []\n",
+        }
+        await handler(mock_hass, mock_conn, msg)
+        mock_conn.send_result.assert_called_once()
+        res = mock_conn.send_result.call_args[0][1]["data"]
+        self.assertNotEqual(res["id"], "dangerous_existing_automation_12345")
+        self.assertTrue(res["id"].startswith("nexus_"))
+
 
 if __name__ == "__main__":
     unittest.main()

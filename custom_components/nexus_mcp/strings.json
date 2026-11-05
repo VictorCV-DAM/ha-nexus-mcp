@@ -73,18 +73,6 @@
           "api_key": "Enter your API key for this provider.",
           "model": "Model identifier to use."
         }
-      },
-      "mcp_server": {
-        "title": "HA-MCP Server Connection",
-        "description": "Nexus MCP connects to an MCP server to provide advanced actions and automation capabilities.\n\n• If you already have **ha-mcp** installed, the endpoint URL was auto-detected below.\n• If you don't have it installed yet, you can get it at the official 👉 **[HA-MCP GitHub Repository]({ha_mcp_repo_url})** via HACS.\n\nConfigure the connection details:",
-        "data": {
-          "mcp_server_url": "MCP Server SSE / Endpoint URL",
-          "autonomous_mode": "Autonomous Mode (Execute actions without asking confirmation)"
-        },
-        "data_description": {
-          "mcp_server_url": "SSE endpoint URL of the HA-MCP server.",
-          "autonomous_mode": "If enabled, Nexus MCP will execute actions without requiring an interactive confirmation prompt."
-        }
       }
     }
   },
@@ -92,13 +80,12 @@
     "step": {
       "init": {
         "title": "Nexus MCP Settings & Credentials",
-        "description": "Configure your Nexus MCP agent settings, credentials, and endpoints. To get or renew your API keys / tokens:\n\n• **Google Gemini**: 👉 [Get key at Google AI Studio]({gemini_api_url})\n• **Groq Cloud (Recommended in Europe)**: 👉 [Get key at Groq Console]({groq_api_url}) | [Model Catalog]({groq_models_url})\n• **Qwen Cloud**: 👉 [Get key at Alibaba Model Studio]({qwen_api_url})\n• **OpenRouter**: 👉 [Get key at OpenRouter]({openrouter_api_url})\n• **HA-MCP Tools**: 👉 [GitHub Repository]({ha_mcp_repo_url})",
+        "description": "Configure your Nexus MCP agent settings, credentials, and endpoints. To get or renew your API keys / tokens:\n\n• **Google Gemini**: 👉 [Get key at Google AI Studio]({gemini_api_url})\n• **Groq Cloud (Recommended in Europe)**: 👉 [Get key at Groq Console]({groq_api_url}) | [Model Catalog]({groq_models_url})\n• **Qwen Cloud**: 👉 [Get key at Alibaba Model Studio]({qwen_api_url})\n• **OpenRouter**: 👉 [Get key at OpenRouter]({openrouter_api_url})",
         "data": {
           "llm_provider": "AI Inference Provider",
           "api_key": "API Key / Token",
           "model": "Model Name",
           "base_url": "Endpoint Base URL",
-          "mcp_server_url": "HA-MCP Server URL",
           "autonomous_mode": "Autonomous Mode (Execute without confirmation)"
         },
         "data_description": {
@@ -106,9 +93,19 @@
           "api_key": "Enter your API key for this provider (not required for Ollama Local).",
           "model": "Model identifier to use.",
           "base_url": "Endpoint base URL for this provider (e.g. http://localhost:11434/v1 for Ollama).",
-          "mcp_server_url": "SSE endpoint URL of the HA-MCP server.",
           "autonomous_mode": "If enabled, Nexus MCP will create automations directly. If disabled (default), it will explain what it understood and ask for your confirmation before proceeding."
         }
+      }
+    }
+  },
+  "selector": {
+    "llm_provider": {
+      "options": {
+        "gemini_free": "Google Gemini (Free Tier)",
+        "groq_free": "Groq Cloud (Free Tier - Europe & Worldwide)",
+        "qwen_free": "Qwen Cloud (Alibaba Model Studio / DashScope)",
+        "ollama_local": "Ollama Local (Qwen 2.5 Coder)",
+        "custom_openai": "OpenAI / OpenRouter / Custom BYOK"
       }
     }
   },

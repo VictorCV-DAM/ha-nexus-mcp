@@ -72,7 +72,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     # Register extra JS URL so Home Assistant frontend loads the card automatically
     if add_extra_js_url:
         try:
-            add_extra_js_url(hass, f"{url_path}?v=1.5.2")
+            add_extra_js_url(hass, f"{url_path}?v=1.5.3")
         except Exception as err:
             _LOGGER.debug("Could not add extra JS URL: %s", err)
 
@@ -90,13 +90,13 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
                 if r.get("url", "").startswith(url_path):
                     frontend_added = True
                     # If version parameter differs, update existing resource to bust browser cache
-                    if r.get("url") != f"{url_path}?v=1.5.2":
+                    if r.get("url") != f"{url_path}?v=1.5.3":
                         res_id = r.get("id")
                         if res_id and getattr(resources, "async_update_item", None):
                             try:
                                 await resources.async_update_item(res_id, {
                                     "res_type": r.get("type", "module"),
-                                    "url": f"{url_path}?v=1.5.2",
+                                    "url": f"{url_path}?v=1.5.3",
                                 })
                             except Exception:
                                 pass
@@ -106,12 +106,12 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
                 if getattr(resources, "async_create_item", None):
                     await resources.async_create_item({
                         "res_type": "module",
-                        "url": f"{url_path}?v=1.5.2",
+                        "url": f"{url_path}?v=1.5.3",
                     })
                 elif getattr(resources, "data", None) and getattr(resources.data, "append", None):
                     resources.data.append({
                         "type": "module",
-                        "url": f"{url_path}?v=1.5.2",
+                        "url": f"{url_path}?v=1.5.3",
                     })
     except Exception as err:
         _LOGGER.debug("Could not auto-register Lovelace resource: %s", err)
@@ -313,8 +313,8 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                     if key in data and isinstance(data[key], dict):
                         data[key] = [data[key]]
 
-                if not data.get("id"):
-                    data["id"] = f"nexus_{int(time.time() * 1000)}"
+                # Always generate a fresh unique id to avoid overwriting existing automations
+                data["id"] = f"nexus_{int(time.time() * 1000)}"
 
                 connection.send_result(msg["id"], {"data": data})
             except Exception as err:
@@ -379,7 +379,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     desired_title = f"Nexus MCP ({current_model})" if current_model else entry.title
     if needs_update:
         # Update in-memory entry data cleanly without triggering re-entrant reload loops
-        entry.data = {**entry.data, **updated_data}
+        hass.config_entries.async_update_entry(entry, data=updated_data)
 
     hass.data.setdefault(DOMAIN, {})
     _LOGGER.info("Initializing Nexus MCP Intercom (%s)", desired_title)

@@ -73,18 +73,6 @@
           "api_key": "Introduce tu clave API para este proveedor.",
           "model": "Identificador del modelo a utilizar."
         }
-      },
-      "mcp_server": {
-        "title": "Conexión con el Servidor HA-MCP",
-        "description": "Nexus MCP se conecta a un servidor MCP para disponer de herramientas avanzadas y gestión de automatizaciones.\n\n• Si ya tienes instalado **ha-mcp**, la URL del endpoint se ha detectado automáticamente abajo.\n• Si aún no lo tienes instalado, consíguelo en el 👉 **[Repositorio oficial de HA-MCP en GitHub]({ha_mcp_repo_url})** mediante HACS.\n\nConfigura los datos de conexión:",
-        "data": {
-          "mcp_server_url": "URL SSE / Endpoint del Servidor MCP",
-          "autonomous_mode": "Modo Autónomo (Ejecutar acciones sin solicitar confirmación interactiva)"
-        },
-        "data_description": {
-          "mcp_server_url": "URL del endpoint SSE del servidor HA-MCP.",
-          "autonomous_mode": "Si se activa, Nexus MCP ejecutará las acciones directamente sin requerir una pregunta de confirmación previa."
-        }
       }
     }
   },
@@ -92,13 +80,12 @@
     "step": {
       "init": {
         "title": "Nexus MCP: Configuración y Credenciales",
-        "description": "Modifica los parámetros de tu agente Nexus MCP, credenciales y endpoints. Para obtener o renovar tu clave API / token:\n\n• **Google Gemini**: 👉 [Obtener clave en Google AI Studio]({gemini_api_url})\n• **Groq Cloud (Recomendado en Europa)**: 👉 [Obtener clave en Groq Console]({groq_api_url}) | [Catálogo de Modelos]({groq_models_url})\n• **Qwen Cloud**: 👉 [Obtener clave en Alibaba Model Studio]({qwen_api_url})\n• **OpenRouter**: 👉 [Obtener clave en OpenRouter]({openrouter_api_url})\n• **HA-MCP Tools**: 👉 [Repositorio GitHub]({ha_mcp_repo_url})",
+        "description": "Modifica los parámetros de tu agente Nexus MCP, credenciales y endpoints. Para obtener o renovar tu clave API / token:\n\n• **Google Gemini**: 👉 [Obtener clave en Google AI Studio]({gemini_api_url})\n• **Groq Cloud (Recomendado en Europa)**: 👉 [Obtener clave en Groq Console]({groq_api_url}) | [Catálogo de Modelos]({groq_models_url})\n• **Qwen Cloud**: 👉 [Obtener clave en Alibaba Model Studio]({qwen_api_url})\n• **OpenRouter**: 👉 [Obtener clave en OpenRouter]({openrouter_api_url})",
         "data": {
           "llm_provider": "Proveedor de IA",
           "api_key": "Clave API / Token",
           "model": "Nombre del Modelo",
           "base_url": "URL Base del Endpoint",
-          "mcp_server_url": "URL del Servidor HA-MCP",
           "autonomous_mode": "Modo Autónomo (Ejecutar sin confirmación)"
         },
         "data_description": {
@@ -106,9 +93,19 @@
           "api_key": "Introduce tu clave API para este proveedor (no requerida para Ollama Local).",
           "model": "Identificador del modelo a utilizar.",
           "base_url": "URL del endpoint para este proveedor (por ejemplo http://localhost:11434/v1 para Ollama).",
-          "mcp_server_url": "URL del endpoint SSE del servidor HA-MCP.",
           "autonomous_mode": "Si está activado, Nexus MCP creará automatizaciones directamente. Si está desactivado (por defecto), te explicará lo que ha entendido y te pedirá confirmación antes de proceder a su creación."
         }
+      }
+    }
+  },
+  "selector": {
+    "llm_provider": {
+      "options": {
+        "gemini_free": "Google Gemini (Nivel gratuito)",
+        "groq_free": "Groq Cloud (Gratis en Europa y todo el mundo)",
+        "qwen_free": "Qwen Cloud (Alibaba Model Studio / DashScope)",
+        "ollama_local": "Ollama Local (Qwen 2.5 Coder)",
+        "custom_openai": "OpenAI / OpenRouter / Custom BYOK"
       }
     }
   },
@@ -127,34 +124,34 @@
   "entity": {
     "sensor": {
       "conversation_history": {
-        "name": "Conversation History"
+        "name": "Historial de conversación"
       },
       "daily_tokens": {
-        "name": "Daily Tokens Used"
+        "name": "Tokens diarios usados"
       },
       "daily_requests_used": {
-        "name": "Daily Requests Used"
+        "name": "Peticiones diarias usadas"
       },
       "daily_requests_remaining": {
-        "name": "Daily Requests Remaining"
+        "name": "Peticiones diarias restantes"
       },
       "daily_quota_percent": {
-        "name": "Daily Quota Remaining"
+        "name": "Cuota diaria restante"
       },
       "daily_requests_limit": {
-        "name": "Daily Requests Limit"
+        "name": "Límite de peticiones diarias"
       },
       "model_limit": {
-        "name": "Tokens Per Minute Limit"
+        "name": "Límite de tokens por minuto"
       },
       "rpm_limit": {
-        "name": "Requests Per Minute Limit"
+        "name": "Límite de peticiones por minuto"
       },
       "max_wait_time": {
-        "name": "Max Window Wait Time"
+        "name": "Tiempo máximo de ventana"
       },
       "rate_limit_reset": {
-        "name": "Rate Limit Cooldown"
+        "name": "Tiempo de enfriamiento"
       }
     }
   }
