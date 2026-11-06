@@ -170,15 +170,17 @@ class TestBuiltinTools(unittest.IsolatedAsyncioTestCase):
         mock_user.is_admin = False
         mock_hass.auth.async_get_user = AsyncMock(return_value=mock_user)
 
-        res = await execute_builtin_tool(
-            mock_hass,
-            "ha_call_service",
-            {
-                "domain": "homeassistant",
-                "service": "restart",
-            },
-            context=non_admin_context,
-        )
+        with patch("custom_components.nexus_mcp.tools.async_should_expose", return_value=True):
+            res = await execute_builtin_tool(
+                mock_hass,
+                "ha_call_service",
+                {
+                    "domain": "homeassistant",
+                    "service": "restart",
+                    "target": {"entity_id": "homeassistant.restart"},
+                },
+                context=non_admin_context,
+            )
         self.assertEqual(res["status"], "error")
         self.assertIn("requires administrator privileges", res["message"])
         mock_hass.services.async_call.assert_not_called()
@@ -365,6 +367,58 @@ class TestBuiltinTools(unittest.IsolatedAsyncioTestCase):
                 context=None,
             )
 
+
+
+    async def test_ha_call_service_requires_exposed_target(self) -> None:
+        """Verify ha_call_service rejects calls with no entity target and unexposed scripts."""
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        mock_hass = MagicMock()
+        mock_hass.services.async_call = AsyncMock()
+
+        # 1. Target-less call (backup.create, recorder.purge, etc.) must be rejected
+        res_no_target = await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {"domain": "backup", "service": "create"},
+        )
+        self.assertIn("error", res_no_target)
+        self.assertIn("At least one exposed 'entity_id' is required", res_no_target["error"])
+
+        # 2. Target-less recorder.purge
+        res_recorder = await execute_builtin_tool(
+            mock_hass,
+            "ha_call_service",
+            {"domain": "recorder", "service": "purge"},
+        )
+        self.assertIn("error", res_recorder)
+        self.assertIn("At least one exposed 'entity_id' is required", res_recorder["error"])
+
+        # 3. Calling an unexposed script without target (e.g. service: script.secret_script)
+        with patch("custom_components.nexus_mcp.tools.async_should_expose", return_value=False):
+            res_unexposed_script = await execute_builtin_tool(
+                mock_hass,
+                "ha_call_service",
+                {"domain": "script", "service": "secret_script"},
+            )
+            self.assertIn("error", res_unexposed_script)
+            self.assertIn("not exposed", res_unexposed_script["error"])
+
+        # 4. Calling an exposed script without target
+        with patch("custom_components.nexus_mcp.tools.async_should_expose", return_value=True):
+            res_exposed_script = await execute_builtin_tool(
+                mock_hass,
+                "ha_call_service",
+                {"domain": "script", "service": "good_script"},
+            )
+            self.assertEqual(res_exposed_script["status"], "success")
+            mock_hass.services.async_call.assert_awaited_with(
+                "script",
+                "good_script",
+                {"entity_id": "script.good_script"},
+                blocking=True,
+                context=None,
+            )
 
 if __name__ == "__main__":
     unittest.main()

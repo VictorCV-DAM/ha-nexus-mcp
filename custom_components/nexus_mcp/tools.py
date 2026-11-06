@@ -388,6 +388,22 @@ async def execute_builtin_tool(
 
         # Automatic domain resolution if missing
         target_eids = [target_eid] if isinstance(target_eid, str) else (target_eid if isinstance(target_eid, list) else [])
+
+        # If calling script.<name> without target, normalize script as target entity
+        if not target_eids and domain == "script" and service and not service.startswith("turn_") and not service.startswith("reload"):
+            target_eids = [f"script.{service}"]
+            target["entity_id"] = f"script.{service}"
+
+        # Require at least one target entity_id for all service calls to prevent
+        # unauthorized execution of target-less administrative, backup, or unexposed services.
+        if not target_eids:
+            return {
+                "error": (
+                    "Service call rejected: At least one exposed 'entity_id' is required for all service calls. "
+                    "Calling services without an exposed entity target is not permitted."
+                )
+            }
+
         first_target_domain = target_eids[0].split(".")[0] if (target_eids and "." in target_eids[0]) else None
 
         if not domain:
