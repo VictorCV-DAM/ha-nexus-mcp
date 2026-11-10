@@ -649,7 +649,9 @@ class NexusMcpCard extends HTMLElement {
           gap: 8px;
         }
         .code-save-auto-btn,
-        .code-save-helper-btn {
+        .code-save-helper-btn,
+        .code-save-script-btn,
+        .code-save-scene-btn {
           background: linear-gradient(135deg, #1976d2 0%, #0288d1 100%);
           border: none;
           color: #ffffff;
@@ -670,18 +672,30 @@ class NexusMcpCard extends HTMLElement {
         .code-save-helper-btn {
           background: linear-gradient(135deg, #7b1fa2 0%, #9c27b0 100%);
         }
+        .code-save-script-btn {
+          background: linear-gradient(135deg, #00796b 0%, #009688 100%);
+        }
+        .code-save-scene-btn {
+          background: linear-gradient(135deg, #e65100 0%, #f57c00 100%);
+        }
         .code-save-auto-btn:hover:not(:disabled),
-        .code-save-helper-btn:hover:not(:disabled) {
+        .code-save-helper-btn:hover:not(:disabled),
+        .code-save-script-btn:hover:not(:disabled),
+        .code-save-scene-btn:hover:not(:disabled) {
           filter: brightness(1.15);
           transform: translateY(-1px);
           box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
         }
         .code-save-auto-btn:active:not(:disabled),
-        .code-save-helper-btn:active:not(:disabled) {
+        .code-save-helper-btn:active:not(:disabled),
+        .code-save-script-btn:active:not(:disabled),
+        .code-save-scene-btn:active:not(:disabled) {
           transform: translateY(0);
         }
         .code-save-auto-btn ha-icon,
-        .code-save-helper-btn ha-icon {
+        .code-save-helper-btn ha-icon,
+        .code-save-script-btn ha-icon,
+        .code-save-scene-btn ha-icon {
           --mdc-icon-size: 20px;
           color: #ffca28;
           display: inline-flex;
@@ -691,20 +705,34 @@ class NexusMcpCard extends HTMLElement {
         .code-save-helper-btn ha-icon {
           color: #e1bee7;
         }
+        .code-save-script-btn ha-icon {
+          color: #b2dfdb;
+        }
+        .code-save-scene-btn ha-icon {
+          color: #ffe0b2;
+        }
         .code-save-auto-btn.saved ha-icon,
         .code-save-auto-btn.error ha-icon,
         .code-save-helper-btn.saved ha-icon,
-        .code-save-helper-btn.error ha-icon {
+        .code-save-helper-btn.error ha-icon,
+        .code-save-script-btn.saved ha-icon,
+        .code-save-script-btn.error ha-icon,
+        .code-save-scene-btn.saved ha-icon,
+        .code-save-scene-btn.error ha-icon {
           color: #ffffff;
         }
         .code-save-auto-btn.saved,
-        .code-save-helper-btn.saved {
+        .code-save-helper-btn.saved,
+        .code-save-script-btn.saved,
+        .code-save-scene-btn.saved {
           background: #2e7d32 !important;
           color: #ffffff !important;
           cursor: default;
         }
         .code-save-auto-btn.error,
-        .code-save-helper-btn.error {
+        .code-save-helper-btn.error,
+        .code-save-script-btn.error,
+        .code-save-scene-btn.error {
           background: #c62828 !important;
           color: #ffffff !important;
         }
@@ -1258,6 +1286,8 @@ class NexusMcpCard extends HTMLElement {
     // 6. Reinsert formatted code boxes (using split/join to safely preserve all code content without $ escaping issues)
     const detectedAutomations = [];
     const detectedHelpers = [];
+    const detectedScripts = [];
+    const detectedScenes = [];
     codeBlocks.forEach((block, i) => {
       const placeholder = `__NEXUS_CODE_BLOCK_${i}__`;
       const cleanCode = block.code.trim();
@@ -1284,10 +1314,23 @@ class NexusMcpCard extends HTMLElement {
         cleanCode.includes(`${hd}:`) || cleanCode.includes(`type: ${hd}`) || cleanCode.includes(`domain: ${hd}`)
       );
 
+      const isScript = isYaml && !isAutomation && !isHelper && (
+        cleanCode.includes("sequence:") || cleanCode.includes("script:") ||
+        ((cleanCode.includes("action:") || cleanCode.includes("actions:")) && !hasTrigger)
+      );
+
+      const isScene = isYaml && !isAutomation && !isHelper && !isScript && (
+        cleanCode.includes("scene:") || (cleanCode.includes("entities:") && !hasTrigger && !cleanCode.includes("sequence:"))
+      );
+
       if (isAutomation) {
         detectedAutomations.push(cleanCode);
       } else if (isHelper) {
         detectedHelpers.push(cleanCode);
+      } else if (isScript) {
+        detectedScripts.push(cleanCode);
+      } else if (isScene) {
+        detectedScenes.push(cleanCode);
       }
 
       const boxHtml = `
@@ -1307,7 +1350,7 @@ class NexusMcpCard extends HTMLElement {
       text = text.split(placeholder).join(boxHtml);
     });
 
-    if (detectedAutomations.length > 0 || detectedHelpers.length > 0) {
+    if (detectedAutomations.length > 0 || detectedHelpers.length > 0 || detectedScripts.length > 0 || detectedScenes.length > 0) {
       const isEs = this._isSpanish();
       let footerHtml = `<div class="bubble-automation-footer">`;
       detectedAutomations.forEach((autoCode, idx) => {
@@ -1318,6 +1361,30 @@ class NexusMcpCard extends HTMLElement {
         footerHtml += `
           <button class="code-save-auto-btn" data-code="${autoDataCode}" title="${btnLabel}">
             <ha-icon icon="mdi:lightning-bolt"></ha-icon>
+            <span class="btn-text">${btnLabel}</span>
+          </button>
+        `;
+      });
+      detectedScripts.forEach((scriptCode, idx) => {
+        const scriptDataCode = encodeURIComponent(scriptCode);
+        const btnLabel = detectedScripts.length > 1
+          ? (isEs ? `Crear y Activar Script #${idx + 1} en Home Assistant` : `Create and Activate Script #${idx + 1} in Home Assistant`)
+          : (isEs ? "Crear y Activar Script en Home Assistant" : "Create and Activate Script in Home Assistant");
+        footerHtml += `
+          <button class="code-save-script-btn" data-code="${scriptDataCode}" title="${btnLabel}">
+            <ha-icon icon="mdi:script-text-play-outline"></ha-icon>
+            <span class="btn-text">${btnLabel}</span>
+          </button>
+        `;
+      });
+      detectedScenes.forEach((sceneCode, idx) => {
+        const sceneDataCode = encodeURIComponent(sceneCode);
+        const btnLabel = detectedScenes.length > 1
+          ? (isEs ? `Crear Escena #${idx + 1} en Home Assistant` : `Create Scene #${idx + 1} in Home Assistant`)
+          : (isEs ? "Crear Escena en Home Assistant" : "Create Scene in Home Assistant");
+        footerHtml += `
+          <button class="code-save-scene-btn" data-code="${sceneDataCode}" title="${btnLabel}">
+            <ha-icon icon="mdi:palette-outline"></ha-icon>
             <span class="btn-text">${btnLabel}</span>
           </button>
         `;
@@ -1463,6 +1530,82 @@ class NexusMcpCard extends HTMLElement {
           btn.disabled = false;
           btn.classList.add("error");
           const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al crear" : "Error creating");
+          btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
+        }
+      };
+    });
+
+    // Attach create script click events
+    const scriptButtons = container.querySelectorAll(".code-save-script-btn");
+    scriptButtons.forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
+        if (!rawCode) return;
+        const isEs = this._isSpanish();
+
+        btn.disabled = true;
+        const textSpan = btn.querySelector(".btn-text");
+        if (textSpan) textSpan.textContent = isEs ? "Creando script..." : "Creating script...";
+
+        try {
+          const res = await this._hass.callWS({
+            type: "nexus_mcp/yaml_to_json",
+            yaml: rawCode,
+          });
+
+          if (!res || !res.is_script || !res.data) {
+            throw new Error(isEs ? "Formato de script no válido" : "Invalid script format");
+          }
+
+          const scriptId = res.script_id || `nexus_script_${Date.now()}`;
+          await this._hass.callApi("POST", `config/script/config/${scriptId}`, res.data);
+
+          btn.classList.add("saved");
+          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Script creado y activo!" : "Script active!"}</span>`;
+        } catch (err) {
+          console.error("Nexus MCP Card: Failed to create script:", err);
+          btn.disabled = false;
+          btn.classList.add("error");
+          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al crear script" : "Error creating script");
+          btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
+        }
+      };
+    });
+
+    // Attach create scene click events
+    const sceneButtons = container.querySelectorAll(".code-save-scene-btn");
+    sceneButtons.forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
+        if (!rawCode) return;
+        const isEs = this._isSpanish();
+
+        btn.disabled = true;
+        const textSpan = btn.querySelector(".btn-text");
+        if (textSpan) textSpan.textContent = isEs ? "Creando escena..." : "Creating scene...";
+
+        try {
+          const res = await this._hass.callWS({
+            type: "nexus_mcp/yaml_to_json",
+            yaml: rawCode,
+          });
+
+          if (!res || !res.is_scene || !res.data) {
+            throw new Error(isEs ? "Formato de escena no válido" : "Invalid scene format");
+          }
+
+          const sceneId = res.scene_id || `nexus_scene_${Date.now()}`;
+          await this._hass.callApi("POST", `config/scene/config/${sceneId}`, res.data);
+
+          btn.classList.add("saved");
+          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Escena creada en Home Assistant!" : "Scene active in Home Assistant!"}</span>`;
+        } catch (err) {
+          console.error("Nexus MCP Card: Failed to create scene:", err);
+          btn.disabled = false;
+          btn.classList.add("error");
+          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al crear escena" : "Error creating scene");
           btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
         }
       };

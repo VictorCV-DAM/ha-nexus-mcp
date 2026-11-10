@@ -348,7 +348,68 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                     })
                     return
 
-                # Normalize trigger, action, condition to lists if provided as dict
+                # Check for scene
+                if "scene" in data:
+                    val = data["scene"]
+                    if isinstance(val, list) and val:
+                        data = val[0]
+                    elif isinstance(val, dict):
+                        first_val = next(iter(val.values())) if val else {}
+                        if isinstance(first_val, dict) and "entities" in first_val:
+                            data = dict(first_val)
+                            if "name" not in data and "alias" not in data:
+                                data["name"] = next(iter(val.keys()))
+                        else:
+                            data = dict(val)
+
+                if isinstance(data, dict) and "entities" in data and not any(k in data for k in ("trigger", "triggers", "sequence", "action", "actions")):
+                    scene_data = dict(data)
+                    if "name" not in scene_data:
+                        scene_data["name"] = scene_data.get("alias") or "Nueva Escena"
+                    scene_id = f"nexus_scene_{int(time.time() * 1000)}"
+                    connection.send_result(msg["id"], {
+                        "is_scene": True,
+                        "scene_id": scene_id,
+                        "data": scene_data,
+                    })
+                    return
+
+                # Check for script
+                if "script" in data:
+                    val = data["script"]
+                    if isinstance(val, dict):
+                        first_val = next(iter(val.values())) if val else {}
+                        if isinstance(first_val, dict) and any(k in first_val for k in ("sequence", "action", "actions")):
+                            data = dict(first_val)
+                            if "alias" not in data and "name" not in data:
+                                data["alias"] = next(iter(val.keys()))
+                        else:
+                            data = dict(val)
+                    elif isinstance(val, list) and val:
+                        data = val[0]
+
+                has_trigger = any(k in data for k in ("trigger", "triggers", "platform"))
+                is_script = ("sequence" in data or "action" in data or "actions" in data) and not has_trigger
+
+                if is_script:
+                    script_data = dict(data)
+                    seq = script_data.get("sequence") or script_data.get("action") or script_data.get("actions")
+                    if isinstance(seq, dict):
+                        seq = [seq]
+                    script_data["sequence"] = seq if isinstance(seq, list) else []
+                    script_data.pop("action", None)
+                    script_data.pop("actions", None)
+                    if "alias" not in script_data:
+                        script_data["alias"] = script_data.get("name") or "Nuevo Script"
+                    script_id = f"nexus_script_{int(time.time() * 1000)}"
+                    connection.send_result(msg["id"], {
+                        "is_script": True,
+                        "script_id": script_id,
+                        "data": script_data,
+                    })
+                    return
+
+                # Otherwise automation: normalize trigger, action, condition to lists if provided as dict
                 for key in ("trigger", "triggers", "action", "actions", "condition", "conditions"):
                     if key in data and isinstance(data[key], dict):
                         data[key] = [data[key]]
