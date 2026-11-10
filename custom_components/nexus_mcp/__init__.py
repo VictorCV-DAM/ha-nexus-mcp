@@ -308,6 +308,46 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                     connection.send_error(msg["id"], "invalid_format", "YAML must be a dictionary/mapping")
                     return
 
+                HELPER_DOMAINS = {
+                    "input_boolean", "input_number", "input_select", "input_text",
+                    "input_datetime", "input_button", "counter", "timer", "schedule",
+                }
+
+                helper_domain = None
+                helper_data = None
+
+                for hd in HELPER_DOMAINS:
+                    if hd in data:
+                        helper_domain = hd
+                        val = data[hd]
+                        if isinstance(val, dict):
+                            first_val = next(iter(val.values())) if val else {}
+                            if isinstance(first_val, dict) and any(k in first_val for k in ("name", "options", "min", "max", "icon", "duration", "initial")):
+                                helper_data = dict(first_val)
+                                if "name" not in helper_data:
+                                    helper_data["name"] = next(iter(val.keys()))
+                            else:
+                                helper_data = dict(val)
+                        elif isinstance(val, list) and val and isinstance(val[0], dict):
+                            helper_data = dict(val[0])
+                        break
+
+                if not helper_domain:
+                    candidate = data.get("type") or data.get("domain") or data.get("platform")
+                    if candidate in HELPER_DOMAINS:
+                        helper_domain = candidate
+                        helper_data = {k: v for k, v in data.items() if k not in ("type", "domain", "platform")}
+
+                if helper_domain and helper_data:
+                    if "name" not in helper_data:
+                        helper_data["name"] = "Nuevo Ayudante"
+                    connection.send_result(msg["id"], {
+                        "is_helper": True,
+                        "helper_domain": helper_domain,
+                        "data": helper_data,
+                    })
+                    return
+
                 # Normalize trigger, action, condition to lists if provided as dict
                 for key in ("trigger", "triggers", "action", "actions", "condition", "conditions"):
                     if key in data and isinstance(data[key], dict):
@@ -316,7 +356,7 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                 # Always generate a fresh unique id to avoid overwriting existing automations
                 data["id"] = f"nexus_{int(time.time() * 1000)}"
 
-                connection.send_result(msg["id"], {"data": data})
+                connection.send_result(msg["id"], {"is_automation": True, "data": data})
             except Exception as err:
                 connection.send_error(msg["id"], "parse_error", str(err))
 

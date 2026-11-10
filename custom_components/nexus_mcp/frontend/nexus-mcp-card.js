@@ -648,7 +648,8 @@ class NexusMcpCard extends HTMLElement {
           flex-direction: column;
           gap: 8px;
         }
-        .code-save-auto-btn {
+        .code-save-auto-btn,
+        .code-save-helper-btn {
           background: linear-gradient(135deg, #1976d2 0%, #0288d1 100%);
           border: none;
           color: #ffffff;
@@ -666,31 +667,44 @@ class NexusMcpCard extends HTMLElement {
           width: 100%;
           box-sizing: border-box;
         }
-        .code-save-auto-btn:hover:not(:disabled) {
+        .code-save-helper-btn {
+          background: linear-gradient(135deg, #7b1fa2 0%, #9c27b0 100%);
+        }
+        .code-save-auto-btn:hover:not(:disabled),
+        .code-save-helper-btn:hover:not(:disabled) {
           filter: brightness(1.15);
           transform: translateY(-1px);
           box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
         }
-        .code-save-auto-btn:active:not(:disabled) {
+        .code-save-auto-btn:active:not(:disabled),
+        .code-save-helper-btn:active:not(:disabled) {
           transform: translateY(0);
         }
-        .code-save-auto-btn ha-icon {
+        .code-save-auto-btn ha-icon,
+        .code-save-helper-btn ha-icon {
           --mdc-icon-size: 20px;
           color: #ffca28;
           display: inline-flex;
           align-items: center;
           justify-content: center;
         }
+        .code-save-helper-btn ha-icon {
+          color: #e1bee7;
+        }
         .code-save-auto-btn.saved ha-icon,
-        .code-save-auto-btn.error ha-icon {
+        .code-save-auto-btn.error ha-icon,
+        .code-save-helper-btn.saved ha-icon,
+        .code-save-helper-btn.error ha-icon {
           color: #ffffff;
         }
-        .code-save-auto-btn.saved {
+        .code-save-auto-btn.saved,
+        .code-save-helper-btn.saved {
           background: #2e7d32 !important;
           color: #ffffff !important;
           cursor: default;
         }
-        .code-save-auto-btn.error {
+        .code-save-auto-btn.error,
+        .code-save-helper-btn.error {
           background: #c62828 !important;
           color: #ffffff !important;
         }
@@ -1243,6 +1257,7 @@ class NexusMcpCard extends HTMLElement {
 
     // 6. Reinsert formatted code boxes (using split/join to safely preserve all code content without $ escaping issues)
     const detectedAutomations = [];
+    const detectedHelpers = [];
     codeBlocks.forEach((block, i) => {
       const placeholder = `__NEXUS_CODE_BLOCK_${i}__`;
       const cleanCode = block.code.trim();
@@ -1261,8 +1276,18 @@ class NexusMcpCard extends HTMLElement {
       const hasAction = cleanCode.includes("action:") || cleanCode.includes("actions:") || cleanCode.includes("service:");
       const isAutomation = isYaml && hasTrigger && hasAction;
 
+      const HELPER_DOMAINS = [
+        "input_boolean", "input_number", "input_select", "input_text",
+        "input_datetime", "input_button", "counter", "timer", "schedule"
+      ];
+      const isHelper = isYaml && !isAutomation && HELPER_DOMAINS.some((hd) =>
+        cleanCode.includes(`${hd}:`) || cleanCode.includes(`type: ${hd}`) || cleanCode.includes(`domain: ${hd}`)
+      );
+
       if (isAutomation) {
         detectedAutomations.push(cleanCode);
+      } else if (isHelper) {
+        detectedHelpers.push(cleanCode);
       }
 
       const boxHtml = `
@@ -1282,7 +1307,7 @@ class NexusMcpCard extends HTMLElement {
       text = text.split(placeholder).join(boxHtml);
     });
 
-    if (detectedAutomations.length > 0) {
+    if (detectedAutomations.length > 0 || detectedHelpers.length > 0) {
       const isEs = this._isSpanish();
       let footerHtml = `<div class="bubble-automation-footer">`;
       detectedAutomations.forEach((autoCode, idx) => {
@@ -1293,6 +1318,18 @@ class NexusMcpCard extends HTMLElement {
         footerHtml += `
           <button class="code-save-auto-btn" data-code="${autoDataCode}" title="${btnLabel}">
             <ha-icon icon="mdi:lightning-bolt"></ha-icon>
+            <span class="btn-text">${btnLabel}</span>
+          </button>
+        `;
+      });
+      detectedHelpers.forEach((helperCode, idx) => {
+        const helperDataCode = encodeURIComponent(helperCode);
+        const btnLabel = detectedHelpers.length > 1
+          ? (isEs ? `Crear Ayudante #${idx + 1} en Home Assistant` : `Create Helper #${idx + 1} in Home Assistant`)
+          : (isEs ? "Crear Ayudante en Home Assistant" : "Create Helper in Home Assistant");
+        footerHtml += `
+          <button class="code-save-helper-btn" data-code="${helperDataCode}" title="${btnLabel}">
+            <ha-icon icon="mdi:puzzle-plus-outline"></ha-icon>
             <span class="btn-text">${btnLabel}</span>
           </button>
         `;
@@ -1426,6 +1463,46 @@ class NexusMcpCard extends HTMLElement {
           btn.disabled = false;
           btn.classList.add("error");
           const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al crear" : "Error creating");
+          btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
+        }
+      };
+    });
+
+    // Attach create helper click events
+    const helperButtons = container.querySelectorAll(".code-save-helper-btn");
+    helperButtons.forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
+        if (!rawCode) return;
+        const isEs = this._isSpanish();
+
+        btn.disabled = true;
+        const textSpan = btn.querySelector(".btn-text");
+        if (textSpan) textSpan.textContent = isEs ? "Creando ayudante..." : "Creating helper...";
+
+        try {
+          const res = await this._hass.callWS({
+            type: "nexus_mcp/yaml_to_json",
+            yaml: rawCode,
+          });
+
+          if (!res || !res.is_helper || !res.helper_domain || !res.data) {
+            throw new Error(isEs ? "Formato de ayudante no reconocido" : "Unrecognized helper format");
+          }
+
+          await this._hass.callWS({
+            type: `${res.helper_domain}/create`,
+            ...res.data,
+          });
+
+          btn.classList.add("saved");
+          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Ayudante creado en Home Assistant!" : "Helper active in Home Assistant!"}</span>`;
+        } catch (err) {
+          console.error("Nexus MCP Card: Failed to create helper:", err);
+          btn.disabled = false;
+          btn.classList.add("error");
+          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al crear ayudante" : "Error creating helper");
           btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
         }
       };
