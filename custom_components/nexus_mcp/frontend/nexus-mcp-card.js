@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.6.4)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.6.5)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -350,6 +350,7 @@ class NexusMcpCard extends HTMLElement {
     const txtSelectModel = isEs ? "Seleccionar IA / Modelo" : "Select AI / Model";
     const txtAssist = isEs ? "Abrir Assist / Voz" : "Open Assist / Voice";
     const txtQuickReload = isEs ? "Recarga rápida de Home Assistant" : "Quick reload Home Assistant";
+    const txtUndo = isEs ? "Deshacer último cambio" : "Undo last change";
     const txtReset = isEs ? "Reiniciar Conversación" : "Reset Conversation";
     const txtRemoveImg = isEs ? "Eliminar imagen" : "Remove image";
     const txtAttached = isEs ? "Imagen adjunta (lista para enviar)" : "Attached image (ready to send)";
@@ -496,6 +497,20 @@ class NexusMcpCard extends HTMLElement {
         .icon-btn:hover {
           background: var(--secondary-background-color, rgba(255, 255, 255, 0.08));
           color: var(--primary-text-color, #fff);
+        }
+        .icon-btn#btn-header-undo {
+          transition: all 0.25s ease;
+        }
+        .icon-btn#btn-header-undo.has-backup {
+          color: #ffb74d !important;
+          background: rgba(255, 152, 0, 0.18) !important;
+          border: 1px solid rgba(255, 152, 0, 0.55);
+          box-shadow: 0 0 10px rgba(255, 152, 0, 0.35);
+          animation: pulse-undo 2.2s infinite ease-in-out;
+        }
+        @keyframes pulse-undo {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 4px rgba(255, 152, 0, 0.2); }
+          50% { transform: scale(1.08); box-shadow: 0 0 12px rgba(255, 152, 0, 0.6); }
         }
         .messages-container {
           flex: 1;
@@ -742,45 +757,51 @@ class NexusMcpCard extends HTMLElement {
           color: #ffffff !important;
           cursor: default;
         }
-        .code-save-auto-btn.error,
-        .code-save-helper-btn.error,
-        .code-save-script-btn.error,
-        .code-save-scene-btn.error,
-        .code-save-card-btn.error {
+        .code-action-btn.error {
           background: #c62828 !important;
           color: #ffffff !important;
         }
+        .code-action-btn .btn-text {
+          white-space: normal;
+          line-height: 1.25;
+          max-height: 2.8em;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
         .code-revert-btn {
-          background: linear-gradient(135deg, #37474f 0%, #263238 100%);
-          border: 1px solid rgba(255, 255, 255, 0.25);
+          background: linear-gradient(135deg, #b71c1c 0%, #7f0000 100%);
+          border: 1px solid rgba(239, 83, 80, 0.4);
           color: #ffffff;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           gap: 8px;
-          font-size: 0.84rem;
+          font-size: 0.86rem;
           font-weight: 600;
-          padding: 8px 14px;
+          padding: 9px 14px;
           border-radius: 8px;
           transition: all 0.2s ease;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+          box-shadow: 0 2px 6px rgba(183, 28, 28, 0.35);
           width: 100%;
           box-sizing: border-box;
-          margin-top: 6px;
+          margin-top: 4px;
         }
         .code-revert-btn:hover:not(:disabled) {
-          background: linear-gradient(135deg, #c62828 0%, #b71c1c 100%);
+          background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
           border-color: #ef5350;
           transform: translateY(-1px);
-          box-shadow: 0 4px 10px rgba(183, 28, 28, 0.4);
+          box-shadow: 0 4px 10px rgba(183, 28, 28, 0.5);
         }
         .code-revert-btn:active:not(:disabled) {
           transform: translateY(0);
         }
         .code-revert-btn ha-icon {
           --mdc-icon-size: 18px;
-          color: #ff8a80;
+          color: #ffcdd2;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -1046,6 +1067,9 @@ class NexusMcpCard extends HTMLElement {
             <select class="agent-select" id="agent-select" title="${txtSelectModel}"></select>
           </div>
           <div class="header-actions">
+            <button class="icon-btn" id="btn-header-undo" title="${txtUndo}">
+              <ha-icon icon="mdi:undo-variant"></ha-icon>
+            </button>
             <div class="vision-badge" id="vision-badge"></div>
             <button class="icon-btn" id="btn-quick-reload" title="${txtQuickReload}">
               <ha-icon icon="mdi:lightning-bolt-outline"></ha-icon>
@@ -1247,6 +1271,115 @@ class NexusMcpCard extends HTMLElement {
       configBtn.onclick = () => {
         this._openConfiguration();
       };
+    }
+
+    const headerUndoBtn = this.shadowRoot.getElementById("btn-header-undo");
+    if (headerUndoBtn) {
+      headerUndoBtn.onclick = () => {
+        this._revertLastBackup();
+      };
+    }
+    this._updateHeaderUndoState();
+  }
+
+  _updateHeaderUndoState() {
+    if (!this.shadowRoot) return;
+    const undoBtn = this.shadowRoot.getElementById("btn-header-undo");
+    if (!undoBtn) return;
+    const isEs = this._isSpanish();
+    const rawBackup = localStorage.getItem("nexus_last_backup");
+    if (rawBackup) {
+      undoBtn.classList.add("has-backup");
+      undoBtn.title = isEs ? "↩️ Deshacer / Revertir último cambio realizado" : "↩️ Undo / Revert last change";
+    } else {
+      undoBtn.classList.remove("has-backup");
+      undoBtn.title = isEs ? "Deshacer (sin cambios pendientes)" : "Undo (no pending changes)";
+    }
+  }
+
+  async _revertLastBackup(sourceBtn = null) {
+    const isEs = this._isSpanish();
+    const rawBackup = localStorage.getItem("nexus_last_backup");
+    if (!rawBackup) {
+      alert(isEs ? "No hay ningún cambio previo guardado para revertir en esta sesión." : "No previous changes saved to revert in this session.");
+      return;
+    }
+
+    let textSpan = null;
+    let allGroupBtns = [];
+    if (sourceBtn) {
+      const btnGroup = sourceBtn.closest(".code-actions-group") || sourceBtn.parentNode;
+      allGroupBtns = btnGroup ? btnGroup.querySelectorAll(".code-action-btn") : [sourceBtn];
+      allGroupBtns.forEach((b) => (b.disabled = true));
+      textSpan = sourceBtn.querySelector(".btn-text");
+      if (textSpan) textSpan.textContent = isEs ? "Revirtiendo..." : "Reverting...";
+    }
+
+    try {
+      const backupObj = JSON.parse(rawBackup);
+      if (backupObj.type === "card" && backupObj.config) {
+        await this._hass.callWS({
+          type: "lovelace/config/save",
+          url_path: backupObj.urlPath || null,
+          config: backupObj.config,
+        });
+      } else if (backupObj.type === "helper" && backupObj.helperId) {
+        if (backupObj.prevAttributes) {
+          await this._hass.callWS({
+            type: `${backupObj.helperDomain}/update`,
+            [`${backupObj.helperDomain}_id`]: backupObj.helperId,
+            ...backupObj.prevAttributes,
+          });
+        } else {
+          await this._hass.callWS({
+            type: `${backupObj.helperDomain}/delete`,
+            [`${backupObj.helperDomain}_id`]: backupObj.helperId,
+          });
+        }
+      } else if (backupObj.type === "automation" && backupObj.autoId) {
+        if (backupObj.prevConfig) {
+          await this._hass.callApi("POST", `config/automation/config/${backupObj.autoId}`, backupObj.prevConfig);
+        } else {
+          await this._hass.callApi("DELETE", `config/automation/config/${backupObj.autoId}`);
+        }
+      } else if (backupObj.type === "script" && backupObj.scriptId) {
+        if (backupObj.prevConfig) {
+          await this._hass.callApi("POST", `config/script/config/${backupObj.scriptId}`, backupObj.prevConfig);
+        } else {
+          await this._hass.callApi("DELETE", `config/script/config/${backupObj.scriptId}`);
+        }
+      } else if (backupObj.type === "scene" && backupObj.sceneId) {
+        if (backupObj.prevConfig) {
+          await this._hass.callApi("POST", `config/scene/config/${backupObj.sceneId}`, backupObj.prevConfig);
+        } else {
+          await this._hass.callApi("DELETE", `config/scene/config/${backupObj.sceneId}`);
+        }
+      }
+
+      localStorage.removeItem("nexus_last_backup");
+      this._updateHeaderUndoState();
+
+      if (sourceBtn) {
+        const btnGroup = sourceBtn.closest(".code-actions-group") || sourceBtn.parentNode;
+        if (btnGroup) {
+          btnGroup.innerHTML = `
+            <div class="code-success-banner" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #64b5f6;">
+              <ha-icon icon="mdi:undo-variant"></ha-icon>
+              <span>${isEs ? "↩️ ¡Último cambio revertido y estado anterior restaurado con éxito!" : "↩️ Last change reverted and restored successfully!"}</span>
+            </div>
+          `;
+        }
+      } else {
+        alert(isEs ? "↩️ ¡Último cambio revertido y estado anterior restaurado con éxito!" : "↩️ Last change reverted and restored successfully!");
+      }
+    } catch (rErr) {
+      console.error("Nexus MCP Card: Revert failed:", rErr);
+      if (sourceBtn) {
+        allGroupBtns.forEach((b) => (b.disabled = false));
+        const errMsg = (rErr && (rErr.message || rErr.error)) || (isEs ? "Error al revertir" : "Error reverting");
+        if (textSpan) textSpan.textContent = errMsg;
+      }
+      alert((isEs ? "Error al revertir: " : "Error reverting: ") + ((rErr && (rErr.message || rErr.error)) || rErr));
     }
   }
 
@@ -1620,6 +1753,15 @@ class NexusMcpCard extends HTMLElement {
 
     // Helper to merge Lovelace card properties non-destructively
     function mergeCardProps(existing, incoming) {
+      if (!existing || typeof existing !== "object") return incoming;
+      if (existing.type !== incoming.type) {
+        const result = { ...incoming };
+        if (existing.layout_options && !incoming.layout_options) result.layout_options = existing.layout_options;
+        if (existing.grid_options && !incoming.grid_options) result.grid_options = existing.grid_options;
+        if (existing.visibility && !incoming.visibility) result.visibility = existing.visibility;
+        if (existing.view_layout && !incoming.view_layout) result.view_layout = existing.view_layout;
+        return result;
+      }
       const merged = { ...existing, ...incoming };
       if (existing.card_mod && !incoming.card_mod) merged.card_mod = existing.card_mod;
       if (existing.layout_options && !incoming.layout_options) merged.layout_options = existing.layout_options;
@@ -1643,70 +1785,7 @@ class NexusMcpCard extends HTMLElement {
         const allGroupBtns = btnGroup.querySelectorAll(".code-action-btn");
 
         if (mode === "revert") {
-          const rawBackup = localStorage.getItem("nexus_last_backup");
-          if (!rawBackup) {
-            alert(isEs ? "No hay ningún cambio previo pendiente de revertir en esta sesión." : "No previous changes saved to revert in this session.");
-            return;
-          }
-
-          allGroupBtns.forEach((b) => (b.disabled = true));
-          const textSpan = btn.querySelector(".btn-text");
-          if (textSpan) textSpan.textContent = isEs ? "Revirtiendo..." : "Reverting...";
-
-          try {
-            const backupObj = JSON.parse(rawBackup);
-            if (backupObj.type === "card" && backupObj.config) {
-              await this._hass.callWS({
-                type: "lovelace/config/save",
-                url_path: backupObj.urlPath || null,
-                config: backupObj.config,
-              });
-            } else if (backupObj.type === "helper" && backupObj.helperId) {
-              if (backupObj.prevAttributes) {
-                await this._hass.callWS({
-                  type: `${backupObj.helperDomain}/update`,
-                  [`${backupObj.helperDomain}_id`]: backupObj.helperId,
-                  ...backupObj.prevAttributes,
-                });
-              } else {
-                await this._hass.callWS({
-                  type: `${backupObj.helperDomain}/delete`,
-                  [`${backupObj.helperDomain}_id`]: backupObj.helperId,
-                });
-              }
-            } else if (backupObj.type === "automation" && backupObj.autoId) {
-              if (backupObj.prevConfig) {
-                await this._hass.callApi("POST", `config/automation/config/${backupObj.autoId}`, backupObj.prevConfig);
-              } else {
-                await this._hass.callApi("DELETE", `config/automation/config/${backupObj.autoId}`);
-              }
-            } else if (backupObj.type === "script" && backupObj.scriptId) {
-              if (backupObj.prevConfig) {
-                await this._hass.callApi("POST", `config/script/config/${backupObj.scriptId}`, backupObj.prevConfig);
-              } else {
-                await this._hass.callApi("DELETE", `config/script/config/${backupObj.scriptId}`);
-              }
-            } else if (backupObj.type === "scene" && backupObj.sceneId) {
-              if (backupObj.prevConfig) {
-                await this._hass.callApi("POST", `config/scene/config/${backupObj.sceneId}`, backupObj.prevConfig);
-              } else {
-                await this._hass.callApi("DELETE", `config/scene/config/${backupObj.sceneId}`);
-              }
-            }
-
-            localStorage.removeItem("nexus_last_backup");
-            btnGroup.innerHTML = `
-              <div class="code-success-banner" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #64b5f6;">
-                <ha-icon icon="mdi:undo-variant"></ha-icon>
-                <span>${isEs ? "↩️ ¡Último cambio revertido y estado anterior restaurado con éxito!" : "↩️ Last change reverted and restored successfully!"}</span>
-              </div>
-            `;
-          } catch (rErr) {
-            console.error("Nexus MCP Card: Revert failed:", rErr);
-            allGroupBtns.forEach((b) => (b.disabled = false));
-            const errMsg = (rErr && (rErr.message || rErr.error)) || (isEs ? "Error al revertir" : "Error reverting");
-            if (textSpan) textSpan.textContent = errMsg;
-          }
+          await this._revertLastBackup(btn);
           return;
         }
 
@@ -1785,6 +1864,7 @@ class NexusMcpCard extends HTMLElement {
               config: backupDashboardConfig,
               timestamp: Date.now()
             }));
+            this._updateHeaderUndoState();
 
             const views = configRes.views;
             let targetView = views[0];
@@ -1798,40 +1878,81 @@ class NexusMcpCard extends HTMLElement {
 
             let cardUpdated = false;
             const isExplicitUpdate = mode === "update";
+
+            // Recursive entity extractor
+            function extractEntities(obj) {
+              const ents = new Set();
+              function scan(val) {
+                if (!val) return;
+                if (typeof val === "string") {
+                  const trimmed = val.trim();
+                  if (/^[a-z0-9_]+\.[a-z0-9_]+$/i.test(trimmed)) {
+                    ents.add(trimmed.toLowerCase());
+                    ents.add(trimmed.toLowerCase().replace(/_local$/, ""));
+                  }
+                } else if (Array.isArray(val)) {
+                  val.forEach(scan);
+                } else if (typeof val === "object") {
+                  for (const k in val) {
+                    scan(val[k]);
+                  }
+                }
+              }
+              scan(obj);
+              return ents;
+            }
+
+            const newCardEntities = extractEntities(newCard);
             const newCardId = newCard.id || newCard.card_id;
-            const newCardEnt = (newCard.entity || "").trim();
             const newCardName = (newCard.title || newCard.name || "").trim().toLowerCase();
-            const newNormEnt = newCardEnt.replace(/_local$/, "");
+
+            // Extract keywords from newCard names or entities
+            const newKeywords = [];
+            if (newCardName) {
+              newCardName.split(/\s+/).forEach((w) => {
+                if (w.length >= 4) newKeywords.push(w);
+              });
+            }
+            newCardEntities.forEach((e) => {
+              const part = e.split(".")[1] || "";
+              part.split("_").forEach((w) => {
+                if (w.length >= 4) newKeywords.push(w);
+              });
+            });
 
             function matches(c) {
               if (!c || typeof c !== "object") return false;
               if (newCardId && (c.id === newCardId || c.card_id === newCardId)) return true;
 
-              // Entity matching (matches exact or _local suffix variation)
-              const cEnt = (c.entity || "").trim();
-              if (newCardEnt && cEnt) {
-                if (cEnt === newCardEnt) return true;
-                if (cEnt.replace(/_local$/, "") === newNormEnt) return true;
+              // Check entities
+              const cEntities = extractEntities(c);
+              for (const e of newCardEntities) {
+                if (cEntities.has(e)) return true;
               }
 
-              // Multi-entity cards (e.g. entities list, chips)
-              if (newCardEnt && Array.isArray(c.entities)) {
-                if (c.entities.some((e) => {
-                  const eid = (typeof e === "string" ? e : e?.entity || "").trim();
-                  return eid === newCardEnt || eid.replace(/_local$/, "") === newNormEnt;
-                })) return true;
+              // Check entity in JSON string dump
+              const cDump = JSON.stringify(c).toLowerCase();
+              for (const e of newCardEntities) {
+                if (cDump.includes(e)) return true;
               }
 
-              // Name or Title match
+              // Check name / title match
               const cName = (c.title || c.name || "").trim().toLowerCase();
               if (newCardName && cName) {
                 if (newCardName === cName) return true;
                 if (newCardName.includes(cName) || cName.includes(newCardName)) return true;
               }
 
+              // Check keyword overlap (e.g. "oukitel")
+              for (const kw of newKeywords) {
+                if (kw && cDump.includes(kw)) return true;
+              }
+
               // Same type fallback if card content mentions the entity
-              if (newCard.type && c.type === newCard.type && (newCardEnt || newCardName)) {
-                if (JSON.stringify(c).toLowerCase().includes(newNormEnt.toLowerCase())) return true;
+              if (newCard.type && c.type === newCard.type && newCardEntities.size > 0) {
+                for (const e of newCardEntities) {
+                  if (cDump.includes(e)) return true;
+                }
               }
 
               return false;
@@ -1934,6 +2055,7 @@ class NexusMcpCard extends HTMLElement {
                 config: backupDashboardConfig,
               });
               localStorage.removeItem("nexus_last_backup");
+              this._updateHeaderUndoState();
             };
 
           } else if (resType === "helper") {
@@ -1949,6 +2071,7 @@ class NexusMcpCard extends HTMLElement {
               prevAttributes: prevAttributes,
               timestamp: Date.now()
             }));
+            this._updateHeaderUndoState();
 
             if (mode === "update" || existingState) {
               const mergedPayload = {
@@ -2029,6 +2152,7 @@ class NexusMcpCard extends HTMLElement {
               prevConfig: prevAutoConfig,
               timestamp: Date.now()
             }));
+            this._updateHeaderUndoState();
 
             if ((mode === "update" || isExisting) && prevAutoConfig && typeof prevAutoConfig === "object") {
               Object.keys(prevAutoConfig).forEach((k) => {
@@ -2052,6 +2176,7 @@ class NexusMcpCard extends HTMLElement {
                 await this._hass.callApi("DELETE", `config/automation/config/${autoId}`);
               }
               localStorage.removeItem("nexus_last_backup");
+              this._updateHeaderUndoState();
             };
 
           } else if (resType === "script") {
@@ -2069,6 +2194,7 @@ class NexusMcpCard extends HTMLElement {
               prevConfig: prevScriptConfig,
               timestamp: Date.now()
             }));
+            this._updateHeaderUndoState();
 
             if ((mode === "update" || isExistingScript) && prevScriptConfig && typeof prevScriptConfig === "object") {
               Object.keys(prevScriptConfig).forEach((k) => {
@@ -2092,6 +2218,7 @@ class NexusMcpCard extends HTMLElement {
                 await this._hass.callApi("DELETE", `config/script/config/${scriptId}`);
               }
               localStorage.removeItem("nexus_last_backup");
+              this._updateHeaderUndoState();
             };
 
           } else if (resType === "scene") {
@@ -2109,6 +2236,7 @@ class NexusMcpCard extends HTMLElement {
               prevConfig: prevSceneConfig,
               timestamp: Date.now()
             }));
+            this._updateHeaderUndoState();
 
             if ((mode === "update" || isExistingScene) && prevSceneConfig && typeof prevSceneConfig === "object") {
               Object.keys(prevSceneConfig).forEach((k) => {
@@ -2132,6 +2260,7 @@ class NexusMcpCard extends HTMLElement {
                 await this._hass.callApi("DELETE", `config/scene/config/${sceneId}`);
               }
               localStorage.removeItem("nexus_last_backup");
+              this._updateHeaderUndoState();
             };
           }
 
@@ -2174,8 +2303,9 @@ class NexusMcpCard extends HTMLElement {
           console.error("Nexus MCP Card: Action failed:", err);
           allGroupBtns.forEach((b) => (b.disabled = false));
           btn.classList.add("error");
-          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al procesar" : "Error processing");
-          btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
+          const rawErrMsg = (err && (err.message || err.error)) || (isEs ? "Error al procesar" : "Error processing");
+          const cleanErrMsg = String(rawErrMsg).split("\n")[0].substring(0, 90);
+          btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(cleanErrMsg)}</span>`;
         }
       };
     });
@@ -2597,7 +2727,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.6.4 Ready ",
+  "%c NEXUS MCP CARD %c v1.6.5 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );

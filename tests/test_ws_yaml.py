@@ -223,6 +223,22 @@ action:
         self.assertEqual(result["data"]["alias"], "Encender Enchufe Oukitel")
         self.assertIn("sequence", result["data"])
 
+    async def test_truncated_yaml_auto_repair(self):
+        handler = self._get_handler()
+        # Truncated YAML where model cut off mid-token on line 4
+        yaml_content = """type: custom:button-card
+entity: switch.enchufe_carga_oukitel
+name: Carga Oukitel
+show"""
+        msg = {"id": 8, "type": "nexus_mcp/yaml_to_json", "yaml": yaml_content}
+        await handler(self.hass, self.connection, msg)
+
+        self.connection.send_result.assert_called_once()
+        result = self.connection.send_result.call_args[0][1]
+        self.assertTrue(result.get("is_card"))
+        self.assertEqual(result["data"]["type"], "custom:button-card")
+        self.assertEqual(result["data"]["entity"], "switch.enchufe_carga_oukitel")
+
 
 if __name__ == "__main__":
     unittest.main()

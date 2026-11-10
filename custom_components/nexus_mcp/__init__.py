@@ -38,7 +38,7 @@ except (ImportError, AttributeError):
     StaticPathConfig = None
 
 
-FRONTEND_VERSION = "1.6.4"
+FRONTEND_VERSION = "1.6.5"
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
@@ -319,12 +319,43 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                 allow_update = msg.get("allow_update", False) or (mode == "update")
 
                 raw_yaml = msg["yaml"]
-                data = yaml.safe_load(raw_yaml)
+                data = None
+                try:
+                    data = yaml.safe_load(raw_yaml)
+                except yaml.YAMLError:
+                    # Auto-repair truncated YAML (e.g. LLM output cut off by max tokens)
+                    lines = raw_yaml.rstrip().splitlines()
+                    for _ in range(min(30, len(lines))):
+                        if not lines:
+                            break
+                        lines.pop()
+                        candidate = "\n".join(lines).rstrip()
+                        if not candidate:
+                            break
+                        try:
+                            data = yaml.safe_load(candidate)
+                            break
+                        except yaml.YAMLError:
+                            continue
+
+                if data is None:
+                    connection.send_error(
+                        msg["id"],
+                        "invalid_format",
+                        "El código YAML generado contiene un error de sintaxis o quedó incompleto al final. "
+                        "Por favor, pide a la IA que lo vuelva a generar de forma concisa.",
+                    )
+                    return
+
                 if isinstance(data, list) and data:
                     data = data[0]
 
                 if not isinstance(data, dict):
-                    connection.send_error(msg["id"], "invalid_format", "YAML must be a dictionary/mapping")
+                    connection.send_error(
+                        msg["id"],
+                        "invalid_format",
+                        "El código YAML debe representar un mapeo/objeto válido.",
+                    )
                     return
 
                 HELPER_DOMAINS = {
@@ -514,7 +545,12 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                     "data": data,
                 })
             except Exception as err:
-                connection.send_error(msg["id"], "parse_error", str(err))
+                _LOGGER.warning("Nexus MCP: Failed to parse YAML: %s", err)
+                connection.send_error(
+                    msg["id"],
+                    "parse_error",
+                    "Error de sintaxis en el código YAML. Por favor, pide a la IA que lo vuelva a generar de forma concisa.",
+                )
 
         try:
             websocket_api.async_register_command(hass, ws_handle_chat)
