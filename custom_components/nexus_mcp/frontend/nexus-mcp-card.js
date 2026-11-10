@@ -349,6 +349,7 @@ class NexusMcpCard extends HTMLElement {
     const txtConfig = isEs ? "Configurar Nexus MCP" : "Configure Nexus MCP";
     const txtSelectModel = isEs ? "Seleccionar IA / Modelo" : "Select AI / Model";
     const txtAssist = isEs ? "Abrir Assist / Voz" : "Open Assist / Voice";
+    const txtQuickReload = isEs ? "Recarga rápida de Home Assistant" : "Quick reload Home Assistant";
     const txtReset = isEs ? "Reiniciar Conversación" : "Reset Conversation";
     const txtRemoveImg = isEs ? "Eliminar imagen" : "Remove image";
     const txtAttached = isEs ? "Imagen adjunta (lista para enviar)" : "Attached image (ready to send)";
@@ -893,6 +894,9 @@ class NexusMcpCard extends HTMLElement {
           </div>
           <div class="header-actions">
             <div class="vision-badge" id="vision-badge"></div>
+            <button class="icon-btn" id="btn-quick-reload" title="${txtQuickReload}">
+              <ha-icon icon="mdi:lightning-bolt-outline"></ha-icon>
+            </button>
             <button class="icon-btn" id="btn-assist" title="${txtAssist}">
               <ha-icon icon="mdi:microphone"></ha-icon>
             </button>
@@ -1072,6 +1076,13 @@ class NexusMcpCard extends HTMLElement {
       };
     }
 
+    const quickReloadBtn = this.shadowRoot.getElementById("btn-quick-reload");
+    if (quickReloadBtn) {
+      quickReloadBtn.onclick = () => {
+        this._handleQuickReload();
+      };
+    }
+
     if (assistBtn) {
       assistBtn.onclick = () => {
         this._openAssist();
@@ -1083,6 +1094,41 @@ class NexusMcpCard extends HTMLElement {
       configBtn.onclick = () => {
         this._openConfiguration();
       };
+    }
+  }
+
+  async _handleQuickReload() {
+    const btn = this.shadowRoot?.getElementById("btn-quick-reload");
+    if (!btn || !this._hass || this._isReloading) return;
+
+    this._isReloading = true;
+    btn.disabled = true;
+    btn.style.opacity = "0.5";
+    const icon = btn.querySelector("ha-icon");
+    if (icon) icon.icon = "mdi:loading";
+
+    try {
+      await this._hass.callService("homeassistant", "reload_all");
+      if (icon) icon.icon = "mdi:check";
+      btn.style.color = "var(--success-color, #4caf50)";
+      setTimeout(() => {
+        if (icon) icon.icon = "mdi:lightning-bolt-outline";
+        btn.style.color = "";
+        btn.style.opacity = "";
+        btn.disabled = false;
+        this._isReloading = false;
+      }, 2000);
+    } catch (err) {
+      console.error("Nexus MCP: Quick Reload failed:", err);
+      if (icon) icon.icon = "mdi:alert-circle-outline";
+      btn.style.color = "var(--error-color, #f44336)";
+      setTimeout(() => {
+        if (icon) icon.icon = "mdi:lightning-bolt-outline";
+        btn.style.color = "";
+        btn.style.opacity = "";
+        btn.disabled = false;
+        this._isReloading = false;
+      }, 2500);
     }
   }
 
