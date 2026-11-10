@@ -490,7 +490,7 @@ class NexusMcpConversationEntity(ConversationEntity):
             "name": f"Nexus MCP ({self._model_name})",
             "manufacturer": "Nexus MCP",
             "model": self._model_name,
-            "sw_version": "1.5.4",
+            "sw_version": "1.6.0",
         }
 
     @property
