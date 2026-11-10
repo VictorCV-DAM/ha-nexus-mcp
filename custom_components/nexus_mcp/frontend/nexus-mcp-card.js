@@ -1329,15 +1329,6 @@ class NexusMcpCard extends HTMLElement {
         cleanCode.includes(`${hd}:`) || cleanCode.includes(`type: ${hd}`) || cleanCode.includes(`domain: ${hd}`)
       );
 
-      const isScript = isYaml && !isAutomation && !isHelper && (
-        cleanCode.includes("sequence:") || cleanCode.includes("script:") ||
-        ((cleanCode.includes("action:") || cleanCode.includes("actions:")) && !hasTrigger)
-      );
-
-      const isScene = isYaml && !isAutomation && !isHelper && !isScript && (
-        cleanCode.includes("scene:") || (cleanCode.includes("entities:") && !hasTrigger && !cleanCode.includes("sequence:"))
-      );
-
       const CARD_TYPES = [
         "tile", "entities", "entity", "glance", "button", "gauge", "markdown",
         "thermostat", "weather-forecast", "light", "alarm-panel", "picture",
@@ -1345,11 +1336,19 @@ class NexusMcpCard extends HTMLElement {
         "statistics-graph", "logbook", "media-control", "map", "iframe",
         "grid", "vertical-stack", "horizontal-stack", "area", "sensor"
       ];
-      const isCard = isYaml && !isAutomation && !isHelper && !isScript && !isScene && (
+      const isCard = isYaml && !isAutomation && !isHelper && (
         CARD_TYPES.some((ct) => cleanCode.includes(`type: ${ct}`) || cleanCode.includes(`type: '${ct}'`) || cleanCode.includes(`type: "${ct}"`)) ||
         cleanCode.includes("type: custom:") ||
         cleanCode.includes("-card") ||
-        (cleanCode.includes("type:") && (cleanCode.includes("cards:") || cleanCode.includes("card:")))
+        (cleanCode.includes("type:") && !cleanCode.includes("sequence:") && (cleanCode.includes("entity:") || cleanCode.includes("entities:") || cleanCode.includes("cards:") || cleanCode.includes("card:")))
+      );
+
+      const isScript = isYaml && !isAutomation && !isHelper && !isCard && (
+        cleanCode.includes("sequence:") || cleanCode.includes("script:")
+      );
+
+      const isScene = isYaml && !isAutomation && !isHelper && !isCard && !isScript && (
+        cleanCode.includes("scene:") || (cleanCode.includes("entities:") && !hasTrigger && !cleanCode.includes("sequence:"))
       );
 
       if (isAutomation) {
