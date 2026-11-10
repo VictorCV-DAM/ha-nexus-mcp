@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.6.2)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.6.3)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -785,6 +785,68 @@ class NexusMcpCard extends HTMLElement {
           align-items: center;
           justify-content: center;
         }
+        .code-actions-group {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          width: 100%;
+        }
+        .code-action-btn {
+          border: none;
+          color: #ffffff;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          font-size: 0.88rem;
+          font-weight: 600;
+          padding: 10px 16px;
+          border-radius: 8px;
+          transition: all 0.2s ease;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .code-save-update-btn {
+          background: linear-gradient(135deg, #00838f 0%, #00acc1 100%);
+        }
+        .code-save-new-btn {
+          background: linear-gradient(135deg, #1976d2 0%, #0288d1 100%);
+        }
+        .code-action-btn:hover:not(:disabled) {
+          filter: brightness(1.15);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+        }
+        .code-action-btn:active:not(:disabled) {
+          transform: translateY(0);
+        }
+        .code-action-btn ha-icon {
+          --mdc-icon-size: 20px;
+          color: #ffffff;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .code-success-banner {
+          background: rgba(46, 125, 50, 0.2);
+          border: 1px solid #4caf50;
+          color: #81c784;
+          padding: 10px 14px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.88rem;
+          font-weight: 600;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .code-success-banner ha-icon {
+          --mdc-icon-size: 20px;
+          color: #81c784;
+        }
         .code-copy-btn {
           border: none;
           color: var(--secondary-text-color, #bbb);
@@ -1332,12 +1394,8 @@ class NexusMcpCard extends HTMLElement {
     // 5. Convert markdown inline code `code` to <code class="inline-code">
     text = text.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
 
-    // 6. Reinsert formatted code boxes (using split/join to safely preserve all code content without $ escaping issues)
-    const detectedAutomations = [];
-    const detectedHelpers = [];
-    const detectedScripts = [];
-    const detectedScenes = [];
-    const detectedCards = [];
+    // 6. Reinsert formatted code boxes and generate explicit dual-action buttons (Update vs Add)
+    const detectedResources = [];
     codeBlocks.forEach((block, i) => {
       const placeholder = `__NEXUS_CODE_BLOCK_${i}__`;
       const cleanCode = block.code.trim();
@@ -1352,15 +1410,12 @@ class NexusMcpCard extends HTMLElement {
 
       const normLang = (langLabel || "").toLowerCase();
       const isYaml = !normLang || normLang === "yaml" || normLang === "yml" || normLang === "ha" || normLang === "homeassistant";
-      const hasTrigger = cleanCode.includes("trigger:") || cleanCode.includes("triggers:") || cleanCode.includes("platform:");
-      const hasAction = cleanCode.includes("action:") || cleanCode.includes("actions:") || cleanCode.includes("service:");
-      const isAutomation = isYaml && hasTrigger && hasAction;
 
       const HELPER_DOMAINS = [
         "input_boolean", "input_number", "input_select", "input_text",
         "input_datetime", "input_button", "counter", "timer", "schedule"
       ];
-      const isHelper = isYaml && !isAutomation && HELPER_DOMAINS.some((hd) =>
+      const isHelper = isYaml && HELPER_DOMAINS.some((hd) =>
         cleanCode.includes(`${hd}:`) || cleanCode.includes(`type: ${hd}`) || cleanCode.includes(`domain: ${hd}`)
       );
 
@@ -1371,7 +1426,7 @@ class NexusMcpCard extends HTMLElement {
         "statistics-graph", "logbook", "media-control", "map", "iframe",
         "grid", "vertical-stack", "horizontal-stack", "area", "sensor"
       ];
-      const isCard = isYaml && !isAutomation && !isHelper && (
+      const isCard = isYaml && !isHelper && (
         CARD_TYPES.some((ct) => cleanCode.includes(`type: ${ct}`) || cleanCode.includes(`type: '${ct}'`) || cleanCode.includes(`type: "${ct}"`)) ||
         cleanCode.includes("type: custom:") ||
         cleanCode.includes("-card") ||
@@ -1379,24 +1434,27 @@ class NexusMcpCard extends HTMLElement {
         (cleanCode.includes("type:") && !cleanCode.includes("sequence:") && (cleanCode.includes("entity:") || cleanCode.includes("entities:") || cleanCode.includes("cards:") || cleanCode.includes("card:")))
       );
 
-      const isScript = isYaml && !isAutomation && !isHelper && !isCard && (
-        cleanCode.includes("sequence:") || cleanCode.includes("script:")
+      const hasTrigger = cleanCode.includes("trigger:") || cleanCode.includes("triggers:") || cleanCode.includes("platform:");
+      const hasAction = cleanCode.includes("action:") || cleanCode.includes("actions:") || cleanCode.includes("service:");
+      const isAutomation = isYaml && !isHelper && !isCard && hasTrigger && hasAction;
+
+      const isScript = isYaml && !isHelper && !isCard && !isAutomation && (
+        cleanCode.includes("sequence:") || cleanCode.includes("script:") || (hasAction && !hasTrigger)
       );
 
-      const isScene = isYaml && !isAutomation && !isHelper && !isCard && !isScript && (
+      const isScene = isYaml && !isHelper && !isCard && !isAutomation && !isScript && (
         cleanCode.includes("scene:") || (cleanCode.includes("entities:") && !hasTrigger && !cleanCode.includes("sequence:"))
       );
 
-      if (isAutomation) {
-        detectedAutomations.push(cleanCode);
-      } else if (isHelper) {
-        detectedHelpers.push(cleanCode);
-      } else if (isScript) {
-        detectedScripts.push(cleanCode);
-      } else if (isScene) {
-        detectedScenes.push(cleanCode);
-      } else if (isCard) {
-        detectedCards.push(cleanCode);
+      let resType = null;
+      if (isCard) resType = "card";
+      else if (isHelper) resType = "helper";
+      else if (isAutomation) resType = "automation";
+      else if (isScript) resType = "script";
+      else if (isScene) resType = "scene";
+
+      if (resType) {
+        detectedResources.push({ type: resType, code: cleanCode });
       }
 
       const boxHtml = `
@@ -1416,67 +1474,51 @@ class NexusMcpCard extends HTMLElement {
       text = text.split(placeholder).join(boxHtml);
     });
 
-    if (detectedAutomations.length > 0 || detectedHelpers.length > 0 || detectedScripts.length > 0 || detectedScenes.length > 0 || detectedCards.length > 0) {
+    if (detectedResources.length > 0) {
       const isEs = this._isSpanish();
       let footerHtml = `<div class="bubble-automation-footer">`;
-      detectedAutomations.forEach((autoCode, idx) => {
-        const autoDataCode = encodeURIComponent(autoCode);
-        const btnLabel = detectedAutomations.length > 1
-          ? (isEs ? `Crear y Activar Automatización #${idx + 1} en Home Assistant` : `Create and Activate Automation #${idx + 1} in Home Assistant`)
-          : (isEs ? "Crear y Activar Automatización en Home Assistant" : "Create and Activate Automation in Home Assistant");
+      detectedResources.forEach((resItem, idx) => {
+        const itemDataCode = encodeURIComponent(resItem.code);
+        const rType = resItem.type;
+        const prefix = detectedResources.length > 1 ? ` #${idx + 1}` : "";
+
+        let updateLabel = "";
+        let newLabel = "";
+        let iconName = "mdi:view-dashboard-outline";
+
+        if (rType === "card") {
+          iconName = "mdi:view-dashboard-outline";
+          updateLabel = isEs ? `🔄 Actualizar Tarjeta Existente${prefix} en Dashboard` : `🔄 Update Existing Card${prefix} in Dashboard`;
+          newLabel = isEs ? `➕ Añadir como Nueva Tarjeta${prefix} al Dashboard` : `➕ Add as New Card${prefix} to Dashboard`;
+        } else if (rType === "helper") {
+          iconName = "mdi:puzzle-plus-outline";
+          updateLabel = isEs ? `🔄 Actualizar Ayudante Existente${prefix} en Home Assistant` : `🔄 Update Existing Helper${prefix} in Home Assistant`;
+          newLabel = isEs ? `➕ Crear como Nuevo Ayudante${prefix} en Home Assistant` : `➕ Create as New Helper${prefix} in Home Assistant`;
+        } else if (rType === "automation") {
+          iconName = "mdi:lightning-bolt";
+          updateLabel = isEs ? `🔄 Actualizar Automatización Existente${prefix} en Home Assistant` : `🔄 Update Existing Automation${prefix} in Home Assistant`;
+          newLabel = isEs ? `➕ Crear como Nueva Automatización${prefix} en Home Assistant` : `➕ Create as New Automation${prefix} in Home Assistant`;
+        } else if (rType === "script") {
+          iconName = "mdi:script-text-play-outline";
+          updateLabel = isEs ? `🔄 Actualizar Script Existente${prefix} en Home Assistant` : `🔄 Update Existing Script${prefix} in Home Assistant`;
+          newLabel = isEs ? `➕ Crear como Nuevo Script${prefix} en Home Assistant` : `➕ Create as New Script${prefix} in Home Assistant`;
+        } else if (rType === "scene") {
+          iconName = "mdi:palette-outline";
+          updateLabel = isEs ? `🔄 Actualizar Escena Existente${prefix} en Home Assistant` : `🔄 Update Existing Scene${prefix} in Home Assistant`;
+          newLabel = isEs ? `➕ Crear como Nueva Escena${prefix} en Home Assistant` : `➕ Create as New Scene${prefix} in Home Assistant`;
+        }
+
         footerHtml += `
-          <button class="code-save-auto-btn" data-code="${autoDataCode}" title="${btnLabel}">
-            <ha-icon icon="mdi:lightning-bolt"></ha-icon>
-            <span class="btn-text">${btnLabel}</span>
-          </button>
-        `;
-      });
-      detectedScripts.forEach((scriptCode, idx) => {
-        const scriptDataCode = encodeURIComponent(scriptCode);
-        const btnLabel = detectedScripts.length > 1
-          ? (isEs ? `Crear y Activar Script #${idx + 1} en Home Assistant` : `Create and Activate Script #${idx + 1} in Home Assistant`)
-          : (isEs ? "Crear y Activar Script en Home Assistant" : "Create and Activate Script in Home Assistant");
-        footerHtml += `
-          <button class="code-save-script-btn" data-code="${scriptDataCode}" title="${btnLabel}">
-            <ha-icon icon="mdi:script-text-play-outline"></ha-icon>
-            <span class="btn-text">${btnLabel}</span>
-          </button>
-        `;
-      });
-      detectedScenes.forEach((sceneCode, idx) => {
-        const sceneDataCode = encodeURIComponent(sceneCode);
-        const btnLabel = detectedScenes.length > 1
-          ? (isEs ? `Crear Escena #${idx + 1} en Home Assistant` : `Create Scene #${idx + 1} in Home Assistant`)
-          : (isEs ? "Crear Escena en Home Assistant" : "Create Scene in Home Assistant");
-        footerHtml += `
-          <button class="code-save-scene-btn" data-code="${sceneDataCode}" title="${btnLabel}">
-            <ha-icon icon="mdi:palette-outline"></ha-icon>
-            <span class="btn-text">${btnLabel}</span>
-          </button>
-        `;
-      });
-      detectedCards.forEach((cardCode, idx) => {
-        const cardDataCode = encodeURIComponent(cardCode);
-        const btnLabel = detectedCards.length > 1
-          ? (isEs ? `Añadir / Actualizar Tarjeta #${idx + 1} en el Dashboard` : `Add / Update Card #${idx + 1} in Dashboard`)
-          : (isEs ? "Añadir / Actualizar Tarjeta en el Dashboard" : "Add / Update Card in Dashboard");
-        footerHtml += `
-          <button class="code-save-card-btn" data-code="${cardDataCode}" title="${btnLabel}">
-            <ha-icon icon="mdi:view-dashboard-outline"></ha-icon>
-            <span class="btn-text">${btnLabel}</span>
-          </button>
-        `;
-      });
-      detectedHelpers.forEach((helperCode, idx) => {
-        const helperDataCode = encodeURIComponent(helperCode);
-        const btnLabel = detectedHelpers.length > 1
-          ? (isEs ? `Crear / Actualizar Ayudante #${idx + 1} en Home Assistant` : `Create / Update Helper #${idx + 1} in Home Assistant`)
-          : (isEs ? "Crear / Actualizar Ayudante en Home Assistant" : "Create / Update Helper in Home Assistant");
-        footerHtml += `
-          <button class="code-save-helper-btn" data-code="${helperDataCode}" title="${btnLabel}">
-            <ha-icon icon="mdi:puzzle-plus-outline"></ha-icon>
-            <span class="btn-text">${btnLabel}</span>
-          </button>
+          <div class="code-actions-group" data-code="${itemDataCode}" data-resource="${rType}">
+            <button class="code-action-btn code-save-update-btn" data-code="${itemDataCode}" data-resource="${rType}" data-mode="update" title="${updateLabel}">
+              <ha-icon icon="${iconName}"></ha-icon>
+              <span class="btn-text">${updateLabel}</span>
+            </button>
+            <button class="code-action-btn code-save-new-btn" data-code="${itemDataCode}" data-resource="${rType}" data-mode="add" title="${newLabel}">
+              <ha-icon icon="mdi:plus-circle-outline"></ha-icon>
+              <span class="btn-text">${newLabel}</span>
+            </button>
+          </div>
         `;
       });
       footerHtml += `</div>`;
@@ -1572,493 +1614,205 @@ class NexusMcpCard extends HTMLElement {
       };
     });
 
-    // Helper to attach an undo / revert button directly underneath any action button
-    const attachUndoButton = (btn, isEs, undoLabel, onUndo) => {
-      if (!btn || !btn.parentNode) return;
-      const dataKey = btn.getAttribute("data-code") || "";
-      const existingUndo = btn.parentNode.querySelector(`.code-revert-btn[data-for="${dataKey}"]`);
-      if (existingUndo) existingUndo.remove();
+    // Helper to merge Lovelace card properties non-destructively
+    function mergeCardProps(existing, incoming) {
+      const merged = { ...existing, ...incoming };
+      if (existing.card_mod && !incoming.card_mod) merged.card_mod = existing.card_mod;
+      if (existing.layout_options && !incoming.layout_options) merged.layout_options = existing.layout_options;
+      if (existing.grid_options && !incoming.grid_options) merged.grid_options = existing.grid_options;
+      if (existing.visibility && !incoming.visibility) merged.visibility = existing.visibility;
+      if (existing.hold_action && !incoming.hold_action) merged.hold_action = existing.hold_action;
+      if (existing.double_tap_action && !incoming.double_tap_action) merged.double_tap_action = existing.double_tap_action;
+      return merged;
+    }
 
-      const undoBtn = document.createElement("button");
-      undoBtn.className = "code-revert-btn";
-      undoBtn.setAttribute("data-for", dataKey);
-      undoBtn.title = isEs ? "Deshacer y restaurar el estado anterior" : "Undo and restore previous state";
-      undoBtn.innerHTML = `
-        <ha-icon icon="mdi:undo-variant"></ha-icon>
-        <span class="btn-text">${undoLabel}</span>
-      `;
-
-      undoBtn.onclick = async (ue) => {
-        ue.stopPropagation();
-        undoBtn.disabled = true;
-        const textSpan = undoBtn.querySelector(".btn-text");
-        if (textSpan) textSpan.textContent = isEs ? "Restaurando..." : "Restoring...";
-        try {
-          await onUndo();
-          undoBtn.innerHTML = `
-            <ha-icon icon="mdi:check-circle"></ha-icon>
-            <span class="btn-text">${isEs ? "✅ Estado anterior restaurado con éxito" : "✅ Restored to previous state"}</span>
-          `;
-          undoBtn.style.background = "linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)";
-          undoBtn.style.borderColor = "#81c784";
-          btn.classList.remove("saved");
-          btn.disabled = false;
-        } catch (err) {
-          console.error("Nexus MCP Card: Undo failed:", err);
-          undoBtn.disabled = false;
-          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al revertir" : "Error reverting");
-          undoBtn.innerHTML = `
-            <ha-icon icon="mdi:alert-circle"></ha-icon>
-            <span class="btn-text">${escapeHtml(errMsg)}</span>
-          `;
-        }
-      };
-
-      btn.parentNode.insertBefore(undoBtn, btn.nextSibling);
-    };
-
-    // Attach create automation click events
-    const autoButtons = container.querySelectorAll(".code-save-auto-btn");
-    autoButtons.forEach((btn) => {
+    // Unified click handler for all code action buttons (Update vs Add)
+    const actionButtons = container.querySelectorAll(".code-action-btn");
+    actionButtons.forEach((btn) => {
       btn.onclick = async (e) => {
         e.stopPropagation();
         const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
         if (!rawCode) return;
+        const mode = btn.getAttribute("data-mode") || "add"; // "update" or "add"
         const isEs = this._isSpanish();
 
-        btn.disabled = true;
+        const btnGroup = btn.closest(".code-actions-group") || btn.parentNode;
+        const allGroupBtns = btnGroup.querySelectorAll(".code-action-btn");
+        allGroupBtns.forEach((b) => (b.disabled = true));
+
         const textSpan = btn.querySelector(".btn-text");
-        if (textSpan) textSpan.textContent = isEs ? "Creando..." : "Creating...";
+        if (textSpan) {
+          textSpan.textContent = isEs
+            ? (mode === "update" ? "Actualizando..." : "Creando...")
+            : (mode === "update" ? "Updating..." : "Creating...");
+        }
 
         try {
           const res = await this._hass.callWS({
             type: "nexus_mcp/yaml_to_json",
             yaml: rawCode,
+            mode: mode,
+            allow_update: mode === "update",
           });
 
           if (!res || !res.data) {
-            throw new Error(isEs ? "Formato de automatización no válido" : "Invalid automation format");
+            throw new Error(isEs ? "Formato YAML no reconocido" : "Unrecognized YAML format");
           }
 
-          const payload = res.data;
-          const autoId = payload.id || `nexus_${Date.now()}`;
-          payload.id = autoId;
-
-          // Check if automation already exists to backup for undo
-          let prevAutoConfig = null;
-          let isExisting = false;
-          try {
-            prevAutoConfig = await this._hass.callApi("GET", `config/automation/config/${autoId}`);
-            isExisting = !!prevAutoConfig;
-          } catch (_) {
-            isExisting = false;
-          }
-
-          // If updating existing, merge non-destructively
-          if (isExisting && prevAutoConfig && typeof prevAutoConfig === "object") {
-            Object.keys(prevAutoConfig).forEach((k) => {
-              if (payload[k] === undefined) {
-                payload[k] = prevAutoConfig[k];
-              }
-            });
-          }
-
-          await this._hass.callApi("POST", `config/automation/config/${autoId}`, payload);
-
-          btn.classList.add("saved");
-          const okMsg = isExisting
-            ? (isEs ? "¡Automatización actualizada con respaldo!" : "Automation safely updated!")
-            : (isEs ? "¡Automatización creada y activa!" : "Automation active!");
-          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${okMsg}</span>`;
-
-          attachUndoButton(
-            btn,
-            isEs,
-            isEs ? "↩️ Deshacer cambios en la Automatización" : "↩️ Undo Automation changes",
-            async () => {
-              if (isExisting && prevAutoConfig) {
-                await this._hass.callApi("POST", `config/automation/config/${autoId}`, prevAutoConfig);
-              } else {
-                await this._hass.callApi("DELETE", `config/automation/config/${autoId}`);
-              }
-            }
+          const resType = res.resource_type || (
+            res.is_card ? "card" :
+            res.is_helper ? "helper" :
+            res.is_script ? "script" :
+            res.is_scene ? "scene" : "automation"
           );
-        } catch (err) {
-          console.error("Nexus MCP Card: Failed to create automation:", err);
-          btn.disabled = false;
-          btn.classList.add("error");
-          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al crear" : "Error creating");
-          btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
-        }
-      };
-    });
 
-    // Attach create script click events
-    const scriptButtons = container.querySelectorAll(".code-save-script-btn");
-    scriptButtons.forEach((btn) => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
-        if (!rawCode) return;
-        const isEs = this._isSpanish();
+          let okMsg = "";
+          let undoLabel = "";
+          let undoCallback = null;
 
-        btn.disabled = true;
-        const textSpan = btn.querySelector(".btn-text");
-        if (textSpan) textSpan.textContent = isEs ? "Creando script..." : "Creating script...";
+          if (resType === "card") {
+            const newCard = res.data;
+            const pathname = window.location.pathname || "";
+            const pathParts = pathname.split("/").filter(Boolean);
+            let urlPath = null;
+            if (pathParts.length > 0 && pathParts[0] !== "lovelace") {
+              urlPath = pathParts[0];
+            }
 
-        try {
-          const res = await this._hass.callWS({
-            type: "nexus_mcp/yaml_to_json",
-            yaml: rawCode,
-          });
-
-          if (!res || !res.is_script || !res.data) {
-            throw new Error(isEs ? "Formato de script no válido" : "Invalid script format");
-          }
-
-          const scriptId = res.script_id || `nexus_script_${Date.now()}`;
-          let prevScriptConfig = null;
-          let isExistingScript = false;
-          try {
-            prevScriptConfig = await this._hass.callApi("GET", `config/script/config/${scriptId}`);
-            isExistingScript = !!prevScriptConfig;
-          } catch (_) {}
-
-          if (isExistingScript && prevScriptConfig && typeof prevScriptConfig === "object") {
-            Object.keys(prevScriptConfig).forEach((k) => {
-              if (res.data[k] === undefined) {
-                res.data[k] = prevScriptConfig[k];
-              }
+            const configRes = await this._hass.callWS({
+              type: "lovelace/config",
+              url_path: urlPath,
             });
-          }
 
-          await this._hass.callApi("POST", `config/script/config/${scriptId}`, res.data);
-
-          btn.classList.add("saved");
-          const okMsg = isExistingScript
-            ? (isEs ? "¡Script actualizado con respaldo!" : "Script safely updated!")
-            : (isEs ? "¡Script creado y activo!" : "Script active!");
-          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${okMsg}</span>`;
-
-          attachUndoButton(
-            btn,
-            isEs,
-            isEs ? "↩️ Deshacer cambios en el Script" : "↩️ Undo Script changes",
-            async () => {
-              if (isExistingScript && prevScriptConfig) {
-                await this._hass.callApi("POST", `config/script/config/${scriptId}`, prevScriptConfig);
-              } else {
-                await this._hass.callApi("DELETE", `config/script/config/${scriptId}`);
-              }
+            if (!configRes || !configRes.views) {
+              throw new Error(isEs ? "No se pudo leer la configuración del dashboard" : "Could not load dashboard config");
             }
-          );
-        } catch (err) {
-          console.error("Nexus MCP Card: Failed to create script:", err);
-          btn.disabled = false;
-          btn.classList.add("error");
-          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al crear script" : "Error creating script");
-          btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
-        }
-      };
-    });
 
-    // Attach create scene click events
-    const sceneButtons = container.querySelectorAll(".code-save-scene-btn");
-    sceneButtons.forEach((btn) => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
-        if (!rawCode) return;
-        const isEs = this._isSpanish();
-
-        btn.disabled = true;
-        const textSpan = btn.querySelector(".btn-text");
-        if (textSpan) textSpan.textContent = isEs ? "Creando escena..." : "Creating scene...";
-
-        try {
-          const res = await this._hass.callWS({
-            type: "nexus_mcp/yaml_to_json",
-            yaml: rawCode,
-          });
-
-          if (!res || !res.is_scene || !res.data) {
-            throw new Error(isEs ? "Formato de escena no válido" : "Invalid scene format");
-          }
-
-          const sceneId = res.scene_id || `nexus_scene_${Date.now()}`;
-          let prevSceneConfig = null;
-          let isExistingScene = false;
-          try {
-            prevSceneConfig = await this._hass.callApi("GET", `config/scene/config/${sceneId}`);
-            isExistingScene = !!prevSceneConfig;
-          } catch (_) {}
-
-          if (isExistingScene && prevSceneConfig && typeof prevSceneConfig === "object") {
-            Object.keys(prevSceneConfig).forEach((k) => {
-              if (res.data[k] === undefined) {
-                res.data[k] = prevSceneConfig[k];
-              }
-            });
-          }
-
-          await this._hass.callApi("POST", `config/scene/config/${sceneId}`, res.data);
-
-          btn.classList.add("saved");
-          const okMsg = isExistingScene
-            ? (isEs ? "¡Escena actualizada con respaldo!" : "Scene safely updated!")
-            : (isEs ? "¡Escena creada en Home Assistant!" : "Scene active in Home Assistant!");
-          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${okMsg}</span>`;
-
-          attachUndoButton(
-            btn,
-            isEs,
-            isEs ? "↩️ Deshacer cambios en la Escena" : "↩️ Undo Scene changes",
-            async () => {
-              if (isExistingScene && prevSceneConfig) {
-                await this._hass.callApi("POST", `config/scene/config/${sceneId}`, prevSceneConfig);
-              } else {
-                await this._hass.callApi("DELETE", `config/scene/config/${sceneId}`);
-              }
+            const backupDashboardConfig = JSON.parse(JSON.stringify(configRes));
+            const views = configRes.views;
+            if (views.length === 0) {
+              throw new Error(isEs ? "El dashboard no tiene vistas" : "Dashboard has no views");
             }
-          );
-        } catch (err) {
-          console.error("Nexus MCP Card: Failed to create scene:", err);
-          btn.disabled = false;
-          btn.classList.add("error");
-          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al crear escena" : "Error creating scene");
-          btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
-        }
-      };
-    });
 
-    // Attach add / update dashboard card click events
-    const cardButtons = container.querySelectorAll(".code-save-card-btn");
-    cardButtons.forEach((btn) => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
-        if (!rawCode) return;
-        const isEs = this._isSpanish();
-
-        btn.disabled = true;
-        const textSpan = btn.querySelector(".btn-text");
-        if (textSpan) textSpan.textContent = isEs ? "Procesando tarjeta..." : "Processing card...";
-
-        try {
-          const res = await this._hass.callWS({
-            type: "nexus_mcp/yaml_to_json",
-            yaml: rawCode,
-          });
-
-          if (!res || !res.is_card || !res.data) {
-            throw new Error(isEs ? "Formato de tarjeta no reconocido" : "Unrecognized card format");
-          }
-
-          const newCard = res.data;
-
-          // 1. Determine current dashboard url_path
-          const pathname = window.location.pathname || "";
-          const pathParts = pathname.split("/").filter(Boolean);
-          let urlPath = null;
-          if (pathParts.length > 0 && pathParts[0] !== "lovelace") {
-            urlPath = pathParts[0];
-          }
-
-          // 2. Fetch current dashboard config
-          const configRes = await this._hass.callWS({
-            type: "lovelace/config",
-            url_path: urlPath,
-          });
-
-          if (!configRes || !configRes.views) {
-            throw new Error(isEs ? "No se pudo leer la configuración del dashboard" : "Could not load dashboard config");
-          }
-
-          // Full snapshot backup for undo
-          const backupDashboardConfig = JSON.parse(JSON.stringify(configRes));
-
-          const views = configRes.views;
-          if (views.length === 0) {
-            throw new Error(isEs ? "El dashboard no tiene vistas" : "Dashboard has no views");
-          }
-
-          // 3. Find current view
-          let targetView = views[0];
-          const currentViewPath = pathParts.length > 1 ? pathParts[1] : "";
-          if (currentViewPath) {
-            const matched = views.find(
-              (v, idx) => v.path === currentViewPath || String(idx) === currentViewPath
-            );
-            if (matched) targetView = matched;
-          }
-
-          // 4. Safe Check: ONLY update if explicitly requested as an update
-          let cardUpdated = false;
-          const explicitUpdate = !!res.is_update;
-          const newCardId = newCard.id || newCard.card_id;
-
-          function matches(c) {
-            if (!c || typeof c !== "object") return false;
-            if (newCardId && (c.id === newCardId || c.card_id === newCardId)) return true;
-            if (explicitUpdate) {
-              const newCardTitle = newCard.title || newCard.name;
-              if (newCardTitle && (c.title === newCardTitle || c.name === newCardTitle)) return true;
-              if (newCard.type && c.type === newCard.type && newCard.entity && c.entity === newCard.entity) return true;
+            let targetView = views[0];
+            const currentViewPath = pathParts.length > 1 ? pathParts[1] : "";
+            if (currentViewPath) {
+              const matched = views.find(
+                (v, idx) => v.path === currentViewPath || String(idx) === currentViewPath
+              );
+              if (matched) targetView = matched;
             }
-            return false;
-          }
 
-          function mergeCardProps(existing, incoming) {
-            const merged = { ...existing, ...incoming };
-            if (existing.card_mod && !incoming.card_mod) merged.card_mod = existing.card_mod;
-            if (existing.layout_options && !incoming.layout_options) merged.layout_options = existing.layout_options;
-            if (existing.grid_options && !incoming.grid_options) merged.grid_options = existing.grid_options;
-            if (existing.visibility && !incoming.visibility) merged.visibility = existing.visibility;
-            if (existing.hold_action && !incoming.hold_action) merged.hold_action = existing.hold_action;
-            if (existing.double_tap_action && !incoming.double_tap_action) merged.double_tap_action = existing.double_tap_action;
-            return merged;
-          }
+            let cardUpdated = false;
+            const isExplicitUpdate = mode === "update";
+            const newCardId = newCard.id || newCard.card_id;
 
-          // Check if placement at beginning was requested in user query or code comment
-          const insertAtBeginning = /principio|inicio|arriba|primera|top|start/i.test(rawCode) ||
-            (this._messages && this._messages.length > 0 && /principio|inicio|arriba|primera|top|start/i.test(this._messages[this._messages.length - 2]?.content || ""));
+            function matches(c) {
+              if (!c || typeof c !== "object") return false;
+              if (newCardId && (c.id === newCardId || c.card_id === newCardId)) return true;
+              if (isExplicitUpdate) {
+                const newCardTitle = newCard.title || newCard.name;
+                if (newCardTitle && (c.title === newCardTitle || c.name === newCardTitle)) return true;
+                if (newCard.type && c.type === newCard.type && newCard.entity && c.entity === newCard.entity) return true;
+                if (newCard.type && c.type === newCard.type) return true;
+              }
+              return false;
+            }
 
-          // If view has sections (modern HA)
-          if (Array.isArray(targetView.sections) && targetView.sections.length > 0) {
-            if (explicitUpdate) {
-              for (const sec of targetView.sections) {
-                if (Array.isArray(sec.cards)) {
-                  const matchIdx = sec.cards.findIndex(matches);
-                  if (matchIdx !== -1) {
-                    sec.cards[matchIdx] = mergeCardProps(sec.cards[matchIdx], newCard);
-                    cardUpdated = true;
-                    break;
+            const insertAtBeginning = /principio|inicio|arriba|primera|top|start/i.test(rawCode) ||
+              (this._messages && this._messages.length > 0 && /principio|inicio|arriba|primera|top|start/i.test(this._messages[this._messages.length - 2]?.content || ""));
+
+            if (Array.isArray(targetView.sections) && targetView.sections.length > 0) {
+              if (isExplicitUpdate) {
+                for (const sec of targetView.sections) {
+                  if (Array.isArray(sec.cards)) {
+                    const matchIdx = sec.cards.findIndex(matches);
+                    if (matchIdx !== -1) {
+                      sec.cards[matchIdx] = mergeCardProps(sec.cards[matchIdx], newCard);
+                      cardUpdated = true;
+                      break;
+                    }
                   }
                 }
               }
-            }
-            if (!cardUpdated) {
-              const targetSec = targetView.sections.find((s) => Array.isArray(s.cards)) || targetView.sections[0];
-              targetSec.cards = targetSec.cards || [];
-              if (insertAtBeginning) {
-                targetSec.cards.unshift(newCard);
-              } else {
-                targetSec.cards.push(newCard);
+              if (!cardUpdated) {
+                const targetSec = targetView.sections.find((s) => Array.isArray(s.cards)) || targetView.sections[0];
+                targetSec.cards = targetSec.cards || [];
+                if (insertAtBeginning) {
+                  targetSec.cards.unshift(newCard);
+                } else {
+                  targetSec.cards.push(newCard);
+                }
+              }
+            } else {
+              targetView.cards = targetView.cards || [];
+              if (isExplicitUpdate) {
+                const matchIdx = targetView.cards.findIndex(matches);
+                if (matchIdx !== -1) {
+                  targetView.cards[matchIdx] = mergeCardProps(targetView.cards[matchIdx], newCard);
+                  cardUpdated = true;
+                }
+              }
+              if (!cardUpdated) {
+                if (insertAtBeginning) {
+                  targetView.cards.unshift(newCard);
+                } else {
+                  targetView.cards.push(newCard);
+                }
               }
             }
-          } else {
-            // Traditional cards array
-            targetView.cards = targetView.cards || [];
-            if (explicitUpdate) {
-              const matchIdx = targetView.cards.findIndex(matches);
-              if (matchIdx !== -1) {
-                targetView.cards[matchIdx] = mergeCardProps(targetView.cards[matchIdx], newCard);
-                cardUpdated = true;
-              }
-            }
-            if (!cardUpdated) {
-              if (insertAtBeginning) {
-                targetView.cards.unshift(newCard);
-              } else {
-                targetView.cards.push(newCard);
-              }
-            }
-          }
 
-          // 5. Save updated dashboard config wholesale
-          await this._hass.callWS({
-            type: "lovelace/config/save",
-            url_path: urlPath,
-            config: configRes,
-          });
+            await this._hass.callWS({
+              type: "lovelace/config/save",
+              url_path: urlPath,
+              config: configRes,
+            });
 
-          btn.classList.add("saved");
-          const successMsg = cardUpdated
-            ? (isEs ? "¡Tarjeta actualizada con respaldo!" : "Card safely updated!")
-            : (insertAtBeginning
-                ? (isEs ? "¡Tarjeta insertada al principio del dashboard!" : "Card added at top of dashboard!")
-                : (isEs ? "¡Nueva tarjeta añadida al dashboard!" : "New card added to dashboard!"));
-          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${successMsg}</span>`;
+            okMsg = cardUpdated
+              ? (isEs ? "¡Tarjeta actualizada con respaldo en el Dashboard!" : "Card safely updated in Dashboard!")
+              : (insertAtBeginning
+                  ? (isEs ? "¡Tarjeta insertada al principio del Dashboard!" : "Card added at top of Dashboard!")
+                  : (isEs ? "¡Nueva tarjeta añadida al Dashboard!" : "New card added to Dashboard!"));
 
-          attachUndoButton(
-            btn,
-            isEs,
-            isEs ? "↩️ Deshacer cambios en el Dashboard" : "↩️ Undo Dashboard changes",
-            async () => {
+            undoLabel = isEs ? "↩️ Deshacer cambios en el Dashboard" : "↩️ Undo Dashboard changes";
+            undoCallback = async () => {
               await this._hass.callWS({
                 type: "lovelace/config/save",
                 url_path: urlPath,
                 config: backupDashboardConfig,
               });
-            }
-          );
-        } catch (err) {
-          console.error("Nexus MCP Card: Failed to save card to dashboard:", err);
-          btn.disabled = false;
-          btn.classList.add("error");
-          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al guardar tarjeta" : "Error saving card");
-          btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
-        }
-      };
-    });
-
-    // Attach create helper click events
-    const helperButtons = container.querySelectorAll(".code-save-helper-btn");
-    helperButtons.forEach((btn) => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
-        if (!rawCode) return;
-        const isEs = this._isSpanish();
-
-        btn.disabled = true;
-        const textSpan = btn.querySelector(".btn-text");
-        if (textSpan) textSpan.textContent = isEs ? "Creando ayudante..." : "Creating helper...";
-
-        try {
-          const res = await this._hass.callWS({
-            type: "nexus_mcp/yaml_to_json",
-            yaml: rawCode,
-          });
-
-          if (!res || !res.is_helper || !res.helper_domain || !res.data) {
-            throw new Error(isEs ? "Formato de ayudante no reconocido" : "Unrecognized helper format");
-          }
-
-          const helperId = res.helper_id;
-          const entityId = helperId ? `${res.helper_domain}.${helperId}` : null;
-          const existingState = entityId && this._hass && this._hass.states && this._hass.states[entityId];
-          const prevAttributes = existingState ? { ...existingState.attributes } : null;
-
-          if (existingState || (res.is_update && helperId)) {
-            // Non-destructive merge of existing attributes
-            const mergedPayload = {
-              ...(prevAttributes ? {
-                name: prevAttributes.friendly_name,
-                icon: prevAttributes.icon,
-                min: prevAttributes.min,
-                max: prevAttributes.max,
-                step: prevAttributes.step,
-                options: prevAttributes.options,
-                unit_of_measurement: prevAttributes.unit_of_measurement,
-                mode: prevAttributes.mode,
-              } : {}),
-              ...res.data,
             };
 
-            await this._hass.callWS({
-              type: `${res.helper_domain}/update`,
-              [`${res.helper_domain}_id`]: helperId,
-              ...mergedPayload,
-            });
-            btn.classList.add("saved");
-            btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Ayudante actualizado con respaldo!" : "Helper safely updated!"}</span>`;
+          } else if (resType === "helper") {
+            const helperId = res.helper_id;
+            const entityId = helperId ? `${res.helper_domain}.${helperId}` : null;
+            const existingState = entityId && this._hass?.states?.[entityId];
+            const prevAttributes = existingState ? { ...existingState.attributes } : null;
 
-            attachUndoButton(
-              btn,
-              isEs,
-              isEs ? "↩️ Deshacer cambios en el Ayudante" : "↩️ Undo Helper changes",
-              async () => {
+            if (mode === "update" || existingState) {
+              const mergedPayload = {
+                ...(prevAttributes ? {
+                  name: prevAttributes.friendly_name,
+                  icon: prevAttributes.icon,
+                  min: prevAttributes.min,
+                  max: prevAttributes.max,
+                  step: prevAttributes.step,
+                  options: prevAttributes.options,
+                  unit_of_measurement: prevAttributes.unit_of_measurement,
+                  mode: prevAttributes.mode,
+                } : {}),
+                ...res.data,
+              };
+
+              await this._hass.callWS({
+                type: `${res.helper_domain}/update`,
+                [`${res.helper_domain}_id`]: helperId,
+                ...mergedPayload,
+              });
+
+              okMsg = isEs ? "¡Ayudante actualizado con respaldo!" : "Helper safely updated!";
+              undoLabel = isEs ? "↩️ Deshacer cambios en el Ayudante" : "↩️ Undo Helper changes";
+              undoCallback = async () => {
                 if (prevAttributes) {
                   await this._hass.callWS({
                     type: `${res.helper_domain}/update`,
@@ -2073,35 +1827,167 @@ class NexusMcpCard extends HTMLElement {
                     mode: prevAttributes.mode,
                   });
                 }
-              }
-            );
-          } else {
-            await this._hass.callWS({
-              type: `${res.helper_domain}/create`,
-              ...res.data,
-            });
-            btn.classList.add("saved");
-            btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Ayudante creado en Home Assistant!" : "Helper active in Home Assistant!"}</span>`;
+              };
+            } else {
+              await this._hass.callWS({
+                type: `${res.helper_domain}/create`,
+                ...res.data,
+              });
 
-            attachUndoButton(
-              btn,
-              isEs,
-              isEs ? "↩️ Deshacer y eliminar Ayudante creado" : "↩️ Undo and delete created Helper",
-              async () => {
+              okMsg = isEs ? "¡Ayudante creado en Home Assistant!" : "Helper active in Home Assistant!";
+              undoLabel = isEs ? "↩️ Deshacer y eliminar Ayudante creado" : "↩️ Undo and delete created Helper";
+              undoCallback = async () => {
                 if (helperId) {
                   await this._hass.callWS({
                     type: `${res.helper_domain}/delete`,
                     [`${res.helper_domain}_id`]: helperId,
                   });
                 }
+              };
+            }
+
+          } else if (resType === "automation") {
+            const payload = res.data;
+            const autoId = res.automation_id || payload.id || `nexus_${Date.now()}`;
+            payload.id = autoId;
+
+            let prevAutoConfig = null;
+            let isExisting = false;
+            try {
+              prevAutoConfig = await this._hass.callApi("GET", `config/automation/config/${autoId}`);
+              isExisting = !!prevAutoConfig;
+            } catch (_) {
+              isExisting = false;
+            }
+
+            if ((mode === "update" || isExisting) && prevAutoConfig && typeof prevAutoConfig === "object") {
+              Object.keys(prevAutoConfig).forEach((k) => {
+                if (payload[k] === undefined) {
+                  payload[k] = prevAutoConfig[k];
+                }
+              });
+            }
+
+            await this._hass.callApi("POST", `config/automation/config/${autoId}`, payload);
+
+            okMsg = (mode === "update" || isExisting)
+              ? (isEs ? "¡Automatización actualizada con respaldo!" : "Automation safely updated!")
+              : (isEs ? "¡Automatización creada y activa!" : "Automation active!");
+
+            undoLabel = isEs ? "↩️ Deshacer cambios en la Automatización" : "↩️ Undo Automation changes";
+            undoCallback = async () => {
+              if (isExisting && prevAutoConfig) {
+                await this._hass.callApi("POST", `config/automation/config/${autoId}`, prevAutoConfig);
+              } else {
+                await this._hass.callApi("DELETE", `config/automation/config/${autoId}`);
               }
-            );
+            };
+
+          } else if (resType === "script") {
+            const scriptId = res.script_id || `nexus_script_${Date.now()}`;
+            let prevScriptConfig = null;
+            let isExistingScript = false;
+            try {
+              prevScriptConfig = await this._hass.callApi("GET", `config/script/config/${scriptId}`);
+              isExistingScript = !!prevScriptConfig;
+            } catch (_) {}
+
+            if ((mode === "update" || isExistingScript) && prevScriptConfig && typeof prevScriptConfig === "object") {
+              Object.keys(prevScriptConfig).forEach((k) => {
+                if (res.data[k] === undefined) {
+                  res.data[k] = prevScriptConfig[k];
+                }
+              });
+            }
+
+            await this._hass.callApi("POST", `config/script/config/${scriptId}`, res.data);
+
+            okMsg = (mode === "update" || isExistingScript)
+              ? (isEs ? "¡Script actualizado con respaldo!" : "Script safely updated!")
+              : (isEs ? "¡Script creado y activo!" : "Script active!");
+
+            undoLabel = isEs ? "↩️ Deshacer cambios en el Script" : "↩️ Undo Script changes";
+            undoCallback = async () => {
+              if (isExistingScript && prevScriptConfig) {
+                await this._hass.callApi("POST", `config/script/config/${scriptId}`, prevScriptConfig);
+              } else {
+                await this._hass.callApi("DELETE", `config/script/config/${scriptId}`);
+              }
+            };
+
+          } else if (resType === "scene") {
+            const sceneId = res.scene_id || `nexus_scene_${Date.now()}`;
+            let prevSceneConfig = null;
+            let isExistingScene = false;
+            try {
+              prevSceneConfig = await this._hass.callApi("GET", `config/scene/config/${sceneId}`);
+              isExistingScene = !!prevSceneConfig;
+            } catch (_) {}
+
+            if ((mode === "update" || isExistingScene) && prevSceneConfig && typeof prevSceneConfig === "object") {
+              Object.keys(prevSceneConfig).forEach((k) => {
+                if (res.data[k] === undefined) {
+                  res.data[k] = prevSceneConfig[k];
+                }
+              });
+            }
+
+            await this._hass.callApi("POST", `config/scene/config/${sceneId}`, res.data);
+
+            okMsg = (mode === "update" || isExistingScene)
+              ? (isEs ? "¡Escena actualizada con respaldo!" : "Scene safely updated!")
+              : (isEs ? "¡Escena creada en Home Assistant!" : "Scene active in Home Assistant!");
+
+            undoLabel = isEs ? "↩️ Deshacer cambios en la Escena" : "↩️ Undo Scene changes";
+            undoCallback = async () => {
+              if (isExistingScene && prevSceneConfig) {
+                await this._hass.callApi("POST", `config/scene/config/${sceneId}`, prevSceneConfig);
+              } else {
+                await this._hass.callApi("DELETE", `config/scene/config/${sceneId}`);
+              }
+            };
+          }
+
+          // Replace the dual-action button group with success banner and immediate Undo button
+          btnGroup.innerHTML = `
+            <div class="code-success-banner">
+              <ha-icon icon="mdi:check-circle"></ha-icon>
+              <span>${escapeHtml(okMsg)}</span>
+            </div>
+            <button class="code-revert-btn" title="${escapeHtml(undoLabel)}">
+              <ha-icon icon="mdi:undo-variant"></ha-icon>
+              <span class="btn-text">${escapeHtml(undoLabel)}</span>
+            </button>
+          `;
+
+          const undoBtn = btnGroup.querySelector(".code-revert-btn");
+          if (undoBtn && undoCallback) {
+            undoBtn.onclick = async (ue) => {
+              ue.stopPropagation();
+              undoBtn.disabled = true;
+              const uText = undoBtn.querySelector(".btn-text");
+              if (uText) uText.textContent = isEs ? "Restaurando..." : "Restoring...";
+              try {
+                await undoCallback();
+                btnGroup.innerHTML = `
+                  <div class="code-success-banner" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #64b5f6;">
+                    <ha-icon icon="mdi:undo-variant"></ha-icon>
+                    <span>${isEs ? "↩️ Estado anterior restaurado con éxito" : "↩️ Restored to previous state"}</span>
+                  </div>
+                `;
+              } catch (uErr) {
+                console.error("Nexus MCP Card: Undo failed:", uErr);
+                undoBtn.disabled = false;
+                const errMsg = (uErr && (uErr.message || uErr.error)) || (isEs ? "Error al revertir" : "Error reverting");
+                if (uText) uText.textContent = errMsg;
+              }
+            };
           }
         } catch (err) {
-          console.error("Nexus MCP Card: Failed to create helper:", err);
-          btn.disabled = false;
+          console.error("Nexus MCP Card: Action failed:", err);
+          allGroupBtns.forEach((b) => (b.disabled = false));
           btn.classList.add("error");
-          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al crear ayudante" : "Error creating helper");
+          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al procesar" : "Error processing");
           btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
         }
       };
@@ -2524,7 +2410,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.6.2 Ready ",
+  "%c NEXUS MCP CARD %c v1.6.3 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );

@@ -187,6 +187,41 @@ icon: mdi:lamp
         self.assertEqual(result.get("card_type"), "tile")
         self.assertEqual(result.get("title"), "Luz Taller LED")
         self.assertEqual(result["data"]["entity"], "light.luz_taller")
+        self.assertEqual(result.get("resource_type"), "card")
+
+    async def test_card_yaml_update_mode(self):
+        handler = self._get_handler()
+        yaml_content = """
+type: custom:mushroom-entity-card
+entity: switch.enchufe_carga_oukitel
+name: Carga Oukitel
+icon: mdi:power
+"""
+        msg = {"id": 6, "type": "nexus_mcp/yaml_to_json", "yaml": yaml_content, "mode": "update"}
+        await handler(self.hass, self.connection, msg)
+
+        result = self.connection.send_result.call_args[0][1]
+        self.assertTrue(result.get("is_card"))
+        self.assertTrue(result.get("is_update"))
+        self.assertEqual(result.get("resource_type"), "card")
+
+    async def test_modern_script_action_syntax(self):
+        handler = self._get_handler()
+        yaml_content = """
+alias: "Encender Enchufe Oukitel"
+action:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.enchufe_carga_oukitel
+"""
+        msg = {"id": 7, "type": "nexus_mcp/yaml_to_json", "yaml": yaml_content}
+        await handler(self.hass, self.connection, msg)
+
+        result = self.connection.send_result.call_args[0][1]
+        self.assertTrue(result.get("is_script"))
+        self.assertEqual(result.get("resource_type"), "script")
+        self.assertEqual(result["data"]["alias"], "Encender Enchufe Oukitel")
+        self.assertIn("sequence", result["data"])
 
 
 if __name__ == "__main__":

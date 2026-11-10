@@ -38,7 +38,7 @@ except (ImportError, AttributeError):
     StaticPathConfig = None
 
 
-FRONTEND_VERSION = "1.6.2"
+FRONTEND_VERSION = "1.6.3"
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
@@ -300,6 +300,8 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
             {
                 vol.Required("type"): "nexus_mcp/yaml_to_json",
                 vol.Required("yaml"): str,
+                vol.Optional("mode"): str,
+                vol.Optional("allow_update"): bool,
             }
         )
         @websocket_api.async_response
@@ -312,6 +314,9 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
             try:
                 import time
                 import yaml
+
+                mode = msg.get("mode", "add")
+                allow_update = msg.get("allow_update", False) or (mode == "update")
 
                 raw_yaml = msg["yaml"]
                 data = yaml.safe_load(raw_yaml)
@@ -371,8 +376,9 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                         helper_data[f"{helper_domain}_id"] = helper_id
 
                     connection.send_result(msg["id"], {
+                        "resource_type": "helper",
                         "is_helper": True,
-                        "is_update": bool(helper_id),
+                        "is_update": allow_update or bool(helper_id),
                         "helper_domain": helper_domain,
                         "helper_id": helper_id,
                         "data": helper_data,
@@ -403,8 +409,9 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
 
                 if is_card and not any(k in data for k in ("trigger", "triggers", "sequence")):
                     card_title = data.get("title") or data.get("name") or data.get("header") or ""
-                    is_update = bool(data.get("card_id") or data.get("id"))
+                    is_update = allow_update or bool(data.get("card_id") or data.get("id"))
                     connection.send_result(msg["id"], {
+                        "resource_type": "card",
                         "is_card": True,
                         "is_update": is_update,
                         "card_type": candidate_type,
@@ -431,9 +438,10 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                     scene_data = dict(data)
                     if "name" not in scene_data:
                         scene_data["name"] = scene_data.get("alias") or "Nueva Escena"
-                    is_update = bool(scene_data.get("id") or scene_data.get("scene_id"))
+                    is_update = allow_update or bool(scene_data.get("id") or scene_data.get("scene_id"))
                     scene_id = scene_data.get("scene_id") or scene_data.get("id") or f"nexus_scene_{int(time.time() * 1000)}"
                     connection.send_result(msg["id"], {
+                        "resource_type": "scene",
                         "is_scene": True,
                         "is_update": is_update,
                         "scene_id": scene_id,
@@ -441,12 +449,12 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                     })
                     return
 
-                # Check for script (requires sequence: or script: key; never match plain card actions)
+                # Check for script (requires sequence: or script: key, or actions without trigger)
                 if "script" in data:
                     val = data["script"]
                     if isinstance(val, dict):
                         first_val = next(iter(val.values())) if val else {}
-                        if isinstance(first_val, dict) and ("sequence" in first_val or "action" in first_val):
+                        if isinstance(first_val, dict) and ("sequence" in first_val or "action" in first_val or "actions" in first_val):
                             data = dict(first_val)
                             if "alias" not in data and "name" not in data:
                                 data["alias"] = next(iter(val.keys()))
@@ -456,7 +464,8 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                         data = val[0]
 
                 has_trigger = any(k in data for k in ("trigger", "triggers", "platform"))
-                is_script = ("sequence" in data or "script" in data) and not has_trigger and not is_card
+                has_action_seq = any(k in data for k in ("sequence", "script", "action", "actions"))
+                is_script = has_action_seq and not has_trigger and not is_card
 
                 if is_script:
                     script_data = dict(data)
@@ -468,9 +477,10 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                     script_data.pop("actions", None)
                     if "alias" not in script_data:
                         script_data["alias"] = script_data.get("name") or "Nuevo Script"
-                    is_update = bool(script_data.get("id") or script_data.get("script_id"))
+                    is_update = allow_update or bool(script_data.get("id") or script_data.get("script_id"))
                     script_id = script_data.get("script_id") or script_data.get("id") or f"nexus_script_{int(time.time() * 1000)}"
                     connection.send_result(msg["id"], {
+                        "resource_type": "script",
                         "is_script": True,
                         "is_update": is_update,
                         "script_id": script_id,
@@ -484,10 +494,12 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                         data[key] = [data[key]]
 
                 original_id = data.get("id")
-                allow_update = msg.get("allow_update", False)
                 if allow_update and original_id:
                     is_update = True
                     auto_id = str(original_id)
+                elif allow_update:
+                    is_update = True
+                    auto_id = f"nexus_{int(time.time() * 1000)}"
                 else:
                     is_update = False
                     auto_id = f"nexus_{int(time.time() * 1000)}"
@@ -495,6 +507,7 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                 data["id"] = auto_id
 
                 connection.send_result(msg["id"], {
+                    "resource_type": "automation",
                     "is_automation": True,
                     "is_update": is_update,
                     "automation_id": auto_id,
