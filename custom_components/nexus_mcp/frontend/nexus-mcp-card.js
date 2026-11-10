@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.6.1)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.6.2)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -749,6 +749,41 @@ class NexusMcpCard extends HTMLElement {
         .code-save-card-btn.error {
           background: #c62828 !important;
           color: #ffffff !important;
+        }
+        .code-revert-btn {
+          background: linear-gradient(135deg, #37474f 0%, #263238 100%);
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          color: #ffffff;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          font-size: 0.84rem;
+          font-weight: 600;
+          padding: 8px 14px;
+          border-radius: 8px;
+          transition: all 0.2s ease;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+          width: 100%;
+          box-sizing: border-box;
+          margin-top: 6px;
+        }
+        .code-revert-btn:hover:not(:disabled) {
+          background: linear-gradient(135deg, #c62828 0%, #b71c1c 100%);
+          border-color: #ef5350;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 10px rgba(183, 28, 28, 0.4);
+        }
+        .code-revert-btn:active:not(:disabled) {
+          transform: translateY(0);
+        }
+        .code-revert-btn ha-icon {
+          --mdc-icon-size: 18px;
+          color: #ff8a80;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
         .code-copy-btn {
           border: none;
@@ -1537,6 +1572,51 @@ class NexusMcpCard extends HTMLElement {
       };
     });
 
+    // Helper to attach an undo / revert button directly underneath any action button
+    const attachUndoButton = (btn, isEs, undoLabel, onUndo) => {
+      if (!btn || !btn.parentNode) return;
+      const dataKey = btn.getAttribute("data-code") || "";
+      const existingUndo = btn.parentNode.querySelector(`.code-revert-btn[data-for="${dataKey}"]`);
+      if (existingUndo) existingUndo.remove();
+
+      const undoBtn = document.createElement("button");
+      undoBtn.className = "code-revert-btn";
+      undoBtn.setAttribute("data-for", dataKey);
+      undoBtn.title = isEs ? "Deshacer y restaurar el estado anterior" : "Undo and restore previous state";
+      undoBtn.innerHTML = `
+        <ha-icon icon="mdi:undo-variant"></ha-icon>
+        <span class="btn-text">${undoLabel}</span>
+      `;
+
+      undoBtn.onclick = async (ue) => {
+        ue.stopPropagation();
+        undoBtn.disabled = true;
+        const textSpan = undoBtn.querySelector(".btn-text");
+        if (textSpan) textSpan.textContent = isEs ? "Restaurando..." : "Restoring...";
+        try {
+          await onUndo();
+          undoBtn.innerHTML = `
+            <ha-icon icon="mdi:check-circle"></ha-icon>
+            <span class="btn-text">${isEs ? "✅ Estado anterior restaurado con éxito" : "✅ Restored to previous state"}</span>
+          `;
+          undoBtn.style.background = "linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)";
+          undoBtn.style.borderColor = "#81c784";
+          btn.classList.remove("saved");
+          btn.disabled = false;
+        } catch (err) {
+          console.error("Nexus MCP Card: Undo failed:", err);
+          undoBtn.disabled = false;
+          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al revertir" : "Error reverting");
+          undoBtn.innerHTML = `
+            <ha-icon icon="mdi:alert-circle"></ha-icon>
+            <span class="btn-text">${escapeHtml(errMsg)}</span>
+          `;
+        }
+      };
+
+      btn.parentNode.insertBefore(undoBtn, btn.nextSibling);
+    };
+
     // Attach create automation click events
     const autoButtons = container.querySelectorAll(".code-save-auto-btn");
     autoButtons.forEach((btn) => {
@@ -1564,13 +1644,45 @@ class NexusMcpCard extends HTMLElement {
           const autoId = payload.id || `nexus_${Date.now()}`;
           payload.id = autoId;
 
+          // Check if automation already exists to backup for undo
+          let prevAutoConfig = null;
+          let isExisting = false;
+          try {
+            prevAutoConfig = await this._hass.callApi("GET", `config/automation/config/${autoId}`);
+            isExisting = !!prevAutoConfig;
+          } catch (_) {
+            isExisting = false;
+          }
+
+          // If updating existing, merge non-destructively
+          if (isExisting && prevAutoConfig && typeof prevAutoConfig === "object") {
+            Object.keys(prevAutoConfig).forEach((k) => {
+              if (payload[k] === undefined) {
+                payload[k] = prevAutoConfig[k];
+              }
+            });
+          }
+
           await this._hass.callApi("POST", `config/automation/config/${autoId}`, payload);
 
           btn.classList.add("saved");
-          const okMsg = res.is_update
-            ? (isEs ? "¡Automatización actualizada!" : "Automation updated!")
+          const okMsg = isExisting
+            ? (isEs ? "¡Automatización actualizada con respaldo!" : "Automation safely updated!")
             : (isEs ? "¡Automatización creada y activa!" : "Automation active!");
           btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${okMsg}</span>`;
+
+          attachUndoButton(
+            btn,
+            isEs,
+            isEs ? "↩️ Deshacer cambios en la Automatización" : "↩️ Undo Automation changes",
+            async () => {
+              if (isExisting && prevAutoConfig) {
+                await this._hass.callApi("POST", `config/automation/config/${autoId}`, prevAutoConfig);
+              } else {
+                await this._hass.callApi("DELETE", `config/automation/config/${autoId}`);
+              }
+            }
+          );
         } catch (err) {
           console.error("Nexus MCP Card: Failed to create automation:", err);
           btn.disabled = false;
@@ -1605,13 +1717,41 @@ class NexusMcpCard extends HTMLElement {
           }
 
           const scriptId = res.script_id || `nexus_script_${Date.now()}`;
+          let prevScriptConfig = null;
+          let isExistingScript = false;
+          try {
+            prevScriptConfig = await this._hass.callApi("GET", `config/script/config/${scriptId}`);
+            isExistingScript = !!prevScriptConfig;
+          } catch (_) {}
+
+          if (isExistingScript && prevScriptConfig && typeof prevScriptConfig === "object") {
+            Object.keys(prevScriptConfig).forEach((k) => {
+              if (res.data[k] === undefined) {
+                res.data[k] = prevScriptConfig[k];
+              }
+            });
+          }
+
           await this._hass.callApi("POST", `config/script/config/${scriptId}`, res.data);
 
           btn.classList.add("saved");
-          const okMsg = res.is_update
-            ? (isEs ? "¡Script actualizado!" : "Script updated!")
+          const okMsg = isExistingScript
+            ? (isEs ? "¡Script actualizado con respaldo!" : "Script safely updated!")
             : (isEs ? "¡Script creado y activo!" : "Script active!");
           btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${okMsg}</span>`;
+
+          attachUndoButton(
+            btn,
+            isEs,
+            isEs ? "↩️ Deshacer cambios en el Script" : "↩️ Undo Script changes",
+            async () => {
+              if (isExistingScript && prevScriptConfig) {
+                await this._hass.callApi("POST", `config/script/config/${scriptId}`, prevScriptConfig);
+              } else {
+                await this._hass.callApi("DELETE", `config/script/config/${scriptId}`);
+              }
+            }
+          );
         } catch (err) {
           console.error("Nexus MCP Card: Failed to create script:", err);
           btn.disabled = false;
@@ -1646,13 +1786,41 @@ class NexusMcpCard extends HTMLElement {
           }
 
           const sceneId = res.scene_id || `nexus_scene_${Date.now()}`;
+          let prevSceneConfig = null;
+          let isExistingScene = false;
+          try {
+            prevSceneConfig = await this._hass.callApi("GET", `config/scene/config/${sceneId}`);
+            isExistingScene = !!prevSceneConfig;
+          } catch (_) {}
+
+          if (isExistingScene && prevSceneConfig && typeof prevSceneConfig === "object") {
+            Object.keys(prevSceneConfig).forEach((k) => {
+              if (res.data[k] === undefined) {
+                res.data[k] = prevSceneConfig[k];
+              }
+            });
+          }
+
           await this._hass.callApi("POST", `config/scene/config/${sceneId}`, res.data);
 
           btn.classList.add("saved");
-          const okMsg = res.is_update
-            ? (isEs ? "¡Escena actualizada!" : "Scene updated!")
+          const okMsg = isExistingScene
+            ? (isEs ? "¡Escena actualizada con respaldo!" : "Scene safely updated!")
             : (isEs ? "¡Escena creada en Home Assistant!" : "Scene active in Home Assistant!");
           btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${okMsg}</span>`;
+
+          attachUndoButton(
+            btn,
+            isEs,
+            isEs ? "↩️ Deshacer cambios en la Escena" : "↩️ Undo Scene changes",
+            async () => {
+              if (isExistingScene && prevSceneConfig) {
+                await this._hass.callApi("POST", `config/scene/config/${sceneId}`, prevSceneConfig);
+              } else {
+                await this._hass.callApi("DELETE", `config/scene/config/${sceneId}`);
+              }
+            }
+          );
         } catch (err) {
           console.error("Nexus MCP Card: Failed to create scene:", err);
           btn.disabled = false;
@@ -1706,6 +1874,9 @@ class NexusMcpCard extends HTMLElement {
             throw new Error(isEs ? "No se pudo leer la configuración del dashboard" : "Could not load dashboard config");
           }
 
+          // Full snapshot backup for undo
+          const backupDashboardConfig = JSON.parse(JSON.stringify(configRes));
+
           const views = configRes.views;
           if (views.length === 0) {
             throw new Error(isEs ? "El dashboard no tiene vistas" : "Dashboard has no views");
@@ -1721,45 +1892,76 @@ class NexusMcpCard extends HTMLElement {
             if (matched) targetView = matched;
           }
 
-          // 4. Check for update vs add
+          // 4. Safe Check: ONLY update if explicitly requested as an update
           let cardUpdated = false;
-          const newCardTitle = newCard.title || newCard.name;
-          const newCardEntity = newCard.entity;
-          const newCardType = newCard.type;
+          const explicitUpdate = !!res.is_update;
+          const newCardId = newCard.id || newCard.card_id;
 
           function matches(c) {
             if (!c || typeof c !== "object") return false;
-            if (newCardTitle && (c.title === newCardTitle || c.name === newCardTitle)) return true;
-            if (newCardType && c.type === newCardType && newCardEntity && c.entity === newCardEntity) return true;
+            if (newCardId && (c.id === newCardId || c.card_id === newCardId)) return true;
+            if (explicitUpdate) {
+              const newCardTitle = newCard.title || newCard.name;
+              if (newCardTitle && (c.title === newCardTitle || c.name === newCardTitle)) return true;
+              if (newCard.type && c.type === newCard.type && newCard.entity && c.entity === newCard.entity) return true;
+            }
             return false;
           }
 
+          function mergeCardProps(existing, incoming) {
+            const merged = { ...existing, ...incoming };
+            if (existing.card_mod && !incoming.card_mod) merged.card_mod = existing.card_mod;
+            if (existing.layout_options && !incoming.layout_options) merged.layout_options = existing.layout_options;
+            if (existing.grid_options && !incoming.grid_options) merged.grid_options = existing.grid_options;
+            if (existing.visibility && !incoming.visibility) merged.visibility = existing.visibility;
+            if (existing.hold_action && !incoming.hold_action) merged.hold_action = existing.hold_action;
+            if (existing.double_tap_action && !incoming.double_tap_action) merged.double_tap_action = existing.double_tap_action;
+            return merged;
+          }
+
+          // Check if placement at beginning was requested in user query or code comment
+          const insertAtBeginning = /principio|inicio|arriba|primera|top|start/i.test(rawCode) ||
+            (this._messages && this._messages.length > 0 && /principio|inicio|arriba|primera|top|start/i.test(this._messages[this._messages.length - 2]?.content || ""));
+
           // If view has sections (modern HA)
           if (Array.isArray(targetView.sections) && targetView.sections.length > 0) {
-            for (const sec of targetView.sections) {
-              if (Array.isArray(sec.cards)) {
-                const matchIdx = sec.cards.findIndex(matches);
-                if (matchIdx !== -1) {
-                  sec.cards[matchIdx] = newCard;
-                  cardUpdated = true;
-                  break;
+            if (explicitUpdate) {
+              for (const sec of targetView.sections) {
+                if (Array.isArray(sec.cards)) {
+                  const matchIdx = sec.cards.findIndex(matches);
+                  if (matchIdx !== -1) {
+                    sec.cards[matchIdx] = mergeCardProps(sec.cards[matchIdx], newCard);
+                    cardUpdated = true;
+                    break;
+                  }
                 }
               }
             }
             if (!cardUpdated) {
-              const targetSec = targetView.sections.find(s => Array.isArray(s.cards)) || targetView.sections[0];
+              const targetSec = targetView.sections.find((s) => Array.isArray(s.cards)) || targetView.sections[0];
               targetSec.cards = targetSec.cards || [];
-              targetSec.cards.push(newCard);
+              if (insertAtBeginning) {
+                targetSec.cards.unshift(newCard);
+              } else {
+                targetSec.cards.push(newCard);
+              }
             }
           } else {
             // Traditional cards array
             targetView.cards = targetView.cards || [];
-            const matchIdx = targetView.cards.findIndex(matches);
-            if (matchIdx !== -1) {
-              targetView.cards[matchIdx] = newCard;
-              cardUpdated = true;
-            } else {
-              targetView.cards.push(newCard);
+            if (explicitUpdate) {
+              const matchIdx = targetView.cards.findIndex(matches);
+              if (matchIdx !== -1) {
+                targetView.cards[matchIdx] = mergeCardProps(targetView.cards[matchIdx], newCard);
+                cardUpdated = true;
+              }
+            }
+            if (!cardUpdated) {
+              if (insertAtBeginning) {
+                targetView.cards.unshift(newCard);
+              } else {
+                targetView.cards.push(newCard);
+              }
             }
           }
 
@@ -1772,9 +1974,24 @@ class NexusMcpCard extends HTMLElement {
 
           btn.classList.add("saved");
           const successMsg = cardUpdated
-            ? (isEs ? "¡Tarjeta actualizada en el dashboard!" : "Card updated in dashboard!")
-            : (isEs ? "¡Tarjeta añadida al dashboard!" : "Card added to dashboard!");
+            ? (isEs ? "¡Tarjeta actualizada con respaldo!" : "Card safely updated!")
+            : (insertAtBeginning
+                ? (isEs ? "¡Tarjeta insertada al principio del dashboard!" : "Card added at top of dashboard!")
+                : (isEs ? "¡Nueva tarjeta añadida al dashboard!" : "New card added to dashboard!"));
           btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${successMsg}</span>`;
+
+          attachUndoButton(
+            btn,
+            isEs,
+            isEs ? "↩️ Deshacer cambios en el Dashboard" : "↩️ Undo Dashboard changes",
+            async () => {
+              await this._hass.callWS({
+                type: "lovelace/config/save",
+                url_path: urlPath,
+                config: backupDashboardConfig,
+              });
+            }
+          );
         } catch (err) {
           console.error("Nexus MCP Card: Failed to save card to dashboard:", err);
           btn.disabled = false;
@@ -1810,16 +2027,54 @@ class NexusMcpCard extends HTMLElement {
 
           const helperId = res.helper_id;
           const entityId = helperId ? `${res.helper_domain}.${helperId}` : null;
-          const exists = entityId && this._hass && this._hass.states && this._hass.states[entityId];
+          const existingState = entityId && this._hass && this._hass.states && this._hass.states[entityId];
+          const prevAttributes = existingState ? { ...existingState.attributes } : null;
 
-          if (exists || (res.is_update && helperId)) {
+          if (existingState || (res.is_update && helperId)) {
+            // Non-destructive merge of existing attributes
+            const mergedPayload = {
+              ...(prevAttributes ? {
+                name: prevAttributes.friendly_name,
+                icon: prevAttributes.icon,
+                min: prevAttributes.min,
+                max: prevAttributes.max,
+                step: prevAttributes.step,
+                options: prevAttributes.options,
+                unit_of_measurement: prevAttributes.unit_of_measurement,
+                mode: prevAttributes.mode,
+              } : {}),
+              ...res.data,
+            };
+
             await this._hass.callWS({
               type: `${res.helper_domain}/update`,
               [`${res.helper_domain}_id`]: helperId,
-              ...res.data,
+              ...mergedPayload,
             });
             btn.classList.add("saved");
-            btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Ayudante actualizado!" : "Helper updated!"}</span>`;
+            btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Ayudante actualizado con respaldo!" : "Helper safely updated!"}</span>`;
+
+            attachUndoButton(
+              btn,
+              isEs,
+              isEs ? "↩️ Deshacer cambios en el Ayudante" : "↩️ Undo Helper changes",
+              async () => {
+                if (prevAttributes) {
+                  await this._hass.callWS({
+                    type: `${res.helper_domain}/update`,
+                    [`${res.helper_domain}_id`]: helperId,
+                    name: prevAttributes.friendly_name,
+                    icon: prevAttributes.icon,
+                    min: prevAttributes.min,
+                    max: prevAttributes.max,
+                    step: prevAttributes.step,
+                    options: prevAttributes.options,
+                    unit_of_measurement: prevAttributes.unit_of_measurement,
+                    mode: prevAttributes.mode,
+                  });
+                }
+              }
+            );
           } else {
             await this._hass.callWS({
               type: `${res.helper_domain}/create`,
@@ -1827,6 +2082,20 @@ class NexusMcpCard extends HTMLElement {
             });
             btn.classList.add("saved");
             btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Ayudante creado en Home Assistant!" : "Helper active in Home Assistant!"}</span>`;
+
+            attachUndoButton(
+              btn,
+              isEs,
+              isEs ? "↩️ Deshacer y eliminar Ayudante creado" : "↩️ Undo and delete created Helper",
+              async () => {
+                if (helperId) {
+                  await this._hass.callWS({
+                    type: `${res.helper_domain}/delete`,
+                    [`${res.helper_domain}_id`]: helperId,
+                  });
+                }
+              }
+            );
           }
         } catch (err) {
           console.error("Nexus MCP Card: Failed to create helper:", err);
@@ -2255,7 +2524,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.6.1 Ready ",
+  "%c NEXUS MCP CARD %c v1.6.2 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );

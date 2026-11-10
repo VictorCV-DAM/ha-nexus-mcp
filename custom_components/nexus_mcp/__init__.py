@@ -38,7 +38,7 @@ except (ImportError, AttributeError):
     StaticPathConfig = None
 
 
-FRONTEND_VERSION = "1.6.1"
+FRONTEND_VERSION = "1.6.2"
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
@@ -394,15 +394,19 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                         candidate_type in CARD_TYPES
                         or candidate_type.startswith("custom:")
                         or candidate_type.endswith("-card")
+                        or "-card" in candidate_type
                         or "cards" in data
                         or "card" in data
+                        or "chips" in data
                     ):
                         is_card = True
 
                 if is_card and not any(k in data for k in ("trigger", "triggers", "sequence")):
                     card_title = data.get("title") or data.get("name") or data.get("header") or ""
+                    is_update = bool(data.get("card_id") or data.get("id"))
                     connection.send_result(msg["id"], {
                         "is_card": True,
+                        "is_update": is_update,
                         "card_type": candidate_type,
                         "title": card_title,
                         "data": data,
