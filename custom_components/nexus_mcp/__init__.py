@@ -38,6 +38,9 @@ except (ImportError, AttributeError):
     StaticPathConfig = None
 
 
+FRONTEND_VERSION = "1.6.1"
+
+
 async def _async_register_frontend(hass: HomeAssistant) -> None:
     """Register custom Lovelace card for plug-and-play UI."""
     domain_data = hass.data.setdefault(DOMAIN, {})
@@ -72,7 +75,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     # Register extra JS URL so Home Assistant frontend loads the card automatically
     if add_extra_js_url:
         try:
-            add_extra_js_url(hass, f"{url_path}?v=1.6.0")
+            add_extra_js_url(hass, f"{url_path}?v={FRONTEND_VERSION}")
         except Exception as err:
             _LOGGER.debug("Could not add extra JS URL: %s", err)
 
@@ -87,16 +90,27 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
 
             frontend_added = False
             for r in getattr(resources, "async_items", lambda: [])():
-                if r.get("url", "").startswith(url_path):
+                r_url = r.get("url", "")
+                # Clean up legacy local resource if still present
+                if "/local/nexus-mcp-card.js" in r_url:
+                    res_id = r.get("id")
+                    if res_id and getattr(resources, "async_delete_item", None):
+                        try:
+                            await resources.async_delete_item(res_id)
+                        except Exception:
+                            pass
+                    continue
+
+                if r_url.startswith(url_path):
                     frontend_added = True
                     # If version parameter differs, update existing resource to bust browser cache
-                    if r.get("url") != f"{url_path}?v=1.6.0":
+                    if r_url != f"{url_path}?v={FRONTEND_VERSION}":
                         res_id = r.get("id")
                         if res_id and getattr(resources, "async_update_item", None):
                             try:
                                 await resources.async_update_item(res_id, {
                                     "res_type": r.get("type", "module"),
-                                    "url": f"{url_path}?v=1.6.0",
+                                    "url": f"{url_path}?v={FRONTEND_VERSION}",
                                 })
                             except Exception:
                                 pass
@@ -106,12 +120,12 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
                 if getattr(resources, "async_create_item", None):
                     await resources.async_create_item({
                         "res_type": "module",
-                        "url": f"{url_path}?v=1.6.0",
+                        "url": f"{url_path}?v={FRONTEND_VERSION}",
                     })
                 elif getattr(resources, "data", None) and getattr(resources.data, "append", None):
                     resources.data.append({
                         "type": "module",
-                        "url": f"{url_path}?v=1.6.0",
+                        "url": f"{url_path}?v={FRONTEND_VERSION}",
                     })
     except Exception as err:
         _LOGGER.debug("Could not auto-register Lovelace resource: %s", err)

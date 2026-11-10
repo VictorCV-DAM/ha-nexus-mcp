@@ -938,6 +938,9 @@ class NexusMcpConversationEntity(ConversationEntity):
             "  5. Dashboard Cards (Lovelace): When asked to design, propose, or modify a dashboard card (e.g. Tile card, Mushroom card, Markdown card, Entities card, Gauge), return the complete card YAML configuration starting with `type:` and its properties. The frontend card provides a 1-click button to automatically add or update the card directly in the user's active dashboard!\n"
             "- YAML & CODE FORMATTING MANDATE:\n"
             "  Whenever you provide YAML configurations, Lovelace card configs, scripts, automations, templates, or code, you MUST always enclose them in Markdown code blocks with the language tag (e.g. ```yaml ... ```, ```json ... ```, or ```python ... ```). Never output bare code or bare YAML without code blocks.\n"
+            "- CRITICAL 1-CLICK UI ACTIONS MANDATE:\n"
+            "  The Nexus MCP user interface automatically parses your Markdown YAML code blocks and renders native 1-click action buttons directly underneath each block in the chat bubble (e.g. to create/update automations, scripts, scenes, helpers, or inject/update dashboard cards into Lovelace).\n"
+            "  NEVER tell the user to manually copy and paste code or YAML into files, dashboards, or raw editors. Instead, inform the user that they can apply the configuration with one click using the action button rendered directly below the code block!\n"
         )
 
         if self._provider == PROVIDER_OLLAMA_LOCAL:
