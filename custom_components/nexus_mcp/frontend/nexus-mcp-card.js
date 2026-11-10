@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.6.3)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.6.4)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -1518,6 +1518,10 @@ class NexusMcpCard extends HTMLElement {
               <ha-icon icon="mdi:plus-circle-outline"></ha-icon>
               <span class="btn-text">${newLabel}</span>
             </button>
+            <button class="code-action-btn code-revert-btn" data-code="${itemDataCode}" data-resource="${rType}" data-mode="revert" title="${isEs ? 'Deshacer último cambio realizado' : 'Revert last change'}">
+              <ha-icon icon="mdi:undo-variant"></ha-icon>
+              <span class="btn-text">${isEs ? '↩️ Deshacer / Revertir Último Cambio' : '↩️ Undo / Revert Last Change'}</span>
+            </button>
           </div>
         `;
       });
@@ -1626,18 +1630,87 @@ class NexusMcpCard extends HTMLElement {
       return merged;
     }
 
-    // Unified click handler for all code action buttons (Update vs Add)
+    // Unified click handler for all code action buttons (Update vs Add vs Revert)
     const actionButtons = container.querySelectorAll(".code-action-btn");
     actionButtons.forEach((btn) => {
       btn.onclick = async (e) => {
         e.stopPropagation();
         const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
-        if (!rawCode) return;
-        const mode = btn.getAttribute("data-mode") || "add"; // "update" or "add"
+        const mode = btn.getAttribute("data-mode") || "add"; // "update", "add", or "revert"
         const isEs = this._isSpanish();
 
         const btnGroup = btn.closest(".code-actions-group") || btn.parentNode;
         const allGroupBtns = btnGroup.querySelectorAll(".code-action-btn");
+
+        if (mode === "revert") {
+          const rawBackup = localStorage.getItem("nexus_last_backup");
+          if (!rawBackup) {
+            alert(isEs ? "No hay ningún cambio previo pendiente de revertir en esta sesión." : "No previous changes saved to revert in this session.");
+            return;
+          }
+
+          allGroupBtns.forEach((b) => (b.disabled = true));
+          const textSpan = btn.querySelector(".btn-text");
+          if (textSpan) textSpan.textContent = isEs ? "Revirtiendo..." : "Reverting...";
+
+          try {
+            const backupObj = JSON.parse(rawBackup);
+            if (backupObj.type === "card" && backupObj.config) {
+              await this._hass.callWS({
+                type: "lovelace/config/save",
+                url_path: backupObj.urlPath || null,
+                config: backupObj.config,
+              });
+            } else if (backupObj.type === "helper" && backupObj.helperId) {
+              if (backupObj.prevAttributes) {
+                await this._hass.callWS({
+                  type: `${backupObj.helperDomain}/update`,
+                  [`${backupObj.helperDomain}_id`]: backupObj.helperId,
+                  ...backupObj.prevAttributes,
+                });
+              } else {
+                await this._hass.callWS({
+                  type: `${backupObj.helperDomain}/delete`,
+                  [`${backupObj.helperDomain}_id`]: backupObj.helperId,
+                });
+              }
+            } else if (backupObj.type === "automation" && backupObj.autoId) {
+              if (backupObj.prevConfig) {
+                await this._hass.callApi("POST", `config/automation/config/${backupObj.autoId}`, backupObj.prevConfig);
+              } else {
+                await this._hass.callApi("DELETE", `config/automation/config/${backupObj.autoId}`);
+              }
+            } else if (backupObj.type === "script" && backupObj.scriptId) {
+              if (backupObj.prevConfig) {
+                await this._hass.callApi("POST", `config/script/config/${backupObj.scriptId}`, backupObj.prevConfig);
+              } else {
+                await this._hass.callApi("DELETE", `config/script/config/${backupObj.scriptId}`);
+              }
+            } else if (backupObj.type === "scene" && backupObj.sceneId) {
+              if (backupObj.prevConfig) {
+                await this._hass.callApi("POST", `config/scene/config/${backupObj.sceneId}`, backupObj.prevConfig);
+              } else {
+                await this._hass.callApi("DELETE", `config/scene/config/${backupObj.sceneId}`);
+              }
+            }
+
+            localStorage.removeItem("nexus_last_backup");
+            btnGroup.innerHTML = `
+              <div class="code-success-banner" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #64b5f6;">
+                <ha-icon icon="mdi:undo-variant"></ha-icon>
+                <span>${isEs ? "↩️ ¡Último cambio revertido y estado anterior restaurado con éxito!" : "↩️ Last change reverted and restored successfully!"}</span>
+              </div>
+            `;
+          } catch (rErr) {
+            console.error("Nexus MCP Card: Revert failed:", rErr);
+            allGroupBtns.forEach((b) => (b.disabled = false));
+            const errMsg = (rErr && (rErr.message || rErr.error)) || (isEs ? "Error al revertir" : "Error reverting");
+            if (textSpan) textSpan.textContent = errMsg;
+          }
+          return;
+        }
+
+        if (!rawCode) return;
         allGroupBtns.forEach((b) => (b.disabled = true));
 
         const textSpan = btn.querySelector(".btn-text");
@@ -1679,21 +1752,41 @@ class NexusMcpCard extends HTMLElement {
               urlPath = pathParts[0];
             }
 
-            const configRes = await this._hass.callWS({
-              type: "lovelace/config",
-              url_path: urlPath,
-            });
+            let configRes = null;
+            try {
+              configRes = await this._hass.callWS({
+                type: "lovelace/config",
+                url_path: urlPath,
+              });
+            } catch (_) {}
 
-            if (!configRes || !configRes.views) {
+            // Auto-fallback: if views empty, query 'mi-casa'
+            if (!configRes || !Array.isArray(configRes.views) || configRes.views.length === 0) {
+              try {
+                const miCasaRes = await this._hass.callWS({
+                  type: "lovelace/config",
+                  url_path: "mi-casa",
+                });
+                if (miCasaRes && Array.isArray(miCasaRes.views) && miCasaRes.views.length > 0) {
+                  configRes = miCasaRes;
+                  urlPath = "mi-casa";
+                }
+              } catch (_) {}
+            }
+
+            if (!configRes || !Array.isArray(configRes.views) || configRes.views.length === 0) {
               throw new Error(isEs ? "No se pudo leer la configuración del dashboard" : "Could not load dashboard config");
             }
 
             const backupDashboardConfig = JSON.parse(JSON.stringify(configRes));
-            const views = configRes.views;
-            if (views.length === 0) {
-              throw new Error(isEs ? "El dashboard no tiene vistas" : "Dashboard has no views");
-            }
+            localStorage.setItem("nexus_last_backup", JSON.stringify({
+              type: "card",
+              urlPath: urlPath,
+              config: backupDashboardConfig,
+              timestamp: Date.now()
+            }));
 
+            const views = configRes.views;
             let targetView = views[0];
             const currentViewPath = pathParts.length > 1 ? pathParts[1] : "";
             if (currentViewPath) {
@@ -1706,36 +1799,104 @@ class NexusMcpCard extends HTMLElement {
             let cardUpdated = false;
             const isExplicitUpdate = mode === "update";
             const newCardId = newCard.id || newCard.card_id;
+            const newCardEnt = (newCard.entity || "").trim();
+            const newCardName = (newCard.title || newCard.name || "").trim().toLowerCase();
+            const newNormEnt = newCardEnt.replace(/_local$/, "");
 
             function matches(c) {
               if (!c || typeof c !== "object") return false;
               if (newCardId && (c.id === newCardId || c.card_id === newCardId)) return true;
-              if (isExplicitUpdate) {
-                const newCardTitle = newCard.title || newCard.name;
-                if (newCardTitle && (c.title === newCardTitle || c.name === newCardTitle)) return true;
-                if (newCard.type && c.type === newCard.type && newCard.entity && c.entity === newCard.entity) return true;
-                if (newCard.type && c.type === newCard.type) return true;
+
+              // Entity matching (matches exact or _local suffix variation)
+              const cEnt = (c.entity || "").trim();
+              if (newCardEnt && cEnt) {
+                if (cEnt === newCardEnt) return true;
+                if (cEnt.replace(/_local$/, "") === newNormEnt) return true;
               }
+
+              // Multi-entity cards (e.g. entities list, chips)
+              if (newCardEnt && Array.isArray(c.entities)) {
+                if (c.entities.some((e) => {
+                  const eid = (typeof e === "string" ? e : e?.entity || "").trim();
+                  return eid === newCardEnt || eid.replace(/_local$/, "") === newNormEnt;
+                })) return true;
+              }
+
+              // Name or Title match
+              const cName = (c.title || c.name || "").trim().toLowerCase();
+              if (newCardName && cName) {
+                if (newCardName === cName) return true;
+                if (newCardName.includes(cName) || cName.includes(newCardName)) return true;
+              }
+
+              // Same type fallback if card content mentions the entity
+              if (newCard.type && c.type === newCard.type && (newCardEnt || newCardName)) {
+                if (JSON.stringify(c).toLowerCase().includes(newNormEnt.toLowerCase())) return true;
+              }
+
               return false;
             }
 
             const insertAtBeginning = /principio|inicio|arriba|primera|top|start/i.test(rawCode) ||
               (this._messages && this._messages.length > 0 && /principio|inicio|arriba|primera|top|start/i.test(this._messages[this._messages.length - 2]?.content || ""));
 
-            if (Array.isArray(targetView.sections) && targetView.sections.length > 0) {
-              if (isExplicitUpdate) {
+            if (isExplicitUpdate) {
+              // 1. Search in targetView
+              if (Array.isArray(targetView.sections)) {
                 for (const sec of targetView.sections) {
                   if (Array.isArray(sec.cards)) {
                     const matchIdx = sec.cards.findIndex(matches);
                     if (matchIdx !== -1) {
                       sec.cards[matchIdx] = mergeCardProps(sec.cards[matchIdx], newCard);
                       cardUpdated = true;
+                      sec.cards = sec.cards.filter((sc, idx) => idx === matchIdx || !matches(sc));
                       break;
                     }
                   }
                 }
               }
+              if (!cardUpdated && Array.isArray(targetView.cards)) {
+                const matchIdx = targetView.cards.findIndex(matches);
+                if (matchIdx !== -1) {
+                  targetView.cards[matchIdx] = mergeCardProps(targetView.cards[matchIdx], newCard);
+                  cardUpdated = true;
+                  targetView.cards = targetView.cards.filter((tc, idx) => idx === matchIdx || !matches(tc));
+                }
+              }
+
+              // 2. If not found in targetView, search across ALL views in dashboard
               if (!cardUpdated) {
+                for (const v of views) {
+                  if (Array.isArray(v.sections)) {
+                    for (const sec of v.sections) {
+                      if (Array.isArray(sec.cards)) {
+                        const matchIdx = sec.cards.findIndex(matches);
+                        if (matchIdx !== -1) {
+                          sec.cards[matchIdx] = mergeCardProps(sec.cards[matchIdx], newCard);
+                          cardUpdated = true;
+                          sec.cards = sec.cards.filter((sc, idx) => idx === matchIdx || !matches(sc));
+                          break;
+                        }
+                      }
+                    }
+                  }
+                  if (cardUpdated) break;
+                  if (Array.isArray(v.cards)) {
+                    const matchIdx = v.cards.findIndex(matches);
+                    if (matchIdx !== -1) {
+                      v.cards[matchIdx] = mergeCardProps(v.cards[matchIdx], newCard);
+                      cardUpdated = true;
+                      v.cards = v.cards.filter((tc, idx) => idx === matchIdx || !matches(tc));
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
+            // If not found as update, or mode is add
+            if (!cardUpdated) {
+              if (Array.isArray(targetView.sections) && targetView.sections.length > 0) {
                 const targetSec = targetView.sections.find((s) => Array.isArray(s.cards)) || targetView.sections[0];
                 targetSec.cards = targetSec.cards || [];
                 if (insertAtBeginning) {
@@ -1743,17 +1904,8 @@ class NexusMcpCard extends HTMLElement {
                 } else {
                   targetSec.cards.push(newCard);
                 }
-              }
-            } else {
-              targetView.cards = targetView.cards || [];
-              if (isExplicitUpdate) {
-                const matchIdx = targetView.cards.findIndex(matches);
-                if (matchIdx !== -1) {
-                  targetView.cards[matchIdx] = mergeCardProps(targetView.cards[matchIdx], newCard);
-                  cardUpdated = true;
-                }
-              }
-              if (!cardUpdated) {
+              } else {
+                targetView.cards = targetView.cards || [];
                 if (insertAtBeginning) {
                   targetView.cards.unshift(newCard);
                 } else {
@@ -1769,7 +1921,7 @@ class NexusMcpCard extends HTMLElement {
             });
 
             okMsg = cardUpdated
-              ? (isEs ? "¡Tarjeta actualizada con respaldo en el Dashboard!" : "Card safely updated in Dashboard!")
+              ? (isEs ? "¡Tarjeta modificada y actualizada con éxito en el Dashboard!" : "Card safely modified and updated in Dashboard!")
               : (insertAtBeginning
                   ? (isEs ? "¡Tarjeta insertada al principio del Dashboard!" : "Card added at top of Dashboard!")
                   : (isEs ? "¡Nueva tarjeta añadida al Dashboard!" : "New card added to Dashboard!"));
@@ -1781,6 +1933,7 @@ class NexusMcpCard extends HTMLElement {
                 url_path: urlPath,
                 config: backupDashboardConfig,
               });
+              localStorage.removeItem("nexus_last_backup");
             };
 
           } else if (resType === "helper") {
@@ -1788,6 +1941,14 @@ class NexusMcpCard extends HTMLElement {
             const entityId = helperId ? `${res.helper_domain}.${helperId}` : null;
             const existingState = entityId && this._hass?.states?.[entityId];
             const prevAttributes = existingState ? { ...existingState.attributes } : null;
+
+            localStorage.setItem("nexus_last_backup", JSON.stringify({
+              type: "helper",
+              helperDomain: res.helper_domain,
+              helperId: helperId,
+              prevAttributes: prevAttributes,
+              timestamp: Date.now()
+            }));
 
             if (mode === "update" || existingState) {
               const mergedPayload = {
@@ -1827,6 +1988,7 @@ class NexusMcpCard extends HTMLElement {
                     mode: prevAttributes.mode,
                   });
                 }
+                localStorage.removeItem("nexus_last_backup");
               };
             } else {
               await this._hass.callWS({
@@ -1843,6 +2005,7 @@ class NexusMcpCard extends HTMLElement {
                     [`${res.helper_domain}_id`]: helperId,
                   });
                 }
+                localStorage.removeItem("nexus_last_backup");
               };
             }
 
@@ -1859,6 +2022,13 @@ class NexusMcpCard extends HTMLElement {
             } catch (_) {
               isExisting = false;
             }
+
+            localStorage.setItem("nexus_last_backup", JSON.stringify({
+              type: "automation",
+              autoId: autoId,
+              prevConfig: prevAutoConfig,
+              timestamp: Date.now()
+            }));
 
             if ((mode === "update" || isExisting) && prevAutoConfig && typeof prevAutoConfig === "object") {
               Object.keys(prevAutoConfig).forEach((k) => {
@@ -1881,6 +2051,7 @@ class NexusMcpCard extends HTMLElement {
               } else {
                 await this._hass.callApi("DELETE", `config/automation/config/${autoId}`);
               }
+              localStorage.removeItem("nexus_last_backup");
             };
 
           } else if (resType === "script") {
@@ -1891,6 +2062,13 @@ class NexusMcpCard extends HTMLElement {
               prevScriptConfig = await this._hass.callApi("GET", `config/script/config/${scriptId}`);
               isExistingScript = !!prevScriptConfig;
             } catch (_) {}
+
+            localStorage.setItem("nexus_last_backup", JSON.stringify({
+              type: "script",
+              scriptId: scriptId,
+              prevConfig: prevScriptConfig,
+              timestamp: Date.now()
+            }));
 
             if ((mode === "update" || isExistingScript) && prevScriptConfig && typeof prevScriptConfig === "object") {
               Object.keys(prevScriptConfig).forEach((k) => {
@@ -1913,6 +2091,7 @@ class NexusMcpCard extends HTMLElement {
               } else {
                 await this._hass.callApi("DELETE", `config/script/config/${scriptId}`);
               }
+              localStorage.removeItem("nexus_last_backup");
             };
 
           } else if (resType === "scene") {
@@ -1923,6 +2102,13 @@ class NexusMcpCard extends HTMLElement {
               prevSceneConfig = await this._hass.callApi("GET", `config/scene/config/${sceneId}`);
               isExistingScene = !!prevSceneConfig;
             } catch (_) {}
+
+            localStorage.setItem("nexus_last_backup", JSON.stringify({
+              type: "scene",
+              sceneId: sceneId,
+              prevConfig: prevSceneConfig,
+              timestamp: Date.now()
+            }));
 
             if ((mode === "update" || isExistingScene) && prevSceneConfig && typeof prevSceneConfig === "object") {
               Object.keys(prevSceneConfig).forEach((k) => {
@@ -1945,10 +2131,11 @@ class NexusMcpCard extends HTMLElement {
               } else {
                 await this._hass.callApi("DELETE", `config/scene/config/${sceneId}`);
               }
+              localStorage.removeItem("nexus_last_backup");
             };
           }
 
-          // Replace the dual-action button group with success banner and immediate Undo button
+          // Replace the button group with the confirmation banner and Undo button
           btnGroup.innerHTML = `
             <div class="code-success-banner">
               <ha-icon icon="mdi:check-circle"></ha-icon>
@@ -2410,7 +2597,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.6.3 Ready ",
+  "%c NEXUS MCP CARD %c v1.6.4 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );

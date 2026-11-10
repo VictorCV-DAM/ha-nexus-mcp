@@ -38,7 +38,7 @@ except (ImportError, AttributeError):
     StaticPathConfig = None
 
 
-FRONTEND_VERSION = "1.6.3"
+FRONTEND_VERSION = "1.6.4"
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
