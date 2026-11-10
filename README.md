@@ -6,10 +6,10 @@
   <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/icon.png" width="130" height="130" alt="Nexus MCP Icon" />
   <h1>Nexus MCP for Home Assistant</h1>
 
-  [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
+  [![HACS Default Store](https://img.shields.io/badge/HACS-Default%20Store-41BDF5.svg)](https://github.com/hacs/default)
   [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1.0%20%E2%80%94%202026.9.4%2B-41BDF5.svg?logo=home-assistant)](https://www.home-assistant.io/)
   [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
-  [![Tests](https://img.shields.io/badge/Tests-50%2F50%20Passing-brightgreen.svg)](https://github.com/VictorCV-DAM/ha-nexus-mcp/tree/main/tests)
+  [![Tests](https://img.shields.io/badge/Tests-73%2F73%20Passing-brightgreen.svg)](https://github.com/VictorCV-DAM/ha-nexus-mcp/tree/main/tests)
   [![Downloads](https://img.shields.io/github/downloads/VictorCV-DAM/ha-nexus-mcp/total.svg?color=brightgreen)](https://github.com/VictorCV-DAM/ha-nexus-mcp/releases)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/VictorCV-DAM/ha-nexus-mcp/blob/main/LICENSE)
   
@@ -25,20 +25,22 @@
 
 ---
 
-## 📦 Quick Installation via HACS
+## 📦 Installation via HACS (Official Default Store)
+
+Nexus MCP is an official member of the [HACS Default Repository](https://github.com/hacs/default). You can find and install it directly through the HACS community store without adding custom repositories!
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=VictorCV-DAM&repository=ha-nexus-mcp&category=integration)
 
 ### ⚡ 1-Click Fast Install
-Click the badge above or use the direct link to open this repository directly inside your Home Assistant HACS store, then click **Download**.
+Click the badge above to open Nexus MCP directly inside your Home Assistant HACS store, then click **Download**.
 
-### 🛠️ Manual HACS Installation
-1. Open **HACS** in Home Assistant.
-2. Click the three dots (top right corner) and select **Custom repositories**.
-3. Add repository URL: `https://github.com/VictorCV-DAM/ha-nexus-mcp` with category **Integration**.
-4. Click **Download** and then **Restart Home Assistant** (*Settings > System > Restart*).
+### 🛠️ Standard HACS Search
+1. Open **HACS** in your Home Assistant sidebar.
+2. Go to **Integrations** and search for **«Nexus MCP»**.
+3. Click on **Nexus MCP** and press **Download**.
+4. Restart Home Assistant (*Settings > System > Restart*).
 5. Go to **Settings ➔ Devices & Services ➔ Add Integration ➔ Search for Nexus MCP**.
-6. Select your preferred inference engine and start chatting with your smart home.
+6. Select your preferred AI engine (Gemini, Groq, Qwen, Ollama, etc.) and you are ready to go!
 
 ---
 
@@ -62,6 +64,17 @@ Nexus MCP is engineered to be ultra-lightweight, with **zero external Python pac
 ---
 
 ## 📸 Visual Showcase & Real-World Demo
+
+### 🎛️ Real-World Dashboard: Hot Helper Creation, 1-Click Automations & Quick Reload
+Nexus MCP integrates seamlessly into your production Home Assistant dashboards with an interactive Lovelace card offering real-time conversational controls and instant 1-click execution buttons:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/VictorCV-DAM/ha-nexus-mcp/main/images/21_dashboard_helpers_automations.jpg" width="100%" alt="Nexus MCP Production Dashboard - Hot Helper Creation and 1-Click Automations" />
+</p>
+
+* **⚡ 1-Click Automation Creation (`Create and Activate Automation in Home Assistant`)**: When the assistant generates an automation, clicking the blue button automatically parses, saves, and activates the automation via Home Assistant's native WebSocket API. No manual YAML copying or file editing required.
+* **🧩 Hot Helper Creation (`Create Helper in Home Assistant`)**: Need a virtual toggle, numeric slider, timer, counter, or datetime helper (`input_boolean`, `input_number`, `input_datetime`, etc.)? The assistant proposes the exact configuration and the purple button creates it **instantly in memory and registry** (`<domain>/create`). **Zero restarts required**: the helper is immediately ready for use across dashboards and automations, and fully editable from *Settings > Devices & Services > Helpers*.
+* **🔄 Discrete Quick Reload (`⚡`)**: Minimalist header button (`mdi:lightning-bolt-outline`) that instantly reloads all Home Assistant configurations (`homeassistant.reload_all`) with real-time animated loading state and green checkmark confirmation.
 
 ### 💬 Interactive Chat & Automation Creator (with Safety Confirmation)
 Ask your smart home in plain natural language (voice or text). Nexus MCP searches entities, designs the automation, explains what it understood, and asks for your confirmation before writing changes:
@@ -143,6 +156,12 @@ Interact visually with your smart home using vision-capable AI models (e.g. `qwe
 
 * **⚡ Native Home Assistant Voice & Chat (`ConversationEntity`)**:
   Registers seamlessly as an official Home Assistant Assist agent. Talk to your home via web dashboard, mobile app, or ESPHome / Assist voice satellites.
+* **🧩 1-Click Hot Helper Creation (`<domain>/create`)**:
+  Instant, zero-restart helper generation directly from chat via native Home Assistant WebSocket collections (`input_boolean`, `input_number`, `input_select`, `input_text`, `input_datetime`, `counter`, `timer`, `input_button`). Helpers appear immediately in Home Assistant and are fully manageable from *Settings > Devices & Services > Helpers*.
+* **⚡ 1-Click Automation Save & Activation**:
+  Parses YAML automation blocks and creates them directly in Home Assistant with a single click, immediately editable in the Visual Automation Editor with live execution traces.
+* **🔄 Discrete Quick Reload**:
+  Instant core configuration reload (`homeassistant.reload_all`) accessible directly from the Lovelace card header with animated spinner and green confirmation check.
 * **🛠️ Native Tool Calling & Smart Assistance**:
   Equipped with built-in Home Assistant tools adhering to Assist exposed entity permissions:
   * `ha_search_entities`: Semantic discovery of exposed entities and device IDs.
@@ -270,7 +289,7 @@ Nexus MCP maintains a rigorous test suite covering config flows, options flows, 
 python -m unittest discover -s tests
 ```
 
-*Result:* **50/50 unit tests passing (100% success rate)**.
+*Result:* **73/73 unit tests passing (100% success rate)**.
 
 ---
 
