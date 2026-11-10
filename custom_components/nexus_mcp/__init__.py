@@ -315,17 +315,19 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
 
                 helper_domain = None
                 helper_data = None
+                helper_slug = None
 
                 for hd in HELPER_DOMAINS:
                     if hd in data:
                         helper_domain = hd
                         val = data[hd]
                         if isinstance(val, dict):
+                            helper_slug = next(iter(val.keys())) if val else None
                             first_val = next(iter(val.values())) if val else {}
                             if isinstance(first_val, dict) and any(k in first_val for k in ("name", "options", "min", "max", "icon", "duration", "initial")):
                                 helper_data = dict(first_val)
                                 if "name" not in helper_data:
-                                    helper_data["name"] = next(iter(val.keys()))
+                                    helper_data["name"] = helper_slug
                             else:
                                 helper_data = dict(val)
                         elif isinstance(val, list) and val and isinstance(val[0], dict):
@@ -341,9 +343,24 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                 if helper_domain and helper_data:
                     if "name" not in helper_data:
                         helper_data["name"] = "Nuevo Ayudante"
+                    helper_id = (
+                        helper_data.get("id")
+                        or helper_data.get(f"{helper_domain}_id")
+                        or helper_data.get("helper_id")
+                        or helper_slug
+                    )
+                    if not helper_id and "entity_id" in helper_data:
+                        ent = str(helper_data["entity_id"])
+                        if ent.startswith(f"{helper_domain}."):
+                            helper_id = ent.split(".", 1)[1]
+                    if helper_id:
+                        helper_data[f"{helper_domain}_id"] = helper_id
+
                     connection.send_result(msg["id"], {
                         "is_helper": True,
+                        "is_update": bool(helper_id),
                         "helper_domain": helper_domain,
+                        "helper_id": helper_id,
                         "data": helper_data,
                     })
                     return
@@ -366,9 +383,11 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                     scene_data = dict(data)
                     if "name" not in scene_data:
                         scene_data["name"] = scene_data.get("alias") or "Nueva Escena"
-                    scene_id = f"nexus_scene_{int(time.time() * 1000)}"
+                    is_update = bool(scene_data.get("id") or scene_data.get("scene_id"))
+                    scene_id = scene_data.get("scene_id") or scene_data.get("id") or f"nexus_scene_{int(time.time() * 1000)}"
                     connection.send_result(msg["id"], {
                         "is_scene": True,
+                        "is_update": is_update,
                         "scene_id": scene_id,
                         "data": scene_data,
                     })
@@ -401,11 +420,43 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                     script_data.pop("actions", None)
                     if "alias" not in script_data:
                         script_data["alias"] = script_data.get("name") or "Nuevo Script"
-                    script_id = f"nexus_script_{int(time.time() * 1000)}"
+                    is_update = bool(script_data.get("id") or script_data.get("script_id"))
+                    script_id = script_data.get("script_id") or script_data.get("id") or f"nexus_script_{int(time.time() * 1000)}"
                     connection.send_result(msg["id"], {
                         "is_script": True,
+                        "is_update": is_update,
                         "script_id": script_id,
                         "data": script_data,
+                    })
+                    return
+
+                # Check for Lovelace Dashboard Card
+                CARD_TYPES = {
+                    "tile", "entities", "entity", "glance", "button", "gauge", "markdown",
+                    "thermostat", "weather-forecast", "light", "alarm-panel", "picture",
+                    "picture-elements", "picture-entity", "picture-glance", "history-graph",
+                    "statistics-graph", "logbook", "media-control", "map", "iframe",
+                    "grid", "vertical-stack", "horizontal-stack", "area", "sensor", "humor"
+                }
+                candidate_type = str(data.get("type", "")).strip()
+                is_card = False
+                if candidate_type:
+                    if (
+                        candidate_type in CARD_TYPES
+                        or candidate_type.startswith("custom:")
+                        or candidate_type.endswith("-card")
+                        or "cards" in data
+                        or "card" in data
+                    ):
+                        is_card = True
+
+                if is_card and not any(k in data for k in ("trigger", "triggers", "sequence")):
+                    card_title = data.get("title") or data.get("name") or data.get("header") or ""
+                    connection.send_result(msg["id"], {
+                        "is_card": True,
+                        "card_type": candidate_type,
+                        "title": card_title,
+                        "data": data,
                     })
                     return
 
@@ -414,10 +465,23 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                     if key in data and isinstance(data[key], dict):
                         data[key] = [data[key]]
 
-                # Always generate a fresh unique id to avoid overwriting existing automations
-                data["id"] = f"nexus_{int(time.time() * 1000)}"
+                original_id = data.get("id")
+                allow_update = msg.get("allow_update", False)
+                if allow_update and original_id:
+                    is_update = True
+                    auto_id = str(original_id)
+                else:
+                    is_update = False
+                    auto_id = f"nexus_{int(time.time() * 1000)}"
 
-                connection.send_result(msg["id"], {"is_automation": True, "data": data})
+                data["id"] = auto_id
+
+                connection.send_result(msg["id"], {
+                    "is_automation": True,
+                    "is_update": is_update,
+                    "automation_id": auto_id,
+                    "data": data,
+                })
             except Exception as err:
                 connection.send_error(msg["id"], "parse_error", str(err))
 

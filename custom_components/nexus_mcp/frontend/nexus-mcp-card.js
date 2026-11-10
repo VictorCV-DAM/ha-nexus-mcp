@@ -651,7 +651,8 @@ class NexusMcpCard extends HTMLElement {
         .code-save-auto-btn,
         .code-save-helper-btn,
         .code-save-script-btn,
-        .code-save-scene-btn {
+        .code-save-scene-btn,
+        .code-save-card-btn {
           background: linear-gradient(135deg, #1976d2 0%, #0288d1 100%);
           border: none;
           color: #ffffff;
@@ -678,10 +679,14 @@ class NexusMcpCard extends HTMLElement {
         .code-save-scene-btn {
           background: linear-gradient(135deg, #e65100 0%, #f57c00 100%);
         }
+        .code-save-card-btn {
+          background: linear-gradient(135deg, #00838f 0%, #00acc1 100%);
+        }
         .code-save-auto-btn:hover:not(:disabled),
         .code-save-helper-btn:hover:not(:disabled),
         .code-save-script-btn:hover:not(:disabled),
-        .code-save-scene-btn:hover:not(:disabled) {
+        .code-save-scene-btn:hover:not(:disabled),
+        .code-save-card-btn:hover:not(:disabled) {
           filter: brightness(1.15);
           transform: translateY(-1px);
           box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
@@ -689,13 +694,15 @@ class NexusMcpCard extends HTMLElement {
         .code-save-auto-btn:active:not(:disabled),
         .code-save-helper-btn:active:not(:disabled),
         .code-save-script-btn:active:not(:disabled),
-        .code-save-scene-btn:active:not(:disabled) {
+        .code-save-scene-btn:active:not(:disabled),
+        .code-save-card-btn:active:not(:disabled) {
           transform: translateY(0);
         }
         .code-save-auto-btn ha-icon,
         .code-save-helper-btn ha-icon,
         .code-save-script-btn ha-icon,
-        .code-save-scene-btn ha-icon {
+        .code-save-scene-btn ha-icon,
+        .code-save-card-btn ha-icon {
           --mdc-icon-size: 20px;
           color: #ffca28;
           display: inline-flex;
@@ -711,6 +718,9 @@ class NexusMcpCard extends HTMLElement {
         .code-save-scene-btn ha-icon {
           color: #ffe0b2;
         }
+        .code-save-card-btn ha-icon {
+          color: #b2ebf2;
+        }
         .code-save-auto-btn.saved ha-icon,
         .code-save-auto-btn.error ha-icon,
         .code-save-helper-btn.saved ha-icon,
@@ -718,13 +728,16 @@ class NexusMcpCard extends HTMLElement {
         .code-save-script-btn.saved ha-icon,
         .code-save-script-btn.error ha-icon,
         .code-save-scene-btn.saved ha-icon,
-        .code-save-scene-btn.error ha-icon {
+        .code-save-scene-btn.error ha-icon,
+        .code-save-card-btn.saved ha-icon,
+        .code-save-card-btn.error ha-icon {
           color: #ffffff;
         }
         .code-save-auto-btn.saved,
         .code-save-helper-btn.saved,
         .code-save-script-btn.saved,
-        .code-save-scene-btn.saved {
+        .code-save-scene-btn.saved,
+        .code-save-card-btn.saved {
           background: #2e7d32 !important;
           color: #ffffff !important;
           cursor: default;
@@ -732,7 +745,8 @@ class NexusMcpCard extends HTMLElement {
         .code-save-auto-btn.error,
         .code-save-helper-btn.error,
         .code-save-script-btn.error,
-        .code-save-scene-btn.error {
+        .code-save-scene-btn.error,
+        .code-save-card-btn.error {
           background: #c62828 !important;
           color: #ffffff !important;
         }
@@ -1288,6 +1302,7 @@ class NexusMcpCard extends HTMLElement {
     const detectedHelpers = [];
     const detectedScripts = [];
     const detectedScenes = [];
+    const detectedCards = [];
     codeBlocks.forEach((block, i) => {
       const placeholder = `__NEXUS_CODE_BLOCK_${i}__`;
       const cleanCode = block.code.trim();
@@ -1323,6 +1338,20 @@ class NexusMcpCard extends HTMLElement {
         cleanCode.includes("scene:") || (cleanCode.includes("entities:") && !hasTrigger && !cleanCode.includes("sequence:"))
       );
 
+      const CARD_TYPES = [
+        "tile", "entities", "entity", "glance", "button", "gauge", "markdown",
+        "thermostat", "weather-forecast", "light", "alarm-panel", "picture",
+        "picture-elements", "picture-entity", "picture-glance", "history-graph",
+        "statistics-graph", "logbook", "media-control", "map", "iframe",
+        "grid", "vertical-stack", "horizontal-stack", "area", "sensor"
+      ];
+      const isCard = isYaml && !isAutomation && !isHelper && !isScript && !isScene && (
+        CARD_TYPES.some((ct) => cleanCode.includes(`type: ${ct}`) || cleanCode.includes(`type: '${ct}'`) || cleanCode.includes(`type: "${ct}"`)) ||
+        cleanCode.includes("type: custom:") ||
+        cleanCode.includes("-card") ||
+        (cleanCode.includes("type:") && (cleanCode.includes("cards:") || cleanCode.includes("card:")))
+      );
+
       if (isAutomation) {
         detectedAutomations.push(cleanCode);
       } else if (isHelper) {
@@ -1331,6 +1360,8 @@ class NexusMcpCard extends HTMLElement {
         detectedScripts.push(cleanCode);
       } else if (isScene) {
         detectedScenes.push(cleanCode);
+      } else if (isCard) {
+        detectedCards.push(cleanCode);
       }
 
       const boxHtml = `
@@ -1350,7 +1381,7 @@ class NexusMcpCard extends HTMLElement {
       text = text.split(placeholder).join(boxHtml);
     });
 
-    if (detectedAutomations.length > 0 || detectedHelpers.length > 0 || detectedScripts.length > 0 || detectedScenes.length > 0) {
+    if (detectedAutomations.length > 0 || detectedHelpers.length > 0 || detectedScripts.length > 0 || detectedScenes.length > 0 || detectedCards.length > 0) {
       const isEs = this._isSpanish();
       let footerHtml = `<div class="bubble-automation-footer">`;
       detectedAutomations.forEach((autoCode, idx) => {
@@ -1389,11 +1420,23 @@ class NexusMcpCard extends HTMLElement {
           </button>
         `;
       });
+      detectedCards.forEach((cardCode, idx) => {
+        const cardDataCode = encodeURIComponent(cardCode);
+        const btnLabel = detectedCards.length > 1
+          ? (isEs ? `Añadir / Actualizar Tarjeta #${idx + 1} en el Dashboard` : `Add / Update Card #${idx + 1} in Dashboard`)
+          : (isEs ? "Añadir / Actualizar Tarjeta en el Dashboard" : "Add / Update Card in Dashboard");
+        footerHtml += `
+          <button class="code-save-card-btn" data-code="${cardDataCode}" title="${btnLabel}">
+            <ha-icon icon="mdi:view-dashboard-outline"></ha-icon>
+            <span class="btn-text">${btnLabel}</span>
+          </button>
+        `;
+      });
       detectedHelpers.forEach((helperCode, idx) => {
         const helperDataCode = encodeURIComponent(helperCode);
         const btnLabel = detectedHelpers.length > 1
-          ? (isEs ? `Crear Ayudante #${idx + 1} en Home Assistant` : `Create Helper #${idx + 1} in Home Assistant`)
-          : (isEs ? "Crear Ayudante en Home Assistant" : "Create Helper in Home Assistant");
+          ? (isEs ? `Crear / Actualizar Ayudante #${idx + 1} en Home Assistant` : `Create / Update Helper #${idx + 1} in Home Assistant`)
+          : (isEs ? "Crear / Actualizar Ayudante en Home Assistant" : "Create / Update Helper in Home Assistant");
         footerHtml += `
           <button class="code-save-helper-btn" data-code="${helperDataCode}" title="${btnLabel}">
             <ha-icon icon="mdi:puzzle-plus-outline"></ha-icon>
@@ -1524,7 +1567,10 @@ class NexusMcpCard extends HTMLElement {
           await this._hass.callApi("POST", `config/automation/config/${autoId}`, payload);
 
           btn.classList.add("saved");
-          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Automatización creada y activa!" : "Automation active!"}</span>`;
+          const okMsg = res.is_update
+            ? (isEs ? "¡Automatización actualizada!" : "Automation updated!")
+            : (isEs ? "¡Automatización creada y activa!" : "Automation active!");
+          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${okMsg}</span>`;
         } catch (err) {
           console.error("Nexus MCP Card: Failed to create automation:", err);
           btn.disabled = false;
@@ -1562,7 +1608,10 @@ class NexusMcpCard extends HTMLElement {
           await this._hass.callApi("POST", `config/script/config/${scriptId}`, res.data);
 
           btn.classList.add("saved");
-          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Script creado y activo!" : "Script active!"}</span>`;
+          const okMsg = res.is_update
+            ? (isEs ? "¡Script actualizado!" : "Script updated!")
+            : (isEs ? "¡Script creado y activo!" : "Script active!");
+          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${okMsg}</span>`;
         } catch (err) {
           console.error("Nexus MCP Card: Failed to create script:", err);
           btn.disabled = false;
@@ -1600,12 +1649,137 @@ class NexusMcpCard extends HTMLElement {
           await this._hass.callApi("POST", `config/scene/config/${sceneId}`, res.data);
 
           btn.classList.add("saved");
-          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Escena creada en Home Assistant!" : "Scene active in Home Assistant!"}</span>`;
+          const okMsg = res.is_update
+            ? (isEs ? "¡Escena actualizada!" : "Scene updated!")
+            : (isEs ? "¡Escena creada en Home Assistant!" : "Scene active in Home Assistant!");
+          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${okMsg}</span>`;
         } catch (err) {
           console.error("Nexus MCP Card: Failed to create scene:", err);
           btn.disabled = false;
           btn.classList.add("error");
           const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al crear escena" : "Error creating scene");
+          btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
+        }
+      };
+    });
+
+    // Attach add / update dashboard card click events
+    const cardButtons = container.querySelectorAll(".code-save-card-btn");
+    cardButtons.forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const rawCode = decodeURIComponent(btn.getAttribute("data-code") || "");
+        if (!rawCode) return;
+        const isEs = this._isSpanish();
+
+        btn.disabled = true;
+        const textSpan = btn.querySelector(".btn-text");
+        if (textSpan) textSpan.textContent = isEs ? "Procesando tarjeta..." : "Processing card...";
+
+        try {
+          const res = await this._hass.callWS({
+            type: "nexus_mcp/yaml_to_json",
+            yaml: rawCode,
+          });
+
+          if (!res || !res.is_card || !res.data) {
+            throw new Error(isEs ? "Formato de tarjeta no reconocido" : "Unrecognized card format");
+          }
+
+          const newCard = res.data;
+
+          // 1. Determine current dashboard url_path
+          const pathname = window.location.pathname || "";
+          const pathParts = pathname.split("/").filter(Boolean);
+          let urlPath = null;
+          if (pathParts.length > 0 && pathParts[0] !== "lovelace") {
+            urlPath = pathParts[0];
+          }
+
+          // 2. Fetch current dashboard config
+          const configRes = await this._hass.callWS({
+            type: "lovelace/config",
+            url_path: urlPath,
+          });
+
+          if (!configRes || !configRes.views) {
+            throw new Error(isEs ? "No se pudo leer la configuración del dashboard" : "Could not load dashboard config");
+          }
+
+          const views = configRes.views;
+          if (views.length === 0) {
+            throw new Error(isEs ? "El dashboard no tiene vistas" : "Dashboard has no views");
+          }
+
+          // 3. Find current view
+          let targetView = views[0];
+          const currentViewPath = pathParts.length > 1 ? pathParts[1] : "";
+          if (currentViewPath) {
+            const matched = views.find(
+              (v, idx) => v.path === currentViewPath || String(idx) === currentViewPath
+            );
+            if (matched) targetView = matched;
+          }
+
+          // 4. Check for update vs add
+          let cardUpdated = false;
+          const newCardTitle = newCard.title || newCard.name;
+          const newCardEntity = newCard.entity;
+          const newCardType = newCard.type;
+
+          function matches(c) {
+            if (!c || typeof c !== "object") return false;
+            if (newCardTitle && (c.title === newCardTitle || c.name === newCardTitle)) return true;
+            if (newCardType && c.type === newCardType && newCardEntity && c.entity === newCardEntity) return true;
+            return false;
+          }
+
+          // If view has sections (modern HA)
+          if (Array.isArray(targetView.sections) && targetView.sections.length > 0) {
+            for (const sec of targetView.sections) {
+              if (Array.isArray(sec.cards)) {
+                const matchIdx = sec.cards.findIndex(matches);
+                if (matchIdx !== -1) {
+                  sec.cards[matchIdx] = newCard;
+                  cardUpdated = true;
+                  break;
+                }
+              }
+            }
+            if (!cardUpdated) {
+              const targetSec = targetView.sections.find(s => Array.isArray(s.cards)) || targetView.sections[0];
+              targetSec.cards = targetSec.cards || [];
+              targetSec.cards.push(newCard);
+            }
+          } else {
+            // Traditional cards array
+            targetView.cards = targetView.cards || [];
+            const matchIdx = targetView.cards.findIndex(matches);
+            if (matchIdx !== -1) {
+              targetView.cards[matchIdx] = newCard;
+              cardUpdated = true;
+            } else {
+              targetView.cards.push(newCard);
+            }
+          }
+
+          // 5. Save updated dashboard config wholesale
+          await this._hass.callWS({
+            type: "lovelace/config/save",
+            url_path: urlPath,
+            config: configRes,
+          });
+
+          btn.classList.add("saved");
+          const successMsg = cardUpdated
+            ? (isEs ? "¡Tarjeta actualizada en el dashboard!" : "Card updated in dashboard!")
+            : (isEs ? "¡Tarjeta añadida al dashboard!" : "Card added to dashboard!");
+          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${successMsg}</span>`;
+        } catch (err) {
+          console.error("Nexus MCP Card: Failed to save card to dashboard:", err);
+          btn.disabled = false;
+          btn.classList.add("error");
+          const errMsg = (err && (err.message || err.error)) || (isEs ? "Error al guardar tarjeta" : "Error saving card");
           btn.innerHTML = `<ha-icon icon="mdi:alert-circle"></ha-icon><span class="btn-text">${escapeHtml(errMsg)}</span>`;
         }
       };
@@ -1634,13 +1808,26 @@ class NexusMcpCard extends HTMLElement {
             throw new Error(isEs ? "Formato de ayudante no reconocido" : "Unrecognized helper format");
           }
 
-          await this._hass.callWS({
-            type: `${res.helper_domain}/create`,
-            ...res.data,
-          });
+          const helperId = res.helper_id;
+          const entityId = helperId ? `${res.helper_domain}.${helperId}` : null;
+          const exists = entityId && this._hass && this._hass.states && this._hass.states[entityId];
 
-          btn.classList.add("saved");
-          btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Ayudante creado en Home Assistant!" : "Helper active in Home Assistant!"}</span>`;
+          if (exists || (res.is_update && helperId)) {
+            await this._hass.callWS({
+              type: `${res.helper_domain}/update`,
+              [`${res.helper_domain}_id`]: helperId,
+              ...res.data,
+            });
+            btn.classList.add("saved");
+            btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Ayudante actualizado!" : "Helper updated!"}</span>`;
+          } else {
+            await this._hass.callWS({
+              type: `${res.helper_domain}/create`,
+              ...res.data,
+            });
+            btn.classList.add("saved");
+            btn.innerHTML = `<ha-icon icon="mdi:check-circle"></ha-icon><span class="btn-text">${isEs ? "¡Ayudante creado en Home Assistant!" : "Helper active in Home Assistant!"}</span>`;
+          }
         } catch (err) {
           console.error("Nexus MCP Card: Failed to create helper:", err);
           btn.disabled = false;

@@ -75,12 +75,34 @@ action:
         self.connection.send_result.assert_called_once()
         result = self.connection.send_result.call_args[0][1]
         self.assertTrue(result.get("is_automation"))
+        self.assertFalse(result.get("is_update"))
         self.assertEqual(result["data"]["alias"], "Test Auto")
         self.assertTrue(result["data"]["id"].startswith("nexus_"))
 
+    async def test_automation_update_yaml_parsing(self):
+        handler = self._get_handler()
+        yaml_content = """
+id: "apagar_luz_taller_auto"
+alias: "Apagar luz taller auto"
+trigger:
+  - platform: state
+    entity_id: switch.luz_taller
+    to: "on"
+action:
+  - service: switch.turn_off
+    target:
+      entity_id: switch.luz_taller
+"""
+        msg = {"id": 10, "type": "nexus_mcp/yaml_to_json", "yaml": yaml_content, "allow_update": True}
+        await handler(self.hass, self.connection, msg)
+
+        result = self.connection.send_result.call_args[0][1]
+        self.assertTrue(result.get("is_automation"))
+        self.assertTrue(result.get("is_update"))
+        self.assertEqual(result["data"]["id"], "apagar_luz_taller_auto")
+
     async def test_helper_yaml_parsing(self):
         handler = self._get_handler()
-        self.assertIsNotNone(handler)
 
         yaml_content = """
 input_boolean:
@@ -95,11 +117,11 @@ input_boolean:
         result = self.connection.send_result.call_args[0][1]
         self.assertTrue(result.get("is_helper"))
         self.assertEqual(result.get("helper_domain"), "input_boolean")
+        self.assertEqual(result.get("helper_id"), "vacation_mode")
         self.assertEqual(result["data"]["name"], "Modo Vacaciones")
 
     async def test_script_yaml_parsing(self):
         handler = self._get_handler()
-        self.assertIsNotNone(handler)
 
         yaml_content = """
 alias: "Secuencia Buenas Noches"
@@ -125,7 +147,6 @@ mode: single
 
     async def test_scene_yaml_parsing(self):
         handler = self._get_handler()
-        self.assertIsNotNone(handler)
 
         yaml_content = """
 name: "Modo Cine"
@@ -146,6 +167,26 @@ entities:
         self.assertEqual(result["data"]["name"], "Modo Cine")
         self.assertIn("light.living_room", result["data"]["entities"])
         self.assertTrue(result.get("scene_id").startswith("nexus_scene_"))
+
+    async def test_card_yaml_parsing(self):
+        handler = self._get_handler()
+
+        yaml_content = """
+type: tile
+entity: light.luz_taller
+name: "Luz Taller LED"
+color: amber
+icon: mdi:lamp
+"""
+        msg = {"id": 5, "type": "nexus_mcp/yaml_to_json", "yaml": yaml_content}
+        await handler(self.hass, self.connection, msg)
+
+        self.connection.send_result.assert_called_once()
+        result = self.connection.send_result.call_args[0][1]
+        self.assertTrue(result.get("is_card"))
+        self.assertEqual(result.get("card_type"), "tile")
+        self.assertEqual(result.get("title"), "Luz Taller LED")
+        self.assertEqual(result["data"]["entity"], "light.luz_taller")
 
 
 if __name__ == "__main__":
