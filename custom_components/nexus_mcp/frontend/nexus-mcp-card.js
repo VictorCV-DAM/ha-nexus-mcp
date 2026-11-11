@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.6.5)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.6.6)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -1289,11 +1289,19 @@ class NexusMcpCard extends HTMLElement {
     const isEs = this._isSpanish();
     const rawBackup = localStorage.getItem("nexus_last_backup");
     if (rawBackup) {
+      undoBtn.disabled = false;
       undoBtn.classList.add("has-backup");
       undoBtn.title = isEs ? "↩️ Deshacer / Revertir último cambio realizado" : "↩️ Undo / Revert last change";
+      undoBtn.style.opacity = "1";
+      undoBtn.style.cursor = "pointer";
+      undoBtn.style.pointerEvents = "auto";
     } else {
+      undoBtn.disabled = true;
       undoBtn.classList.remove("has-backup");
-      undoBtn.title = isEs ? "Deshacer (sin cambios pendientes)" : "Undo (no pending changes)";
+      undoBtn.title = isEs ? "Deshacer (inactivo: no hay cambios pendientes)" : "Undo (inactive: no pending changes)";
+      undoBtn.style.opacity = "0.35";
+      undoBtn.style.cursor = "not-allowed";
+      undoBtn.style.pointerEvents = "none";
     }
   }
 
@@ -1650,10 +1658,6 @@ class NexusMcpCard extends HTMLElement {
             <button class="code-action-btn code-save-new-btn" data-code="${itemDataCode}" data-resource="${rType}" data-mode="add" title="${newLabel}">
               <ha-icon icon="mdi:plus-circle-outline"></ha-icon>
               <span class="btn-text">${newLabel}</span>
-            </button>
-            <button class="code-action-btn code-revert-btn" data-code="${itemDataCode}" data-resource="${rType}" data-mode="revert" title="${isEs ? 'Deshacer último cambio realizado' : 'Revert last change'}">
-              <ha-icon icon="mdi:undo-variant"></ha-icon>
-              <span class="btn-text">${isEs ? '↩️ Deshacer / Revertir Último Cambio' : '↩️ Undo / Revert Last Change'}</span>
             </button>
           </div>
         `;
@@ -2727,7 +2731,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.6.5 Ready ",
+  "%c NEXUS MCP CARD %c v1.6.6 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
