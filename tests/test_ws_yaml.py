@@ -119,6 +119,28 @@ input_boolean:
         self.assertEqual(result.get("helper_domain"), "input_boolean")
         self.assertEqual(result.get("helper_id"), "vacation_mode")
         self.assertEqual(result["data"]["name"], "Modo Vacaciones")
+        self.assertNotIn("input_boolean_id", result["data"])
+
+    async def test_input_button_helper_parsing_no_id_pollution(self):
+        handler = self._get_handler()
+        yaml_content = """
+input_button:
+  sincronizar_google_home:
+    name: Sincronizar Google Home
+    icon: mdi:google-home
+"""
+        msg = {"id": 20, "type": "nexus_mcp/yaml_to_json", "yaml": yaml_content}
+        await handler(self.hass, self.connection, msg)
+
+        self.connection.send_result.assert_called_once()
+        result = self.connection.send_result.call_args[0][1]
+        self.assertTrue(result.get("is_helper"))
+        self.assertEqual(result.get("helper_domain"), "input_button")
+        self.assertEqual(result.get("helper_id"), "sincronizar_google_home")
+        self.assertEqual(result["data"]["name"], "Sincronizar Google Home")
+        self.assertEqual(result["data"]["icon"], "mdi:google-home")
+        self.assertNotIn("input_button_id", result["data"])
+        self.assertNotIn("id", result["data"])
 
     async def test_script_yaml_parsing(self):
         handler = self._get_handler()

@@ -38,7 +38,7 @@ except (ImportError, AttributeError):
     StaticPathConfig = None
 
 
-FRONTEND_VERSION = "1.6.6"
+FRONTEND_VERSION = "1.6.7"
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
@@ -391,8 +391,6 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                         helper_data = {k: v for k, v in data.items() if k not in ("type", "domain", "platform")}
 
                 if helper_domain and helper_data:
-                    if "name" not in helper_data:
-                        helper_data["name"] = "Nuevo Ayudante"
                     helper_id = (
                         helper_data.get("id")
                         or helper_data.get(f"{helper_domain}_id")
@@ -403,16 +401,21 @@ def _async_setup_websocket(hass: HomeAssistant) -> None:
                         ent = str(helper_data["entity_id"])
                         if ent.startswith(f"{helper_domain}."):
                             helper_id = ent.split(".", 1)[1]
-                    if helper_id:
-                        helper_data[f"{helper_domain}_id"] = helper_id
+
+                    clean_helper_data = {
+                        k: v for k, v in helper_data.items()
+                        if not k.endswith("_id") and k not in ("id", "type", "domain", "platform", "helper_id")
+                    }
+                    if "name" not in clean_helper_data:
+                        clean_helper_data["name"] = helper_slug or "Nuevo Ayudante"
 
                     connection.send_result(msg["id"], {
                         "resource_type": "helper",
                         "is_helper": True,
-                        "is_update": allow_update or bool(helper_id),
+                        "is_update": allow_update,
                         "helper_domain": helper_domain,
                         "helper_id": helper_id,
-                        "data": helper_data,
+                        "data": clean_helper_data,
                     })
                     return
 

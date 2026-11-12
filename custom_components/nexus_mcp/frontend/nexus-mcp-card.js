@@ -1,5 +1,5 @@
 /**
- * Nexus MCP Plug & Play Card for Home Assistant (v1.6.6)
+ * Nexus MCP Plug & Play Card for Home Assistant (v1.6.7)
  * Interactive Multi-Agent AI Selector, Real-Time Chat, History & Assist.
  */
 
@@ -127,6 +127,10 @@ class NexusMcpCard extends HTMLElement {
       }
     }
 
+    if (!this._cachedLovelaceConfig && hass) {
+      this._loadDashboardConfig();
+    }
+
     if (!oldHass || oldHass.language !== hass.language || oldHass.locale?.language !== hass.locale?.language) {
       this._updateTranslations();
       this._updateAgentDropdown();
@@ -136,6 +140,174 @@ class NexusMcpCard extends HTMLElement {
       }
       this._updateMessagesView();
     }
+  }
+
+  async _loadDashboardConfig() {
+    if (!this._hass) return;
+    const pathname = window.location.pathname || "";
+    const pathParts = pathname.split("/").filter(Boolean);
+    let urlPath = (pathParts.length > 0 && pathParts[0] !== "lovelace") ? pathParts[0] : null;
+    try {
+      let res = await this._hass.callWS({ type: "lovelace/config", url_path: urlPath });
+      if (!res || !Array.isArray(res.views) || res.views.length === 0) {
+        res = await this._hass.callWS({ type: "lovelace/config", url_path: "mi-casa" });
+      }
+      if (res && Array.isArray(res.views)) {
+        this._cachedLovelaceConfig = res;
+      }
+    } catch (_) {}
+  }
+
+  _checkResourceExists(resType, cleanCode) {
+    if (!this._hass) return false;
+    const states = this._hass.states || {};
+
+    if (resType === "helper") {
+      const HELPER_DOMAINS = [
+        "input_boolean", "input_number", "input_select", "input_text",
+        "input_datetime", "input_button", "counter", "timer", "schedule"
+      ];
+      let foundDomain = null;
+      let slug = null;
+      for (const hd of HELPER_DOMAINS) {
+        const domainRegex = new RegExp(`(?:^|\\n)\\s*${hd}:(?:\\s*\\n\\s*([a-z0-9_]+):)?`, "i");
+        const m = cleanCode.match(domainRegex);
+        if (m) {
+          foundDomain = hd;
+          if (m[1]) slug = m[1].trim().toLowerCase();
+          break;
+        }
+      }
+      if (!foundDomain) {
+        const typeMatch = cleanCode.match(/(?:type|domain|platform):\s*['"]?([a-z0-9_]+)['"]?/i);
+        if (typeMatch && HELPER_DOMAINS.includes(typeMatch[1].toLowerCase())) {
+          foundDomain = typeMatch[1].toLowerCase();
+        }
+      }
+      if (!foundDomain) return false;
+
+      // Check explicit entity_id
+      const entMatch = cleanCode.match(/entity_id:\s*['"]?([a-z0-9_]+\.[a-z0-9_]+)['"]?/i);
+      if (entMatch && states[entMatch[1].toLowerCase()]) return true;
+
+      // Check target slug
+      const idMatch = cleanCode.match(/(?:^|\n)\s*(?:id|helper_id):\s*['"]?([a-z0-9_]+)['"]?/i);
+      const targetSlug = slug || (idMatch ? idMatch[1].trim().toLowerCase() : null);
+      if (targetSlug && states[`${foundDomain}.${targetSlug}`]) return true;
+
+      // Check by friendly_name
+      const nameMatch = cleanCode.match(/(?:^|\n)\s*name:\s*['"]?([^'"\n]+)['"]?/i);
+      if (nameMatch) {
+        const targetName = nameMatch[1].trim().toLowerCase();
+        for (const entityId in states) {
+          if (entityId.startsWith(`${foundDomain}.`)) {
+            const fn = states[entityId]?.attributes?.friendly_name?.trim().toLowerCase();
+            if (fn === targetName) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    if (resType === "automation") {
+      const idMatch = cleanCode.match(/(?:^|\n)\s*id:\s*['"]?([^'"\n]+)['"]?/i);
+      if (idMatch) {
+        const autoId = idMatch[1].trim();
+        if (states[`automation.${autoId}`]) return true;
+        for (const eid in states) {
+          if (eid.startsWith("automation.")) {
+            if (states[eid]?.attributes?.id === autoId) return true;
+          }
+        }
+      }
+      const aliasMatch = cleanCode.match(/(?:^|\n)\s*alias:\s*['"]?([^'"\n]+)['"]?/i);
+      if (aliasMatch) {
+        const targetAlias = aliasMatch[1].trim().toLowerCase();
+        for (const eid in states) {
+          if (eid.startsWith("automation.")) {
+            const fn = states[eid]?.attributes?.friendly_name?.trim().toLowerCase();
+            if (fn === targetAlias) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    if (resType === "script") {
+      const slugMatch = cleanCode.match(/(?:^|\n)\s*script:\s*\n\s*([a-z0-9_]+):/i);
+      const idMatch = cleanCode.match(/(?:^|\n)\s*id:\s*['"]?([^'"\n]+)['"]?/i);
+      const targetSlug = (slugMatch && slugMatch[1]) || (idMatch && idMatch[1]);
+      if (targetSlug && states[`script.${targetSlug.trim().toLowerCase()}`]) return true;
+
+      const aliasMatch = cleanCode.match(/(?:^|\n)\s*alias:\s*['"]?([^'"\n]+)['"]?/i);
+      if (aliasMatch) {
+        const targetAlias = aliasMatch[1].trim().toLowerCase();
+        for (const eid in states) {
+          if (eid.startsWith("script.")) {
+            const fn = states[eid]?.attributes?.friendly_name?.trim().toLowerCase();
+            if (fn === targetAlias) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    if (resType === "scene") {
+      const slugMatch = cleanCode.match(/(?:^|\n)\s*scene:\s*\n\s*([a-z0-9_]+):/i);
+      const idMatch = cleanCode.match(/(?:^|\n)\s*id:\s*['"]?([^'"\n]+)['"]?/i);
+      const targetSlug = (slugMatch && slugMatch[1]) || (idMatch && idMatch[1]);
+      if (targetSlug && states[`scene.${targetSlug.trim().toLowerCase()}`]) return true;
+
+      const nameMatch = cleanCode.match(/(?:^|\n)\s*name:\s*['"]?([^'"\n]+)['"]?/i);
+      if (nameMatch) {
+        const targetName = nameMatch[1].trim().toLowerCase();
+        for (const eid in states) {
+          if (eid.startsWith("scene.")) {
+            const fn = states[eid]?.attributes?.friendly_name?.trim().toLowerCase();
+            if (fn === targetName) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    if (resType === "card") {
+      if (this._cachedLovelaceConfig && Array.isArray(this._cachedLovelaceConfig.views)) {
+        const entMatches = cleanCode.matchAll(/[a-z0-9_]+\.[a-z0-9_]+/gi);
+        const cardEnts = new Set();
+        for (const m of entMatches) {
+          cardEnts.add(m[0].toLowerCase());
+          cardEnts.add(m[0].toLowerCase().replace(/_local$/, ""));
+        }
+        const nameMatch = cleanCode.match(/(?:^|\n)\s*(?:title|name):\s*['"]?([^'"\n]+)['"]?/i);
+        const cardTitle = nameMatch ? nameMatch[1].trim().toLowerCase() : "";
+
+        for (const v of this._cachedLovelaceConfig.views) {
+          let vCards = Array.isArray(v.cards) ? [...v.cards] : [];
+          if (Array.isArray(v.sections)) {
+            for (const s of v.sections) {
+              if (Array.isArray(s.cards)) vCards.push(...s.cards);
+            }
+          }
+          for (const c of vCards) {
+            if (!c || typeof c !== "object") continue;
+            const cDump = JSON.stringify(c).toLowerCase();
+            for (const ent of cardEnts) {
+              if (cDump.includes(ent)) return true;
+            }
+            if (cardTitle && cardTitle.length >= 4) {
+              const cTitle = (c.title || c.name || "").trim().toLowerCase();
+              if (cTitle && (cTitle === cardTitle || cTitle.includes(cardTitle) || cardTitle.includes(cTitle))) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    return false;
   }
 
   _getAvailableAgents() {
@@ -1649,12 +1821,16 @@ class NexusMcpCard extends HTMLElement {
           newLabel = isEs ? `➕ Crear como Nueva Escena${prefix} en Home Assistant` : `➕ Create as New Scene${prefix} in Home Assistant`;
         }
 
+        const exists = this._checkResourceExists(rType, resItem.code);
+
         footerHtml += `
           <div class="code-actions-group" data-code="${itemDataCode}" data-resource="${rType}">
-            <button class="code-action-btn code-save-update-btn" data-code="${itemDataCode}" data-resource="${rType}" data-mode="update" title="${updateLabel}">
-              <ha-icon icon="${iconName}"></ha-icon>
-              <span class="btn-text">${updateLabel}</span>
-            </button>
+            ${exists ? `
+              <button class="code-action-btn code-save-update-btn" data-code="${itemDataCode}" data-resource="${rType}" data-mode="update" title="${updateLabel}">
+                <ha-icon icon="${iconName}"></ha-icon>
+                <span class="btn-text">${updateLabel}</span>
+              </button>
+            ` : ""}
             <button class="code-action-btn code-save-new-btn" data-code="${itemDataCode}" data-resource="${rType}" data-mode="add" title="${newLabel}">
               <ha-icon icon="mdi:plus-circle-outline"></ha-icon>
               <span class="btn-text">${newLabel}</span>
@@ -2077,34 +2253,72 @@ class NexusMcpCard extends HTMLElement {
             }));
             this._updateHeaderUndoState();
 
-            if (mode === "update" || existingState) {
-              const mergedPayload = {
-                ...(prevAttributes ? {
-                  name: prevAttributes.friendly_name,
-                  icon: prevAttributes.icon,
-                  min: prevAttributes.min,
-                  max: prevAttributes.max,
-                  step: prevAttributes.step,
-                  options: prevAttributes.options,
-                  unit_of_measurement: prevAttributes.unit_of_measurement,
-                  mode: prevAttributes.mode,
-                } : {}),
-                ...res.data,
-              };
+            if (mode === "add") {
+              const createPayload = { ...res.data };
+              delete createPayload[`${res.helper_domain}_id`];
+              delete createPayload.id;
+              delete createPayload.helper_id;
 
-              await this._hass.callWS({
-                type: `${res.helper_domain}/update`,
-                [`${res.helper_domain}_id`]: helperId,
-                ...mergedPayload,
+              const createRes = await this._hass.callWS({
+                type: `${res.helper_domain}/create`,
+                ...createPayload,
               });
+              const createdId = createRes?.id || createRes?.[`${res.helper_domain}_id`] || helperId;
 
-              okMsg = isEs ? "¡Ayudante actualizado con respaldo!" : "Helper safely updated!";
-              undoLabel = isEs ? "↩️ Deshacer cambios en el Ayudante" : "↩️ Undo Helper changes";
+              okMsg = isEs ? "¡Ayudante creado en Home Assistant!" : "Helper active in Home Assistant!";
+              undoLabel = isEs ? "↩️ Deshacer y eliminar Ayudante creado" : "↩️ Undo and delete created Helper";
               undoCallback = async () => {
-                if (prevAttributes) {
+                if (createdId) {
                   await this._hass.callWS({
-                    type: `${res.helper_domain}/update`,
-                    [`${res.helper_domain}_id`]: helperId,
+                    type: `${res.helper_domain}/delete`,
+                    [`${res.helper_domain}_id`]: createdId,
+                  });
+                }
+                localStorage.removeItem("nexus_last_backup");
+                this._updateHeaderUndoState();
+              };
+            } else {
+              // mode === "update"
+              let targetId = helperId;
+              try {
+                const listItems = await this._hass.callWS({ type: `${res.helper_domain}/list` });
+                if (Array.isArray(listItems) && listItems.length > 0) {
+                  const match = listItems.find(
+                    (it) => it.id === helperId ||
+                            (it.name && res.data?.name && it.name.trim().toLowerCase() === res.data.name.trim().toLowerCase())
+                  );
+                  if (match) targetId = match.id;
+                }
+              } catch (_) {}
+
+              if (!targetId && !existingState) {
+                // If it doesn't exist to update, create it!
+                const createPayload = { ...res.data };
+                delete createPayload[`${res.helper_domain}_id`];
+                delete createPayload.id;
+                delete createPayload.helper_id;
+
+                const createRes = await this._hass.callWS({
+                  type: `${res.helper_domain}/create`,
+                  ...createPayload,
+                });
+                const createdId = createRes?.id || helperId;
+
+                okMsg = isEs ? "¡Ayudante creado en Home Assistant!" : "Helper active in Home Assistant!";
+                undoLabel = isEs ? "↩️ Deshacer y eliminar Ayudante creado" : "↩️ Undo and delete created Helper";
+                undoCallback = async () => {
+                  if (createdId) {
+                    await this._hass.callWS({
+                      type: `${res.helper_domain}/delete`,
+                      [`${res.helper_domain}_id`]: createdId,
+                    });
+                  }
+                  localStorage.removeItem("nexus_last_backup");
+                  this._updateHeaderUndoState();
+                };
+              } else {
+                const mergedPayload = {
+                  ...(prevAttributes ? {
                     name: prevAttributes.friendly_name,
                     icon: prevAttributes.icon,
                     min: prevAttributes.min,
@@ -2113,27 +2327,40 @@ class NexusMcpCard extends HTMLElement {
                     options: prevAttributes.options,
                     unit_of_measurement: prevAttributes.unit_of_measurement,
                     mode: prevAttributes.mode,
-                  });
-                }
-                localStorage.removeItem("nexus_last_backup");
-              };
-            } else {
-              await this._hass.callWS({
-                type: `${res.helper_domain}/create`,
-                ...res.data,
-              });
+                  } : {}),
+                  ...res.data,
+                };
+                delete mergedPayload[`${res.helper_domain}_id`];
+                delete mergedPayload.id;
+                delete mergedPayload.helper_id;
 
-              okMsg = isEs ? "¡Ayudante creado en Home Assistant!" : "Helper active in Home Assistant!";
-              undoLabel = isEs ? "↩️ Deshacer y eliminar Ayudante creado" : "↩️ Undo and delete created Helper";
-              undoCallback = async () => {
-                if (helperId) {
-                  await this._hass.callWS({
-                    type: `${res.helper_domain}/delete`,
-                    [`${res.helper_domain}_id`]: helperId,
-                  });
-                }
-                localStorage.removeItem("nexus_last_backup");
-              };
+                await this._hass.callWS({
+                  type: `${res.helper_domain}/update`,
+                  [`${res.helper_domain}_id`]: targetId,
+                  ...mergedPayload,
+                });
+
+                okMsg = isEs ? "¡Ayudante actualizado con respaldo!" : "Helper safely updated!";
+                undoLabel = isEs ? "↩️ Deshacer cambios en el Ayudante" : "↩️ Undo Helper changes";
+                undoCallback = async () => {
+                  if (prevAttributes) {
+                    await this._hass.callWS({
+                      type: `${res.helper_domain}/update`,
+                      [`${res.helper_domain}_id`]: targetId,
+                      name: prevAttributes.friendly_name,
+                      icon: prevAttributes.icon,
+                      min: prevAttributes.min,
+                      max: prevAttributes.max,
+                      step: prevAttributes.step,
+                      options: prevAttributes.options,
+                      unit_of_measurement: prevAttributes.unit_of_measurement,
+                      mode: prevAttributes.mode,
+                    });
+                  }
+                  localStorage.removeItem("nexus_last_backup");
+                  this._updateHeaderUndoState();
+                };
+              }
             }
 
           } else if (resType === "automation") {
@@ -2731,7 +2958,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.6.6 Ready ",
+  "%c NEXUS MCP CARD %c v1.6.7 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
