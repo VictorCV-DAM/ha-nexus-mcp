@@ -19,6 +19,12 @@ from .mcp_client import McpTool
 
 _LOGGER = logging.getLogger(__name__)
 
+HELPER_AND_CONFIG_DOMAINS = {
+    "input_button", "input_boolean", "input_text", "input_number",
+    "input_datetime", "input_select", "counter", "timer", "schedule",
+    "automation", "script", "scene"
+}
+
 
 def serialize_for_json(obj: Any) -> Any:
     """Recursively convert datetime, set, and non-serializable objects into JSON-compatible types."""
@@ -122,6 +128,7 @@ async def execute_builtin_tool(
         all_states = [
             s for s in hass.states.async_all()
             if async_should_expose(hass, "conversation", s.entity_id)
+            or s.entity_id.split(".")[0] in HELPER_AND_CONFIG_DOMAINS
         ]
         total_count = len(all_states)
 
@@ -288,7 +295,8 @@ async def execute_builtin_tool(
 
     if name == "ha_get_entity_state":
         entity_id = arguments.get("entity_id", "")
-        if not async_should_expose(hass, "conversation", entity_id):
+        domain_part = entity_id.split(".")[0] if "." in entity_id else ""
+        if domain_part not in HELPER_AND_CONFIG_DOMAINS and not async_should_expose(hass, "conversation", entity_id):
             return {"error": f"Entity '{entity_id}' is not exposed to Assist/Conversation."}
 
         state = hass.states.get(entity_id)
@@ -418,9 +426,15 @@ async def execute_builtin_tool(
         if domain == "light" and first_target_domain == "switch":
             domain = "homeassistant"
 
-        # Check that target entities are exposed to conversation
+        # Check that target entities are exposed to conversation or are helpers/automations
+        EXEMPT_TARGET_DOMAINS = {
+            "input_button", "input_boolean", "input_text", "input_number",
+            "input_datetime", "input_select", "counter", "timer", "schedule",
+            "automation"
+        }
         for eid in target_eids:
-            if not async_should_expose(hass, "conversation", eid):
+            domain_part = eid.split(".")[0] if "." in eid else ""
+            if domain_part not in EXEMPT_TARGET_DOMAINS and not async_should_expose(hass, "conversation", eid):
                 return {"error": f"Entity '{eid}' is not exposed to Assist/Conversation."}
 
         # Guard administrative/destructive services to require admin privileges

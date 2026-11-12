@@ -420,5 +420,36 @@ class TestBuiltinTools(unittest.IsolatedAsyncioTestCase):
                 context=None,
             )
 
+    async def test_ha_search_entities_and_get_state_includes_helpers(self) -> None:
+        """Verify ha_search_entities and ha_get_entity_state find helpers even if unexposed."""
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        mock_hass = MagicMock()
+        state_btn = MagicMock()
+        state_btn.entity_id = "input_button.sync_google_home"
+        state_btn.state = "2026-11-12T18:00:00+00:00"
+        state_btn.attributes = {"friendly_name": "Sincronizar Google Home"}
+
+        mock_hass.states.async_all.return_value = [state_btn]
+        mock_hass.states.get.return_value = state_btn
+
+        # Even with async_should_expose returning False (default for helpers in HA)
+        with patch("custom_components.nexus_mcp.tools.async_should_expose", return_value=False):
+            res_search = await execute_builtin_tool(
+                mock_hass,
+                "ha_search_entities",
+                {"query": "sync_google_home"}
+            )
+            self.assertEqual(res_search["count"], 1)
+            self.assertEqual(res_search["results"][0]["entity_id"], "input_button.sync_google_home")
+
+            res_state = await execute_builtin_tool(
+                mock_hass,
+                "ha_get_entity_state",
+                {"entity_id": "input_button.sync_google_home"}
+            )
+            self.assertNotIn("error", res_state)
+            self.assertEqual(res_state["entity_id"], "input_button.sync_google_home")
+
 if __name__ == "__main__":
     unittest.main()

@@ -158,6 +158,28 @@ class NexusMcpCard extends HTMLElement {
     } catch (_) {}
   }
 
+  _tokenize(str) {
+    if (!str) return [];
+    const clean = String(str).toLowerCase().replace(/[_.\-]/g, " ");
+    const stopWords = new Set(["el", "la", "los", "las", "de", "del", "un", "una", "en", "para", "por", "con", "al", "the", "a", "an", "and", "or"]);
+    return clean.split(/\s+/).filter(w => w.length >= 2 && !stopWords.has(w));
+  }
+
+  _isFuzzyMatch(target, candidate) {
+    if (!target || !candidate) return false;
+    const t = String(target).trim().toLowerCase();
+    const c = String(candidate).trim().toLowerCase();
+    if (t === c || t.includes(c) || c.includes(t)) return true;
+    const tTokens = this._tokenize(t);
+    const cTokens = this._tokenize(c);
+    if (tTokens.length === 0 || cTokens.length === 0) return false;
+    const cSet = new Set(cTokens);
+    const common = tTokens.filter(tok => cSet.has(tok));
+    if (common.length === tTokens.length || common.length === cTokens.length) return true;
+    const ratio = common.length / Math.min(tTokens.length, cTokens.length);
+    return common.length >= 2 && ratio >= 0.5;
+  }
+
   _checkResourceExists(resType, cleanCode) {
     if (!this._hass) return false;
     const states = this._hass.states || {};
@@ -195,24 +217,37 @@ class NexusMcpCard extends HTMLElement {
       const targetSlug = slug || (idMatch ? idMatch[1].trim().toLowerCase() : null);
       if (targetSlug && states[`${foundDomain}.${targetSlug}`]) return true;
 
-      // Check by friendly_name
+      // Check by friendly_name and slug with fuzzy match
       const nameMatch = cleanCode.match(/(?:^|\n)\s*name:\s*['"]?([^'"\n]+)['"]?/i);
-      if (nameMatch) {
-        const targetName = nameMatch[1].trim().toLowerCase();
-        for (const entityId in states) {
-          if (entityId.startsWith(`${foundDomain}.`)) {
-            const fn = states[entityId]?.attributes?.friendly_name?.trim().toLowerCase();
-            if (fn === targetName) return true;
+      const targetName = nameMatch ? nameMatch[1].trim() : null;
+
+      for (const entityId in states) {
+        if (entityId.startsWith(`${foundDomain}.`)) {
+          const fn = states[entityId]?.attributes?.friendly_name;
+          const eSlug = entityId.substring(foundDomain.length + 1);
+          if (targetName && fn && this._isFuzzyMatch(targetName, fn)) return true;
+          if (targetSlug && (eSlug === targetSlug || this._isFuzzyMatch(targetSlug, eSlug))) return true;
+          if (targetName && this._isFuzzyMatch(targetName, eSlug)) return true;
+        }
+      }
+
+      // Check session memory of recently created entities
+      if (Array.isArray(this._lastCreatedEntities)) {
+        for (const created of this._lastCreatedEntities) {
+          if (created.domain === foundDomain) {
+            if (targetSlug && (created.id === targetSlug || this._isFuzzyMatch(targetSlug, created.id))) return true;
+            if (targetName && (created.name === targetName || this._isFuzzyMatch(targetName, created.name))) return true;
           }
         }
       }
+
       return false;
     }
 
     if (resType === "automation") {
       const idMatch = cleanCode.match(/(?:^|\n)\s*id:\s*['"]?([^'"\n]+)['"]?/i);
-      if (idMatch) {
-        const autoId = idMatch[1].trim();
+      const autoId = idMatch ? idMatch[1].trim() : null;
+      if (autoId) {
         if (states[`automation.${autoId}`]) return true;
         for (const eid in states) {
           if (eid.startsWith("automation.")) {
@@ -220,14 +255,15 @@ class NexusMcpCard extends HTMLElement {
           }
         }
       }
+
       const aliasMatch = cleanCode.match(/(?:^|\n)\s*alias:\s*['"]?([^'"\n]+)['"]?/i);
-      if (aliasMatch) {
-        const targetAlias = aliasMatch[1].trim().toLowerCase();
-        for (const eid in states) {
-          if (eid.startsWith("automation.")) {
-            const fn = states[eid]?.attributes?.friendly_name?.trim().toLowerCase();
-            if (fn === targetAlias) return true;
-          }
+      const targetAlias = aliasMatch ? aliasMatch[1].trim() : null;
+      for (const eid in states) {
+        if (eid.startsWith("automation.")) {
+          const fn = states[eid]?.attributes?.friendly_name;
+          const aId = states[eid]?.attributes?.id;
+          if (autoId && (eid === `automation.${autoId}` || aId === autoId || this._isFuzzyMatch(autoId, eid.substring(11)))) return true;
+          if (targetAlias && fn && this._isFuzzyMatch(targetAlias, fn)) return true;
         }
       }
       return false;
@@ -240,13 +276,13 @@ class NexusMcpCard extends HTMLElement {
       if (targetSlug && states[`script.${targetSlug.trim().toLowerCase()}`]) return true;
 
       const aliasMatch = cleanCode.match(/(?:^|\n)\s*alias:\s*['"]?([^'"\n]+)['"]?/i);
-      if (aliasMatch) {
-        const targetAlias = aliasMatch[1].trim().toLowerCase();
-        for (const eid in states) {
-          if (eid.startsWith("script.")) {
-            const fn = states[eid]?.attributes?.friendly_name?.trim().toLowerCase();
-            if (fn === targetAlias) return true;
-          }
+      const targetAlias = aliasMatch ? aliasMatch[1].trim() : null;
+      for (const eid in states) {
+        if (eid.startsWith("script.")) {
+          const fn = states[eid]?.attributes?.friendly_name;
+          const sSlug = eid.substring(7);
+          if (targetSlug && (sSlug === targetSlug || this._isFuzzyMatch(targetSlug, sSlug))) return true;
+          if (targetAlias && fn && this._isFuzzyMatch(targetAlias, fn)) return true;
         }
       }
       return false;
@@ -259,13 +295,13 @@ class NexusMcpCard extends HTMLElement {
       if (targetSlug && states[`scene.${targetSlug.trim().toLowerCase()}`]) return true;
 
       const nameMatch = cleanCode.match(/(?:^|\n)\s*name:\s*['"]?([^'"\n]+)['"]?/i);
-      if (nameMatch) {
-        const targetName = nameMatch[1].trim().toLowerCase();
-        for (const eid in states) {
-          if (eid.startsWith("scene.")) {
-            const fn = states[eid]?.attributes?.friendly_name?.trim().toLowerCase();
-            if (fn === targetName) return true;
-          }
+      const targetName = nameMatch ? nameMatch[1].trim() : null;
+      for (const eid in states) {
+        if (eid.startsWith("scene.")) {
+          const fn = states[eid]?.attributes?.friendly_name;
+          const sSlug = eid.substring(6);
+          if (targetSlug && (sSlug === targetSlug || this._isFuzzyMatch(targetSlug, sSlug))) return true;
+          if (targetName && fn && this._isFuzzyMatch(targetName, fn)) return true;
         }
       }
       return false;
@@ -1830,11 +1866,16 @@ class NexusMcpCard extends HTMLElement {
                 <ha-icon icon="${iconName}"></ha-icon>
                 <span class="btn-text">${updateLabel}</span>
               </button>
-            ` : ""}
-            <button class="code-action-btn code-save-new-btn" data-code="${itemDataCode}" data-resource="${rType}" data-mode="add" title="${newLabel}">
-              <ha-icon icon="mdi:plus-circle-outline"></ha-icon>
-              <span class="btn-text">${newLabel}</span>
-            </button>
+              <button class="code-action-btn code-save-new-btn secondary-btn" data-code="${itemDataCode}" data-resource="${rType}" data-mode="add" title="${newLabel}">
+                <ha-icon icon="mdi:content-copy"></ha-icon>
+                <span class="btn-text">${isEs ? "➕ Crear como Duplicado" : "➕ Create Duplicate"}</span>
+              </button>
+            ` : `
+              <button class="code-action-btn code-save-new-btn" data-code="${itemDataCode}" data-resource="${rType}" data-mode="add" title="${newLabel}">
+                <ha-icon icon="mdi:plus-circle-outline"></ha-icon>
+                <span class="btn-text">${newLabel}</span>
+              </button>
+            `}
           </div>
         `;
       });
@@ -2265,6 +2306,14 @@ class NexusMcpCard extends HTMLElement {
               });
               const createdId = createRes?.id || createRes?.[`${res.helper_domain}_id`] || helperId;
 
+              this._lastCreatedEntities = this._lastCreatedEntities || [];
+              this._lastCreatedEntities.push({
+                domain: res.helper_domain,
+                id: createdId,
+                name: res.data?.name || "",
+                entityId: `${res.helper_domain}.${createdId}`
+              });
+
               okMsg = isEs ? "¡Ayudante creado en Home Assistant!" : "Helper active in Home Assistant!";
               undoLabel = isEs ? "↩️ Deshacer y eliminar Ayudante creado" : "↩️ Undo and delete created Helper";
               undoCallback = async () => {
@@ -2285,7 +2334,9 @@ class NexusMcpCard extends HTMLElement {
                 if (Array.isArray(listItems) && listItems.length > 0) {
                   const match = listItems.find(
                     (it) => it.id === helperId ||
-                            (it.name && res.data?.name && it.name.trim().toLowerCase() === res.data.name.trim().toLowerCase())
+                            this._isFuzzyMatch(res.data?.name, it.name) ||
+                            this._isFuzzyMatch(helperId, it.id) ||
+                            this._isFuzzyMatch(res.data?.name, it.id)
                   );
                   if (match) targetId = match.id;
                 }
@@ -2958,7 +3009,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.6.7 Ready ",
+  "%c NEXUS MCP CARD %c v1.6.8 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
