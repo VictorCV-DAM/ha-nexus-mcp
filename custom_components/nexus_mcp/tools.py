@@ -104,6 +104,20 @@ def get_builtin_tools() -> list[McpTool]:
                 "required": ["service"],
             },
         ),
+        McpTool(
+            name="ha_get_config",
+            description="Retrieve the complete internal YAML/JSON configuration (triggers, conditions, actions, sequence, options, helper attributes) of an automation, script, scene, or helper. ALWAYS use this tool whenever the user asks to inspect, read, copy, duplicate, replicate, or modify an existing automation, script, scene, or helper.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "The entity_id of the automation, script, scene, or helper to inspect or replicate (e.g. 'automation.sincronizar_dispositivos_google_home_comedor').",
+                    }
+                },
+                "required": ["entity_id"],
+            },
+        ),
     ]
 
 
@@ -316,6 +330,142 @@ async def execute_builtin_tool(
             "state": state.state,
             "attributes": trimmed_attrs,
         }
+
+    if name == "ha_get_config":
+        import yaml
+        entity_id = (arguments.get("entity_id") or "").strip().lower()
+        if not entity_id or "." not in entity_id:
+            return {"error": "A valid entity_id is required (e.g. 'automation.my_automation')."}
+
+        domain = entity_id.split(".")[0]
+        slug = entity_id.split(".")[1]
+
+        unique_id = None
+        friendly_name = None
+        state_obj = hass.states.get(entity_id)
+        if state_obj:
+            fn = state_obj.attributes.get("friendly_name")
+            if isinstance(fn, str):
+                friendly_name = fn
+            sid = state_obj.attributes.get("id")
+            if isinstance(sid, str):
+                unique_id = sid
+
+        try:
+            from homeassistant.helpers import entity_registry as er
+            ent_reg = er.async_get(hass)
+            entry = ent_reg.async_get(entity_id) if ent_reg else None
+            if entry:
+                if isinstance(getattr(entry, "unique_id", None), str):
+                    unique_id = entry.unique_id
+                if isinstance(getattr(entry, "name", None), str) and entry.name:
+                    friendly_name = entry.name
+                elif isinstance(getattr(entry, "original_name", None), str) and entry.original_name:
+                    friendly_name = entry.original_name
+        except Exception:
+            pass
+
+        if domain == "automation":
+            auto_path = hass.config.path("automations.yaml")
+            try:
+                def _read_autos():
+                    import os
+                    if not os.path.exists(auto_path):
+                        return None
+                    with open(auto_path, "r", encoding="utf-8") as f:
+                        return yaml.safe_load(f) or []
+
+                autos = await hass.async_add_executor_job(_read_autos)
+                if isinstance(autos, list):
+                    for a in autos:
+                        if not isinstance(a, dict):
+                            continue
+                        if unique_id and str(a.get("id")) == str(unique_id):
+                            return {"domain": "automation", "entity_id": entity_id, "config": a}
+                        if friendly_name and a.get("alias") and a.get("alias").strip().lower() == friendly_name.strip().lower():
+                            return {"domain": "automation", "entity_id": entity_id, "config": a}
+                        if slug and slug in str(a.get("id", "")):
+                            return {"domain": "automation", "entity_id": entity_id, "config": a}
+            except Exception as err:
+                _LOGGER.warning("Could not read automations.yaml: %s", err)
+
+            return {"error": f"Configuration for automation '{entity_id}' not found in automations.yaml."}
+
+        if domain == "script":
+            script_path = hass.config.path("scripts.yaml")
+            try:
+                def _read_scripts():
+                    import os
+                    if not os.path.exists(script_path):
+                        return None
+                    with open(script_path, "r", encoding="utf-8") as f:
+                        return yaml.safe_load(f) or {}
+
+                scripts = await hass.async_add_executor_job(_read_scripts)
+                if isinstance(scripts, dict):
+                    if slug in scripts:
+                        cfg = dict(scripts[slug])
+                        cfg["id"] = slug
+                        return {"domain": "script", "entity_id": entity_id, "config": cfg}
+                    for k, v in scripts.items():
+                        if isinstance(v, dict):
+                            if (friendly_name and v.get("alias") == friendly_name) or k == slug:
+                                cfg = dict(v)
+                                cfg["id"] = k
+                                return {"domain": "script", "entity_id": entity_id, "config": cfg}
+            except Exception as err:
+                _LOGGER.warning("Could not read scripts.yaml: %s", err)
+
+            return {"error": f"Configuration for script '{entity_id}' not found in scripts.yaml."}
+
+        if domain == "scene":
+            scene_path = hass.config.path("scenes.yaml")
+            try:
+                def _read_scenes():
+                    import os
+                    if not os.path.exists(scene_path):
+                        return None
+                    with open(scene_path, "r", encoding="utf-8") as f:
+                        return yaml.safe_load(f) or []
+
+                scenes = await hass.async_add_executor_job(_read_scenes)
+                if isinstance(scenes, list):
+                    for s in scenes:
+                        if isinstance(s, dict):
+                            if (unique_id and str(s.get("id")) == str(unique_id)) or (friendly_name and s.get("name") == friendly_name):
+                                return {"domain": "scene", "entity_id": entity_id, "config": s}
+            except Exception as err:
+                _LOGGER.warning("Could not read scenes.yaml: %s", err)
+
+            return {"error": f"Configuration for scene '{entity_id}' not found in scenes.yaml."}
+
+        if domain in HELPER_AND_CONFIG_DOMAINS:
+            # Check helper storage
+            helper_path = hass.config.path(".storage", domain)
+            try:
+                def _read_helper():
+                    import json, os
+                    if not os.path.exists(helper_path):
+                        return None
+                    with open(helper_path, "r", encoding="utf-8") as f:
+                        return json.load(f)
+
+                data = await hass.async_add_executor_job(_read_helper)
+                if isinstance(data, dict):
+                    items = data.get("data", {}).get("items", [])
+                    for it in items:
+                        if it.get("id") == slug or (friendly_name and it.get("name") == friendly_name) or (unique_id and it.get("id") == unique_id):
+                            return {"domain": domain, "entity_id": entity_id, "config": it}
+            except Exception as err:
+                _LOGGER.warning("Could not read helper storage for %s: %s", domain, err)
+
+            if state_obj:
+                return {"domain": domain, "entity_id": entity_id, "config": dict(state_obj.attributes)}
+
+        if state_obj:
+            return {"domain": domain, "entity_id": entity_id, "state": state_obj.state, "config": dict(state_obj.attributes)}
+
+        return {"error": f"Entity '{entity_id}' not found."}
 
     if name == "ha_call_service":
         domain = str(arguments.get("domain") or "").strip()

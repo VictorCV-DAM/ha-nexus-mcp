@@ -451,5 +451,46 @@ class TestBuiltinTools(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("error", res_state)
             self.assertEqual(res_state["entity_id"], "input_button.sync_google_home")
 
+    async def test_ha_get_config_automation_and_script(self) -> None:
+        """Verify ha_get_config retrieves automation and script configurations."""
+        import tempfile, os, yaml
+        from custom_components.nexus_mcp.tools import execute_builtin_tool
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            auto_path = os.path.join(tmpdir, "automations.yaml")
+            sample_auto = [
+                {
+                    "id": "nexus_123",
+                    "alias": "Test Sync Google Home",
+                    "trigger": [{"platform": "state", "entity_id": "input_button.test"}],
+                    "action": [{"service": "homeassistant.turn_on"}],
+                    "mode": "single"
+                }
+            ]
+            with open(auto_path, "w", encoding="utf-8") as f:
+                yaml.dump(sample_auto, f)
+
+            mock_hass = MagicMock()
+            mock_hass.config.path.side_effect = lambda *args: os.path.join(tmpdir, *args)
+            mock_hass.async_add_executor_job = AsyncMock(side_effect=lambda func, *args: func(*args))
+
+            state_auto = MagicMock()
+            state_auto.entity_id = "automation.test_sync_google_home"
+            state_auto.state = "on"
+            state_auto.attributes = {"friendly_name": "Test Sync Google Home", "id": "nexus_123"}
+            mock_hass.states.get.return_value = state_auto
+
+            res = await execute_builtin_tool(
+                mock_hass,
+                "ha_get_config",
+                {"entity_id": "automation.test_sync_google_home"}
+            )
+
+            self.assertNotIn("error", res)
+            self.assertEqual(res["domain"], "automation")
+            self.assertEqual(res["config"]["id"], "nexus_123")
+            self.assertEqual(res["config"]["alias"], "Test Sync Google Home")
+            self.assertEqual(res["config"]["mode"], "single")
+
 if __name__ == "__main__":
     unittest.main()

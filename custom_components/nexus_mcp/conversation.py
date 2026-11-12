@@ -875,6 +875,13 @@ class NexusMcpConversationEntity(ConversationEntity):
             )
         )
         is_action_request = bool(ACTION_COMMAND_REGEX.search(text)) and not is_explicit_automation_request
+        is_replication_request = any(
+            kw in text.lower()
+            for kw in (
+                "replica", "replicar", "copia", "copiar", "duplica", "duplicar",
+                "clona", "clonar", "inspecciona", "inspeccionar", "lee la configuracion"
+            )
+        ) and any(d in text.lower() for d in ("automation.", "script.", "scene.", "input_"))
 
         # Check if the user is giving an affirmative continuation (e.g. 'dale', 'vale', 'adelante', 'hazlo', 'procede', 'ok')
         clean_text_lower = text.lower().strip()
@@ -931,11 +938,15 @@ class NexusMcpConversationEntity(ConversationEntity):
             "- Direct commands (`ha_call_service`), searching (`ha_search_entities`), and reading states (`ha_get_entity_state`) "
             "NEVER require confirmation and MUST be executed immediately without asking!\n"
             "- CREATING & MODIFYING AUTOMATIONS, SCRIPTS, SCENES, HELPERS & DASHBOARD CARDS:\n"
-            "  1. Automations: When asked to create or modify an automation, return the complete proposed automation in a Markdown YAML code block (```yaml ... ```) with alias, description, trigger, condition (if any), and action. If modifying an existing automation, include its original `id` so it is updated in place without duplicating.\n"
-            "  2. Scripts: When asked to create or modify a script/routine, return the proposed script in a Markdown YAML code block (```yaml ... ```) with alias, description, sequence, and mode: single. If modifying an existing script, include its original `id` or slug.\n"
-            "  3. Scenes: When asked to create or modify a scene, return the proposed scene in a Markdown YAML code block (```yaml ... ```) with name, icon, and entities (target states). If modifying an existing scene, include its original `id` or slug.\n"
+            "  1. Automations: When asked to create, replicate, or modify an automation, return the complete proposed automation in a Markdown YAML code block (```yaml ... ```) with alias, description, trigger, condition (if any), and action. If modifying an existing automation, include its original `id` so it is updated in place without duplicating. If replicating/cloning an existing automation, inspect it first with `ha_get_config`, generate a new unique `id` and appropriate alias (e.g. adding 'Copia'), and return the complete YAML.\n"
+            "  2. Scripts: When asked to create, replicate, or modify a script/routine, return the proposed script in a Markdown YAML code block (```yaml ... ```) with alias, description, sequence, and mode: single. If modifying an existing script, include its original `id` or slug.\n"
+            "  3. Scenes: When asked to create, replicate, or modify a scene, return the proposed scene in a Markdown YAML code block (```yaml ... ```) with name, icon, and entities (target states). If modifying an existing scene, include its original `id` or slug.\n"
             "  4. Helpers (Ayudantes): When asked to create or modify a helper (e.g. input_boolean, input_number, input_select, input_text, counter, timer, input_button), return the YAML code block with helper domain and configuration (name, icon, options, min, max, etc.). When modifying an existing helper, search for it using `ha_search_entities` or keep the same name and slug as previously discussed, rather than inventing a new name or slug. The frontend card provides 1-click native creation and in-place updates.\n"
             "  5. Dashboard Cards (Lovelace): When asked to design, propose, or modify a dashboard card (e.g. Tile card, Mushroom card, Markdown card, Entities card, Gauge), return the complete card YAML configuration starting with `type:` and its properties. The frontend card provides a 1-click button to automatically add or update the card directly in the user's active dashboard!\n"
+            "- REPLICATING OR INSPECTING EXISTING AUTOMATIONS, SCRIPTS, SCENES & HELPERS:\n"
+            "  You have direct access to the `ha_get_config` tool to read the complete internal triggers, conditions, actions, and sequence of any automation, script, scene, or helper.\n"
+            "  Whenever the user asks to replicate, duplicate, clone, inspect, or modify an existing automation or script (e.g. 'replica esta automatización: automation.xxx'), you MUST IMMEDIATELY call `ha_get_config` with its entity_id to inspect its internal configuration.\n"
+            "  NEVER tell the user that you lack access to triggers, conditions, or actions! NEVER tell the user to manually copy and paste YAML from Home Assistant menus, settings, or files! You have full read access via `ha_get_config`. Once retrieved, provide the replicated YAML block with a new alias/id so the user can create it with 1 click!\n"
             "- YAML & CODE FORMATTING MANDATE:\n"
             "  Whenever you provide YAML configurations, Lovelace card configs, scripts, automations, templates, or code, you MUST always enclose them in Markdown code blocks with the language tag (e.g. ```yaml ... ```, ```json ... ```, or ```python ... ```). Never output bare code or bare YAML without code blocks.\n"
             "- CRITICAL 1-CLICK UI ACTIONS MANDATE:\n"
@@ -976,7 +987,7 @@ class NexusMcpConversationEntity(ConversationEntity):
         assistant_reply = "OK."
         executed_any_tool = False
         executed_action_service = False
-        force_tool_choice = "required" if is_action_request else None
+        force_tool_choice = "required" if (is_action_request or is_replication_request) else None
         hallucination_retried = False
 
         try:
@@ -985,7 +996,10 @@ class NexusMcpConversationEntity(ConversationEntity):
                 # For direct action commands, maintain tool requirement until ha_call_service executes
                 current_tool_choice = (
                     "required"
-                    if (is_action_request and not executed_action_service and turn_idx < 3)
+                    if (
+                        (is_replication_request and not executed_any_tool and turn_idx == 0)
+                        or (is_action_request and not executed_action_service and turn_idx < 3)
+                    )
                     else force_tool_choice
                 )
                 force_tool_choice = None
