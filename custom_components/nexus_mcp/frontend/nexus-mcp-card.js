@@ -158,26 +158,15 @@ class NexusMcpCard extends HTMLElement {
     } catch (_) {}
   }
 
-  _tokenize(str) {
-    if (!str) return [];
-    const clean = String(str).toLowerCase().replace(/[_.\-]/g, " ");
-    const stopWords = new Set(["el", "la", "los", "las", "de", "del", "un", "una", "en", "para", "por", "con", "al", "the", "a", "an", "and", "or"]);
-    return clean.split(/\s+/).filter(w => w.length >= 2 && !stopWords.has(w));
-  }
-
-  _isFuzzyMatch(target, candidate) {
-    if (!target || !candidate) return false;
-    const t = String(target).trim().toLowerCase();
-    const c = String(candidate).trim().toLowerCase();
-    if (t === c || t.includes(c) || c.includes(t)) return true;
-    const tTokens = this._tokenize(t);
-    const cTokens = this._tokenize(c);
-    if (tTokens.length === 0 || cTokens.length === 0) return false;
-    const cSet = new Set(cTokens);
-    const common = tTokens.filter(tok => cSet.has(tok));
-    if (common.length === tTokens.length || common.length === cTokens.length) return true;
-    const ratio = common.length / Math.min(tTokens.length, cTokens.length);
-    return common.length >= 2 && ratio >= 0.5;
+  _normalizeString(str) {
+    if (!str) return "";
+    return String(str)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
   }
 
   _checkResourceExists(resType, cleanCode) {
@@ -217,17 +206,22 @@ class NexusMcpCard extends HTMLElement {
       const targetSlug = slug || (idMatch ? idMatch[1].trim().toLowerCase() : null);
       if (targetSlug && states[`${foundDomain}.${targetSlug}`]) return true;
 
-      // Check by friendly_name and slug with fuzzy match
+      // Check by friendly_name and slug with strict normalized match
       const nameMatch = cleanCode.match(/(?:^|\n)\s*name:\s*['"]?([^'"\n]+)['"]?/i);
       const targetName = nameMatch ? nameMatch[1].trim() : null;
+      const normTargetName = this._normalizeString(targetName);
+      const normTargetSlug = this._normalizeString(targetSlug);
 
       for (const entityId in states) {
         if (entityId.startsWith(`${foundDomain}.`)) {
           const fn = states[entityId]?.attributes?.friendly_name;
           const eSlug = entityId.substring(foundDomain.length + 1);
-          if (targetName && fn && this._isFuzzyMatch(targetName, fn)) return true;
-          if (targetSlug && (eSlug === targetSlug || this._isFuzzyMatch(targetSlug, eSlug))) return true;
-          if (targetName && this._isFuzzyMatch(targetName, eSlug)) return true;
+          const normFn = this._normalizeString(fn);
+          const normESlug = this._normalizeString(eSlug);
+
+          if (targetSlug && (eSlug === targetSlug || (normTargetSlug && normTargetSlug === normESlug))) return true;
+          if (normTargetName && normFn && normTargetName === normFn) return true;
+          if (normTargetName && normESlug && normTargetName === normESlug) return true;
         }
       }
 
@@ -235,8 +229,10 @@ class NexusMcpCard extends HTMLElement {
       if (Array.isArray(this._lastCreatedEntities)) {
         for (const created of this._lastCreatedEntities) {
           if (created.domain === foundDomain) {
-            if (targetSlug && (created.id === targetSlug || this._isFuzzyMatch(targetSlug, created.id))) return true;
-            if (targetName && (created.name === targetName || this._isFuzzyMatch(targetName, created.name))) return true;
+            const normCreatedName = this._normalizeString(created.name);
+            const normCreatedId = this._normalizeString(created.id);
+            if (targetSlug && (created.id === targetSlug || (normTargetSlug && normTargetSlug === normCreatedId))) return true;
+            if (normTargetName && normCreatedName && normTargetName === normCreatedName) return true;
           }
         }
       }
@@ -256,14 +252,32 @@ class NexusMcpCard extends HTMLElement {
         }
       }
 
+      // Check explicit entity_id if specified in YAML
+      const entMatch = cleanCode.match(/(?:^|\n)\s*entity_id:\s*['"]?(automation\.[a-z0-9_]+)['"]?/i);
+      if (entMatch && states[entMatch[1].toLowerCase()]) return true;
+
       const aliasMatch = cleanCode.match(/(?:^|\n)\s*alias:\s*['"]?([^'"\n]+)['"]?/i);
       const targetAlias = aliasMatch ? aliasMatch[1].trim() : null;
-      for (const eid in states) {
-        if (eid.startsWith("automation.")) {
-          const fn = states[eid]?.attributes?.friendly_name;
-          const aId = states[eid]?.attributes?.id;
-          if (autoId && (eid === `automation.${autoId}` || aId === autoId || this._isFuzzyMatch(autoId, eid.substring(11)))) return true;
-          if (targetAlias && fn && this._isFuzzyMatch(targetAlias, fn)) return true;
+      const normTargetAlias = this._normalizeString(targetAlias);
+      const isNexusGeneratedId = autoId && autoId.startsWith("nexus_");
+      const normAutoId = autoId && !isNexusGeneratedId ? this._normalizeString(autoId) : "";
+
+      if (normTargetAlias || normAutoId) {
+        for (const eid in states) {
+          if (eid.startsWith("automation.")) {
+            const fn = states[eid]?.attributes?.friendly_name;
+            const normFn = this._normalizeString(fn);
+            // Strict exact normalized alias comparison
+            if (normTargetAlias && normFn && normTargetAlias === normFn) return true;
+
+            // Strict slug comparison ONLY if autoId is not autogenerated 'nexus_'
+            if (normAutoId) {
+              const eSlug = eid.substring(11).toLowerCase();
+              if (autoId.toLowerCase() === eSlug) return true;
+              const normSlug = this._normalizeString(eSlug);
+              if (normAutoId === normSlug) return true;
+            }
+          }
         }
       }
       return false;
@@ -275,14 +289,29 @@ class NexusMcpCard extends HTMLElement {
       const targetSlug = (slugMatch && slugMatch[1]) || (idMatch && idMatch[1]);
       if (targetSlug && states[`script.${targetSlug.trim().toLowerCase()}`]) return true;
 
+      const entMatch = cleanCode.match(/(?:^|\n)\s*entity_id:\s*['"]?(script\.[a-z0-9_]+)['"]?/i);
+      if (entMatch && states[entMatch[1].toLowerCase()]) return true;
+
       const aliasMatch = cleanCode.match(/(?:^|\n)\s*alias:\s*['"]?([^'"\n]+)['"]?/i);
       const targetAlias = aliasMatch ? aliasMatch[1].trim() : null;
-      for (const eid in states) {
-        if (eid.startsWith("script.")) {
-          const fn = states[eid]?.attributes?.friendly_name;
-          const sSlug = eid.substring(7);
-          if (targetSlug && (sSlug === targetSlug || this._isFuzzyMatch(targetSlug, sSlug))) return true;
-          if (targetAlias && fn && this._isFuzzyMatch(targetAlias, fn)) return true;
+      const normTargetAlias = this._normalizeString(targetAlias);
+      const isNexusGeneratedId = targetSlug && targetSlug.startsWith("nexus_");
+      const normTargetSlug = targetSlug && !isNexusGeneratedId ? this._normalizeString(targetSlug) : "";
+
+      if (normTargetAlias || normTargetSlug) {
+        for (const eid in states) {
+          if (eid.startsWith("script.")) {
+            const fn = states[eid]?.attributes?.friendly_name;
+            const normFn = this._normalizeString(fn);
+            if (normTargetAlias && normFn && normTargetAlias === normFn) return true;
+
+            if (normTargetSlug) {
+              const sSlug = eid.substring(7).toLowerCase();
+              if (targetSlug.toLowerCase() === sSlug) return true;
+              const normSlug = this._normalizeString(sSlug);
+              if (normTargetSlug === normSlug) return true;
+            }
+          }
         }
       }
       return false;
@@ -294,14 +323,29 @@ class NexusMcpCard extends HTMLElement {
       const targetSlug = (slugMatch && slugMatch[1]) || (idMatch && idMatch[1]);
       if (targetSlug && states[`scene.${targetSlug.trim().toLowerCase()}`]) return true;
 
+      const entMatch = cleanCode.match(/(?:^|\n)\s*entity_id:\s*['"]?(scene\.[a-z0-9_]+)['"]?/i);
+      if (entMatch && states[entMatch[1].toLowerCase()]) return true;
+
       const nameMatch = cleanCode.match(/(?:^|\n)\s*name:\s*['"]?([^'"\n]+)['"]?/i);
       const targetName = nameMatch ? nameMatch[1].trim() : null;
-      for (const eid in states) {
-        if (eid.startsWith("scene.")) {
-          const fn = states[eid]?.attributes?.friendly_name;
-          const sSlug = eid.substring(6);
-          if (targetSlug && (sSlug === targetSlug || this._isFuzzyMatch(targetSlug, sSlug))) return true;
-          if (targetName && fn && this._isFuzzyMatch(targetName, fn)) return true;
+      const normTargetName = this._normalizeString(targetName);
+      const isNexusGeneratedId = targetSlug && targetSlug.startsWith("nexus_");
+      const normTargetSlug = targetSlug && !isNexusGeneratedId ? this._normalizeString(targetSlug) : "";
+
+      if (normTargetName || normTargetSlug) {
+        for (const eid in states) {
+          if (eid.startsWith("scene.")) {
+            const fn = states[eid]?.attributes?.friendly_name;
+            const normFn = this._normalizeString(fn);
+            if (normTargetName && normFn && normTargetName === normFn) return true;
+
+            if (normTargetSlug) {
+              const sSlug = eid.substring(6).toLowerCase();
+              if (targetSlug.toLowerCase() === sSlug) return true;
+              const normSlug = this._normalizeString(sSlug);
+              if (normTargetSlug === normSlug) return true;
+            }
+          }
         }
       }
       return false;
@@ -309,14 +353,12 @@ class NexusMcpCard extends HTMLElement {
 
     if (resType === "card") {
       if (this._cachedLovelaceConfig && Array.isArray(this._cachedLovelaceConfig.views)) {
-        const entMatches = cleanCode.matchAll(/[a-z0-9_]+\.[a-z0-9_]+/gi);
-        const cardEnts = new Set();
-        for (const m of entMatches) {
-          cardEnts.add(m[0].toLowerCase());
-          cardEnts.add(m[0].toLowerCase().replace(/_local$/, ""));
-        }
+        const idMatch = cleanCode.match(/(?:^|\n)\s*(?:id|card_id):\s*['"]?([^'"\n]+)['"]?/i);
+        const cardId = idMatch ? idMatch[1].trim() : null;
+
         const nameMatch = cleanCode.match(/(?:^|\n)\s*(?:title|name):\s*['"]?([^'"\n]+)['"]?/i);
-        const cardTitle = nameMatch ? nameMatch[1].trim().toLowerCase() : "";
+        const cardTitle = nameMatch ? nameMatch[1].trim() : "";
+        const normCardTitle = this._normalizeString(cardTitle);
 
         for (const v of this._cachedLovelaceConfig.views) {
           let vCards = Array.isArray(v.cards) ? [...v.cards] : [];
@@ -327,15 +369,11 @@ class NexusMcpCard extends HTMLElement {
           }
           for (const c of vCards) {
             if (!c || typeof c !== "object") continue;
-            const cDump = JSON.stringify(c).toLowerCase();
-            for (const ent of cardEnts) {
-              if (cDump.includes(ent)) return true;
-            }
-            if (cardTitle && cardTitle.length >= 4) {
-              const cTitle = (c.title || c.name || "").trim().toLowerCase();
-              if (cTitle && (cTitle === cardTitle || cTitle.includes(cardTitle) || cardTitle.includes(cTitle))) {
-                return true;
-              }
+            if (cardId && (c.id === cardId || c.card_id === cardId)) return true;
+            if (normCardTitle && normCardTitle.length >= 3) {
+              const cTitle = (c.title || c.name || "").trim();
+              const normCTitle = this._normalizeString(cTitle);
+              if (normCTitle && normCardTitle === normCTitle) return true;
             }
           }
         }
@@ -2332,11 +2370,13 @@ class NexusMcpCard extends HTMLElement {
               try {
                 const listItems = await this._hass.callWS({ type: `${res.helper_domain}/list` });
                 if (Array.isArray(listItems) && listItems.length > 0) {
+                  const normDataName = this._normalizeString(res.data?.name);
+                  const normHelperId = this._normalizeString(helperId);
                   const match = listItems.find(
                     (it) => it.id === helperId ||
-                            this._isFuzzyMatch(res.data?.name, it.name) ||
-                            this._isFuzzyMatch(helperId, it.id) ||
-                            this._isFuzzyMatch(res.data?.name, it.id)
+                            (normHelperId && this._normalizeString(it.id) === normHelperId) ||
+                            (normDataName && this._normalizeString(it.name) === normDataName) ||
+                            (normDataName && this._normalizeString(it.id) === normDataName)
                   );
                   if (match) targetId = match.id;
                 }
@@ -3009,7 +3049,7 @@ class NexusMcpCardEditor extends HTMLElement {
 customElements.define("nexus-mcp-card", NexusMcpCard);
 customElements.define("nexus-mcp-card-editor", NexusMcpCardEditor);
 console.info(
-  "%c NEXUS MCP CARD %c v1.6.8 Ready ",
+  "%c NEXUS MCP CARD %c v1.6.9 Ready ",
   "color: white; background: #03a9f4; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
   "color: #03a9f4; background: #e1f5fe; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;"
 );
