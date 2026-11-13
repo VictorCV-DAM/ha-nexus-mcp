@@ -1802,9 +1802,10 @@ class NexusMcpCard extends HTMLElement {
         "input_boolean", "input_number", "input_select", "input_text",
         "input_datetime", "input_button", "counter", "timer", "schedule"
       ];
-      const isHelper = isYaml && HELPER_DOMAINS.some((hd) =>
-        cleanCode.includes(`${hd}:`) || cleanCode.includes(`type: ${hd}`) || cleanCode.includes(`domain: ${hd}`)
-      );
+      const isHelper = isYaml && HELPER_DOMAINS.some((hd) => {
+        const re = new RegExp(`(?:^|\\n)\\s*(?:${hd}:|(?:type|domain|platform|helper|helper_type):\\s*['"]?${hd}['"]?)`, "i");
+        return re.test(cleanCode) || cleanCode.includes(`${hd}:`);
+      });
 
       const CARD_TYPES = [
         "tile", "entities", "entity", "glance", "button", "gauge", "markdown",
